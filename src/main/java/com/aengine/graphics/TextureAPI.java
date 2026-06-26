@@ -5,5 +5,6 @@ public interface TextureAPI {
     void unbind();
     int  getWidth();
     int  getHeight();
+    int  getID();
     void cleanup();
 }

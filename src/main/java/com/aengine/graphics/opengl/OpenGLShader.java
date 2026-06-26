@@ -2,6 +2,7 @@ package com.aengine.graphics.opengl;
 
 import com.aengine.graphics.ShaderAPI;
 import com.aengine.utils.FileUtils;
+import com.aengine.utils.Logger;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
@@ -20,6 +21,8 @@ public class OpenGLShader implements ShaderAPI {
     private final Map<String, Integer> uniformCache = new HashMap<>();
 
     public OpenGLShader(String vertexPath, String fragmentPath) {
+        Logger.debug(Logger.System.SHADER, "Compiling pipeline shaders from targets: [Vert: %s | Frag: %s]", vertexPath, fragmentPath);
+        
         int vert = compile(GL_VERTEX_SHADER,   FileUtils.readResource(vertexPath));
         int frag = compile(GL_FRAGMENT_SHADER, FileUtils.readResource(fragmentPath));
 
@@ -29,8 +32,12 @@ public class OpenGLShader implements ShaderAPI {
         glLinkProgram(programId);
 
         if (glGetProgrami(programId, GL_LINK_STATUS) == GL_FALSE) {
-            throw new RuntimeException("Shader link error:\n" + glGetProgramInfoLog(programId));
+            String log = glGetProgramInfoLog(programId);
+            Logger.error(Logger.System.SHADER, "Pipeline link failure:\n%s", log);
+            throw new RuntimeException("Shader link error:\n" + log);
         }
+
+        Logger.info(Logger.System.SHADER, "Shader pipeline attached and linked successfully. Program ID: %d", programId);
 
         glDeleteShader(vert);
         glDeleteShader(frag);
@@ -40,18 +47,34 @@ public class OpenGLShader implements ShaderAPI {
         int id = glCreateShader(type);
         glShaderSource(id, src);
         glCompileShader(id);
+        
         if (glGetShaderi(id, GL_COMPILE_STATUS) == GL_FALSE) {
             String label = (type == GL_VERTEX_SHADER) ? "Vertex" : "Fragment";
-            throw new RuntimeException(label + " shader compile error:\n" + glGetShaderInfoLog(id));
+            String log = glGetShaderInfoLog(id);
+            Logger.error(Logger.System.SHADER, "%s GLSL compilation failed:\n%s", label, log);
+            throw new RuntimeException(label + " shader compile error:\n" + log);
         }
         return id;
     }
 
-    @Override public void bind()   { glUseProgram(programId); }
-    @Override public void unbind() { glUseProgram(0); }
+    @Override 
+    public void bind() { 
+        glUseProgram(programId); 
+    }
+    
+    @Override 
+    public void unbind() { 
+        glUseProgram(0); 
+    }
 
     private int location(String name) {
-        return uniformCache.computeIfAbsent(name, n -> glGetUniformLocation(programId, n));
+        return uniformCache.computeIfAbsent(name, n -> {
+            int loc = glGetUniformLocation(programId, n);
+            if (loc == -1) {
+                Logger.warn(Logger.System.SHADER, "Active uniform target '%s' not found or optimized out in program %d.", n, programId);
+            }
+            return loc;
+        });
     }
 
     @Override public void setInt(String name, int value)     { glUniform1i(location(name), value); }
@@ -62,10 +85,17 @@ public class OpenGLShader implements ShaderAPI {
 
     @Override
     public void setMat4(String name, Matrix4f mat) {
-        FloatBuffer buf = BufferUtils.createFloatBuffer(16);
-        mat.get(buf);
-        glUniformMatrix4fv(location(name), false, buf);
+        int loc = location(name);
+        if (loc != -1) {
+            FloatBuffer buf = BufferUtils.createFloatBuffer(16);
+            mat.get(buf);
+            glUniformMatrix4fv(loc, false, buf);
+        }
     }
 
-    @Override public void cleanup() { glDeleteProgram(programId); }
+    @Override 
+    public void cleanup() { 
+        Logger.info(Logger.System.SHADER, "Deleting shader pipeline program ID: %d", programId);
+        glDeleteProgram(programId); 
+    }
 }

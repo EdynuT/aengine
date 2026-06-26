@@ -1,6 +1,6 @@
 # AEngine
 
-Java graphics engine built on OpenGL 3.3 Core Profile, designed to power **Aeternum** — a first-person dungeon crawler RPG.
+Java graphics engine built on OpenGL 3.3 Core Profile.
 
 The engine is structured as a reusable library. The abstraction layer between game code and the graphics backend (`RendererAPI`, `ShaderAPI`, `TextureAPI`, `BufferAPI`) is designed to allow a future migration from OpenGL to Vulkan without touching game logic.
 
@@ -8,7 +8,6 @@ The engine is structured as a reusable library. The abstraction layer between ga
 
 ## Stack
 
-| | |
 |---|---|
 | Language | Java 25 |
 | Build | Gradle 9.1+ (wrapper included) |
@@ -39,7 +38,7 @@ First run downloads Gradle (~130 MB). Subsequent runs start in seconds.
 .\gradlew.bat publishToMavenLocal
 ```
 
-This installs `com.aengine:AEngine:1.0.0` into `~/.m2/repository`.
+This installs `com.aengine:AEngine:0.6` into `~/.m2/repository`.
 
 ### 2. Import in your game project
 
@@ -91,11 +90,11 @@ public class MyGame extends Engine {
 - [x] Camera — orthographic 2D and perspective 3D
 - [x] Entity / Component / Transform system
 - [x] Library publishing (Maven Local)
-- [ ] Logger with per-system log levels
+- [x] Logger with per-system log levels
+- [ ] Hot reload of game logic
 - [ ] WASD movement
 - [ ] Renderer3D — grid-based dungeon walls
 - [ ] UI / HUD overlay
 - [ ] Framebuffer + post-processing (scanlines, fog)
 - [ ] Scene serialization
-- [ ] Hot reload of game logic
 - [ ] Dear ImGui editor integration
