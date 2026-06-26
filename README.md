@@ -8,6 +8,7 @@ The engine is structured as a reusable library. The abstraction layer between ga
 
 ## Stack
 
+| | |
 |---|---|
 | Language | Java 25 |
 | Build | Gradle 9.1+ (wrapper included) |
