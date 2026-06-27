@@ -20,17 +20,13 @@ public class OpenGLShader implements ShaderAPI {
     private int programId;
     private final Map<String, Integer> uniformCache = new HashMap<>();
 
-    /**
-     * Standard path-based initialization wrapper.
-     */
+    // Standard path-based initialization wrapper.
     public OpenGLShader(String vertexPath, String fragmentPath) {
         Logger.debug(Logger.System.SHADER, "Loading pipeline shaders from paths: [Vert: %s | Frag: %s]", vertexPath, fragmentPath);
         initFromSource(FileUtils.readResource(vertexPath), FileUtils.readResource(fragmentPath));
     }
 
-    /**
-     * Overloaded constructor accepting raw or dynamically generated GLSL source code directly.
-     */
+    // Overloaded constructor accepting raw or dynamically generated GLSL source code directly.
     public OpenGLShader(String vertexSource, String fragmentSource, boolean isRawSource) {
         Logger.debug(Logger.System.SHADER, "Compiling pipeline shaders from dynamic runtime raw source strings.");
         initFromSource(vertexSource, fragmentSource);

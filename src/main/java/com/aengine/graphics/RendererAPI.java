@@ -4,8 +4,9 @@ import org.joml.Vector4f;
 
 public interface RendererAPI {
     void init();
+    void initBatchBuffers(int maxVertices, int maxIndices, int vertexSizeFloats);
     void setClearColor(Vector4f color);
     void clear();
-    void drawIndexed(int indexCount);
+    void drawBatch(float[] vertices, int vertexCount, int indexCount);
     void cleanup();
 }

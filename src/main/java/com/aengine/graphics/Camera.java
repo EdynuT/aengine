@@ -51,10 +51,10 @@ public class Camera {
         viewProjection.set(projection).mul(view);
     }
 
-    public void setPosition(float x, float y, float z) { position.set(x, y, z); recalculate(); }
-    public void move(Vector3f delta)                    { position.add(delta);    recalculate(); }
-    public void setYaw(float yaw)                       { this.yaw   = yaw;       recalculate(); }
-    public void setPitch(float pitch)                   { this.pitch = pitch;     recalculate(); }
+    public void setPosition(float x, float y, float z)  { position.set(x, y, z); recalculate(); }
+    public void move(Vector3f delta)                    { position.add(delta);   recalculate(); }
+    public void setYaw(float yaw)                       { this.yaw   = yaw;      recalculate(); }
+    public void setPitch(float pitch)                   { this.pitch = pitch;    recalculate(); }
 
     public Matrix4f getProjection()     { return projection; }
     public Matrix4f getView()           { return view; }

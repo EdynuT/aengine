@@ -26,7 +26,7 @@ The engine is structured as a reusable library. The abstraction layer between ga
 .\gradlew.bat run
 ```
 
-Linux
+- Linux
 ```shell
 ./gradlew clean run
 ```
@@ -41,11 +41,17 @@ First run downloads Gradle (~130 MB). Subsequent runs start in seconds.
 
 ### 1. Publish to Maven Local
 
+- Windows
 ```powershell
 .\gradlew publishToMavenLocal
 ```
 
-This installs `com.aengine:AEngine:0.6` into `~/.m2/repository`.
+- Linux
+```shell
+./gradlew publishToMavenLocal
+```
+
+This installs `com.aengine:AEngine:0.7` into `~/.m2/repository`.
 
 ### 2. Import in your game project
 
@@ -57,7 +63,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.aengine:AEngine:1.0.0'
+    implementation 'com.aengine:AEngine:0.7'
 
     // LWJGL natives — required, declare for your target platform
     runtimeOnly "org.lwjgl:lwjgl:3.3.4:natives-windows"
@@ -100,9 +106,10 @@ public class MyGame extends Engine {
 - [x] Logger with per-system log levels
 - [x] Hot reload of game logic
 - [x] Camera
-- [ ] WASD movement
+- [x] WASD movement
 - [x] Renderer3D — grid-based dungeon walls
 - [ ] UI / HUD overlay
 - [ ] Framebuffer + post-processing (scanlines, fog)
 - [ ] Scene serialization
+- [ ] ECS (Entity Component System) 
 - [ ] Dear ImGui editor integration

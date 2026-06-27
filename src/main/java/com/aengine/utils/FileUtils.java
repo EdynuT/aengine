@@ -22,6 +22,21 @@ public class FileUtils {
 
     public static String readAndInjectResource(String path, int maxSlots) {
         String source = readResource(path);
-        return source.replace("#MAX_TEXTURE_SLOTS#", String.valueOf(maxSlots));
+        
+        // First, inject the array dimensions constraint
+        source = source.replace("#MAX_TEXTURE_SLOTS#", String.valueOf(maxSlots));
+        
+        // Procedurally assemble the GLSL switch-case block to satisfy strict compilers like Mesa/ACO
+        StringBuilder switchBuilder = new StringBuilder();
+        for (int i = 0; i < maxSlots; i++) {
+            switchBuilder.append("        case ")
+                        .append(i)
+                        .append(": texColor = texture(u_Textures[")
+                        .append(i)
+                        .append("], v_TexCoord); break;\n");
+        }
+        
+        // Inject the final string tree back into the shader source code layout
+        return source.replace("#DYNAMIC_SWITCH_BODY#", switchBuilder.toString());
     }
 }
