@@ -8,9 +8,11 @@ bin/
 !gradle/wrapper/gradle-wrapper.jar
 
 # IDE
+.vscode/
 .idea/
 *.iml
 .vscode/settings.json
+.vscode/tasks.json
 
 # OS
 Thumbs.db
