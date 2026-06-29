@@ -53,14 +53,14 @@ Clone the repository to your workspace
 
 - **Windows**
 ```powershell
-git clone [https://github.com/EdynuT/AEngine.git](https://github.com/EdynuT/AEngine.git)
+git clone https://github.com/EdynuT/AEngine.git
 
 cd .\path\to\AEngine
 ```
 
 - **Linux**
 ```bash
-git clone [https://github.com/EdynuT/AEngine.git](https://github.com/EdynuT/AEngine.git)
+git clone https://github.com/EdynuT/AEngine.git
 
 cd ./path/to/AEngine
 ```
