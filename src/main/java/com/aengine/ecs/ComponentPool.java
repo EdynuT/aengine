@@ -4,6 +4,19 @@ import com.aengine.utils.Logger;
 import java.lang.reflect.Array;
 import java.util.Arrays;
 
+/*
+ * MEMORY ADDRESSING NOTE: SPARSE SET PATTERN
+ * * In standard Object-Oriented Programming (OOP), entities store lists of components. 
+ * This causes CPU Cache Misses because the hardware has to follow pointers scattered 
+ * randomly across the Java Heap, stalling the CPU while it waits for RAM fetches.
+ * * Data-Oriented Design (DOD) solves this using a Sparse Set:
+ * 1. `denseComponents`: A strictly packed, contiguous array of component data. 
+ * When the CPU requests index [0], the hardware L1 Cache automatically pre-fetches 
+ * [1], [2], and [3] in a single 64-byte Cache Line, resulting in ultra-fast iteration.
+ * 2. `entityToDense` (Sparse Array): Maps Entity ID -> Dense Array Index in O(1) time.
+ * 3. `denseToEntity` (Dense Array): Allows the system to know which entity owns a component 
+ * during linear iteration, bypassing the need to read the entity object itself.
+ */
 public final class ComponentPool<T> {
 
     private final Class<?> componentType;

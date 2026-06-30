@@ -2,6 +2,8 @@ package com.aengine;
 
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
+import com.aengine.graphics.TextureAPI;
+import com.aengine.graphics.opengl.OpenGLTexture;
 import com.aengine.graphics.Camera;
 import com.aengine.utils.ProjectWizard;
 import com.aengine.utils.FileSystem;
@@ -26,7 +28,7 @@ public class Main extends Engine {
 
     // Allocation-free temporary structural containers for 3D physical environment alignment
     private static final Vector3f GROUND_POSITION = new Vector3f(0.0f, -1.5f, 0.0f); 
-    private static final Vector3f GROUND_SIZE = new Vector3f(1000.0f, 1.0f, 1000.0f);   
+    private static final Vector3f GROUND_SIZE = new Vector3f(1024.0f, 1.0f, 1024.0f); // 32 bit limit
     private static final Vector4f GROUND_COLOR    = new Vector4f(0.50f, 0.50f, 0.50f, 1.0f); // Light Gray Floor
 
     // Shared execution state capturing target path sent from external process host
@@ -61,8 +63,9 @@ public class Main extends Engine {
         Renderer2D.init();
         Renderer3D.init();
         
-        // Atmospheric sky blue background clear color registration
-        Renderer2D.setClearColor(0.45f, 0.65f, 0.85f, 1.0f);
+        // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f)
+        // Gray backgrund for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
+        Renderer2D.setClearColor(0.30f, 0.30f, 0.30f, 1.0f);
 
         cameraSystem = new CameraSystem();
         cameraEntity = registry.createEntity();
@@ -90,15 +93,19 @@ public class Main extends Engine {
             
             // Spawn static world assets locked at Z = 0.0f to prevent pipeline artifacts
             for (int i = 0; i < 3; i++) {
-                int entity = registry.createEntity();
-                registry.addComponent(entity, new TransformComponent(new Vector3f(i * 2.5f - 2.5f, 0.0f, 0.0f)));
-                registry.addComponent(entity, new SpriteComponent(new Vector4f(0.2f, i * 0.3f + 0.3f, 0.5f, 1.0f)));
+                int entityID = registry.createEntity();
+                registry.addComponent(entityID, new TransformComponent(new Vector3f(0.0f, 1.0f, -3.0f)));
+                TextureAPI texture = new OpenGLTexture("assets://textures/caixa.png");
+                SpriteComponent sprite = new SpriteComponent(new Vector4f(1.0f, 1.0f, 1.0f, 1.0f));
+                sprite.texture = texture;
+                registry.addComponent(entityID, sprite);
             }
         }
     }
 
     @Override
     protected void onUpdate(float deltaTime) {
+        // com.aengine.utils.FPSTracker.update(deltaTime);
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }

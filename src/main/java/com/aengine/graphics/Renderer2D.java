@@ -47,7 +47,7 @@ public class Renderer2D {
     };
 
     public static void init() {
-        Logger.info(Logger.System.RENDERER, "Initializing decoupled 2D/3D Hybrid Batch Renderer pipeline...");
+        Logger.info(Logger.System.RENDERER, "Initializing Batch Renderer pipeline...");
 
         // Ensure hardware capability mapping is bound and active before allocating buffers
         HardwareCapabilities.initialize();

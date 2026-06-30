@@ -2,6 +2,7 @@ package com.aengine.ecs.systems;
 
 import com.aengine.Input;
 import com.aengine.Keys;
+import com.aengine.Main; // Importado para acessar o RenderMode
 import com.aengine.ecs.ComponentPool;
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.System;
@@ -42,6 +43,9 @@ public final class CameraSystem extends System {
         CameraComponent[] cameras = cameraPool.getRawComponents();
         int[] denseToEntity = cameraPool.getRawDenseToEntity();
         int totalElements = cameraPool.size();
+
+        // Verify if the active render mode is 2D or 3D
+        boolean is2DMode = (Main.getActiveRenderMode() == Main.RenderMode.MODE_2D);
 
         for (int i = 0; i < totalElements; i++) {
             CameraComponent camComp = cameras[i];
@@ -93,25 +97,41 @@ public final class CameraSystem extends System {
                     isCursorHidden = true;
                 }
 
-                // Modifier state check: SHIFT + RIGHT CLICK (Strafe/Pan mode)
-                if (Input.isKeyPressed(Keys.SHIFT_L) || Input.isKeyPressed(Keys.SHIFT_R)) {
+                if (is2DMode) {
+                    // --- 2D BEHAVIOR ---
+                    // Right Button only drags the camera (Pan) along the X and Y axes
                     if (Math.abs(deltaX) > 0.0f) {
-                        movementDelta.add(new Vector3f(rightDirection).mul(deltaX * mouseSensitivity * 0.01f));
+                        // Invert the delta to give the sensation of "dragging the paper"
+                        movementDelta.x -= deltaX * mouseSensitivity * 0.05f;
                     }
                     if (Math.abs(deltaY) > 0.0f) {
-                        movementDelta.sub(new Vector3f(forwardDirection).mul(deltaY * mouseSensitivity * 0.01f));
+                        // In GLFW, moving the mouse down increases Y. To make the camera go up, Y must be positive.
+                        movementDelta.y += deltaY * mouseSensitivity * 0.05f;
                     }
                 } else {
-                    // Standard State: RIGHT CLICK ONLY (Orbit/Look mode)
-                    if (Math.abs(deltaX) > 0.0f || Math.abs(deltaY) > 0.0f) {
-                        currentYaw += deltaX * mouseSensitivity;
-                        currentPitch -= deltaY * mouseSensitivity;
+                    // --- 3D BEHAVIOR ---
+                    // Modifier state check: SHIFT + RIGHT CLICK (Strafe/Pan mode)
+                    if (Input.isKeyPressed(Keys.SHIFT_L) || Input.isKeyPressed(Keys.SHIFT_R)) {
+                        if (Math.abs(deltaX) > 0.0f) {
+                            movementDelta.add(new Vector3f(rightDirection).mul(deltaX * mouseSensitivity * 0.01f));
+                        }
+                        if (Math.abs(deltaY) > 0.0f) {
+                            movementDelta.sub(new Vector3f(forwardDirection).mul(deltaY * mouseSensitivity * 0.01f));
+                        }
+                    } else {
+                        // Standard State: RIGHT CLICK ONLY (Orbit/Look mode)
+                        if (Math.abs(deltaX) > 0.0f || Math.abs(deltaY) > 0.0f) {
+                            currentYaw += deltaX * mouseSensitivity;
+                            currentPitch -= deltaY * mouseSensitivity;
 
-                        if (currentPitch > 89.9f)  currentPitch = 89.9f;
-                        if (currentPitch < -89.9f) currentPitch = -89.9f;
+                            // Lock the Y axis to prevent the camera from flipping
+                            if (currentPitch > 89.9f)  currentPitch = 89.9f;
+                            if (currentPitch < -89.9f) currentPitch = -89.9f;
+                        }
                     }
                 }
             } else {
+                // Restore the cursor when releasing the right button
                 if (isCursorHidden) {
                     long windowHandle = glfwGetCurrentContext();
                     glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -120,6 +140,7 @@ public final class CameraSystem extends System {
             }
 
             // 4. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
+            // Works identically in 2D and 3D as requested
             if (Input.isKeyPressed(Keys.SPACE)) {
                 movementDelta.add(new Vector3f(verticalUp).mul(speedModifier));
             }

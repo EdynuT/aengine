@@ -49,16 +49,40 @@ public final class HardwareCapabilities {
 
         initialized = true;
 
+        /* Python to java
+        box = [gpuVendor, gpuHardware, glVersion, maxTextureSlots, maxTextureSize, maxRenderBufferSize, cpuModel, cpuLogicalCores]
+        max_len = []
+        for iten in range(len(box)):
+            max_len.append(len(box[iten]))
+        
+        max_len = max(max_len)
+
+        bar = "=" * (max_len)
+        */
+
+        // now translated to java
+        String[] box = {gpuVendor, gpuHardware, glVersion, String.valueOf(maxTextureSlots), String.valueOf(maxTextureSize), String.valueOf(maxRenderBufferSize), cpuModel, String.valueOf(cpuLogicalCores)};
+        
+        int max_len = 0;
+        for (String item : box) {
+            if (item.length() > max_len) {
+                max_len = item.length();
+            }
+        }
+
+        String bar = "=".repeat(max_len + 28);
+
         // 3. Flush Complete Hardware Stack Context to Logs
-        Logger.info(Logger.System.RENDERER, "==============================================================================");
-        Logger.info(Logger.System.RENDERER, "NATIVE HARDWARE TELEMETRY LOGGED:");
-        Logger.info(Logger.System.RENDERER, " -> CPU Host Identifier   : %s (%d logical threads)", cpuModel, cpuLogicalCores);
+        Logger.info(Logger.System.RENDERER, bar);
+        Logger.info(Logger.System.RENDERER, "HARDWARE TELEMETRY LOGGED:");
+        Logger.info(Logger.System.RENDERER, " -> CPU Host Identifier   : %s", cpuModel);
+        Logger.info(Logger.System.RENDERER, " -> CPU Logical Cores     : %d active threads", cpuLogicalCores);
         Logger.info(Logger.System.RENDERER, " -> Graphics Accelerator  : %s", gpuHardware);
         Logger.info(Logger.System.RENDERER, " -> OpenGL Driver Scope   : %s", glVersion);
         Logger.info(Logger.System.RENDERER, " -> Hardware Texture Units: %d active slots", maxTextureSlots);
         Logger.info(Logger.System.RENDERER, " -> Texture Resolution Max: %dx%d px", maxTextureSize, maxTextureSize);
         Logger.info(Logger.System.RENDERER, " -> FrameBuffer Render Cap: %d px", maxRenderBufferSize);
-        Logger.info(Logger.System.RENDERER, "==============================================================================");
+        Logger.info(Logger.System.RENDERER, bar);
     }
 
     private static void resolveCpuSpecifications() {

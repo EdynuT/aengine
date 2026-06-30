@@ -118,6 +118,9 @@ public class Window {
 
         Logger.debug(Logger.System.WINDOW, "Mapping window frame buffer to physical display.");
         glfwShowWindow(handle);
+        org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(handle);
+        org.lwjgl.glfw.GLFW.glfwSwapInterval(0);
+        org.lwjgl.glfw.GLFW.glfwShowWindow(handle);
     }
 
     public void swapBuffers() { 
