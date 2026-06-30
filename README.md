@@ -129,15 +129,34 @@ Windows requires the Microsoft Edge WebView2 runtime (usually pre-installed on W
   npm install -g @tauri-apps/cli@next
   ```
 
-### Starting the Development Workspace
+### Executing the Runtime Environment
+The framework dynamically switches execution pipelines at startup using JVM command-line arguments. You can pass these parameters straight through Gradle using the `--args` flag.
+
+* **1. Standard 2D Pipeline (Default)**
+  Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
+
+  ```bash
+  ./gradlew run
+  ```
+
+* **2. Hybrid Core 3D Perspective Pipeline**
+  Enforces the 3D projection subsystem layout. This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
+
+  ```bash
+  ./gradlew run --args="--3d"
+  ```
+
+### Starting the Interface Development Workspace
 To kickstart the Tauri v2 Hub Wizard in development mode (which automatically watches for changes in both the Rust backend and the HTML/CSS frontend assets):
 
+* **1. Running the Interface**
+  
   ```bash
   tauri dev
   ```
   **Note:** If you installed via `cargo install`, the bare alias might require you to run `cargo tauri dev`, which works natively and identically across all platforms.
 
-Compiling build for final distribuition (.msi, .exe, .deb, AppImage):
+* **2. Compiling for Distribuition:**
 
   ```bash
   tauri build
@@ -194,11 +213,13 @@ Compiling build for final distribuition (.msi, .exe, .deb, AppImage):
 
 - [x] Native Subprocess Handshake — IPC Command Pipeline mapping between Rust/JS and JVM Argument injection.
 
+- [x] Decouple 2D/3D Specialized Render Pipelines: Enforce strict segregation between 2D Batching and 3D Mesh Pipelines. Project Initialization manifests (project.json) must explicitly declare target dimensions to cull unnecessary buffer overheads.
+
+- [x] Procedural Infinite Grid Pipeline — Implemented an angle-aware screen-space analytic grid (1.0f, 4.0f, 16.0f units) utilizing isotropic hardware derivatives (fwidth) to negate sub-sampling aliasing.
+
 - [ ] Architecture Realignment — Segregate ImGui Dependencies: Isolate and deprecate Dear ImGui from structural window wrappers. Retain ImGui execution paths exclusively for intra-viewport debug overlays running inside the active LWJGL hardware thread, shifting window-frame layout responsibility entirely to the WebKit/Tauri frontend context.
 
 - [ ] Local Socket IPC Daemon: Implement a lightweight local loopback TCP socket connection between the Tauri frontend wrapper and the Java Core to stream real-time framework telemetry (FPS counters, active ECS allocations, and structural logs) directly into the UI dashboard.
-
-- [ ] Decouple 2D/3D Specialized Render Pipelines: Enforce strict segregation between 2D Batching and 3D Mesh Pipelines. Project Initialization manifests (project.json) must explicitly declare target dimensions to cull unnecessary buffer overheads.
 
 - [ ] Dynamic Vertex Layout Texture Slating: Complete integration of texture indices (in float a_TexIndex) inside Renderer2D/3D batches to enforce single draw-call execution frames using GPU hardware slots dynamically.
 

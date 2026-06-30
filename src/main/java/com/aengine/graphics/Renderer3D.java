@@ -4,46 +4,73 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
+import com.aengine.utils.FileUtils;
 import com.aengine.utils.Logger;
+
+import static org.lwjgl.opengl.GL30.*;
 
 public class Renderer3D {
 
-    private static final int VERTICES_PER_QUAD = 4;
-    private static final int INDICES_PER_QUAD = 6;
-    private static final int VERTEX_SIZE_FLOATS = 10;
+    private static ShaderAPI gridShader;
+    private static Camera activeCameraContext;
 
-    // Unit quad local position definitions in 3D Space (Facing the Z axis)
-    private static final Vector4f[] LOCAL_VERTICES = {
-        new Vector4f(-0.5f, -0.5f, 0.0f, 1.0f),
-        new Vector4f( 0.5f, -0.5f, 0.0f, 1.0f),
-        new Vector4f( 0.5f,  0.5f, 0.0f, 1.0f),
-        new Vector4f(-0.5f,  0.5f, 0.0f, 1.0f)
-    };
-
-    private static final Vector2f[] LOCAL_UV = {
-        new Vector2f(0.0f, 0.0f),
-        new Vector2f(1.0f, 0.0f),
-        new Vector2f(1.0f, 1.0f),
-        new Vector2f(0.0f, 1.0f)
-    };
+    // Direct hardware pointers for isolated static geometry
+    private static int gridVAO, gridVBO, gridEBO;
 
     public static void init() {
         Logger.info(Logger.System.RENDERER, "Initializing core 3D Projection Subsystem...");
+        
+        String vertSrc = FileUtils.readResource("/shaders/opengl/grid.vert");
+        String fragSrc = FileUtils.readResource("/shaders/opengl/grid.frag");
+        gridShader = RenderContext.createShader(vertSrc, fragSrc, true);
+
+        // Upload the structural floor quad directly to VRAM once
+        setupGridHardware();
+    }
+
+    private static void setupGridHardware() {
+        // Flat 1x1 quad centered at origin, facing Y-up natively
+        float[] vertices = {
+            -0.5f, 0.0f, -0.5f,
+             0.5f, 0.0f, -0.5f,
+             0.5f, 0.0f,  0.5f,
+            -0.5f, 0.0f,  0.5f
+        };
+
+        int[] indices = { 0, 1, 2, 2, 3, 0 };
+
+        gridVAO = glGenVertexArrays();
+        gridVBO = glGenBuffers();
+        gridEBO = glGenBuffers();
+
+        glBindVertexArray(gridVAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gridEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, false, 3 * Float.BYTES, 0);
+        glEnableVertexAttribArray(0);
+
+        glBindVertexArray(0);
     }
 
     public static void beginScene(Camera camera) {
-        // Diverts active hardware thread state compilation to unifed dynamic shader pipelines
+        activeCameraContext = camera;
         Renderer2D.beginScene(camera);
     }
 
-    public static void drawCubeFace(Vector3f position, Vector3f rotation, Vector3f scale, TextureAPI texture, Vector4f tint) {
-        if (Renderer2D.getIndexCount() >= 6000) {
-            Renderer2D.flush();
-        }
+    public static void drawPlane(Vector3f position, Vector3f rotation, Vector3f scale, Vector4f color) {
+        // Force the 2D renderer to clear its queue to preserve depth testing order
+        Renderer2D.flush();
 
-        float textureIndex = Renderer2D.getOrCreateTextureIndex(texture);
+        gridShader.bind();
+        gridShader.setMat4("u_ViewProjection", activeCameraContext.getViewProjection());
+        gridShader.setVec4("u_GridColor", color);
 
-        // Build 3D transformation matrix (Translation, Rotation, Scale)
+        // Hardware-side spatial transformation
         Matrix4f transform = new Matrix4f()
             .translate(position)
             .rotateX((float) Math.toRadians(rotation.x))
@@ -51,27 +78,14 @@ public class Renderer3D {
             .rotateZ((float) Math.toRadians(rotation.z))
             .scale(scale);
 
-        float[] vBuffer = Renderer2D.getVertexBuffer();
+        gridShader.setMat4("u_Transform", transform);
 
-        for (int i = 0; i < VERTICES_PER_QUAD; i++) {
-            Vector4f worldPos = new Vector4f(LOCAL_VERTICES[i]).mul(transform);
+        // Bypass Renderer2D entirely. Dispatch draw command natively.
+        glBindVertexArray(gridVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
 
-            int baseIndex = Renderer2D.getVertexCount();
-            vBuffer[baseIndex + 0] = worldPos.x;
-            vBuffer[baseIndex + 1] = worldPos.y;
-            vBuffer[baseIndex + 2] = worldPos.z; // Hardware Z Depth value preserved
-            vBuffer[baseIndex + 3] = LOCAL_UV[i].x;
-            vBuffer[baseIndex + 4] = LOCAL_UV[i].y;
-            vBuffer[baseIndex + 5] = tint.x;
-            vBuffer[baseIndex + 6] = tint.y;
-            vBuffer[baseIndex + 7] = tint.z;
-            vBuffer[baseIndex + 8] = tint.w;
-            vBuffer[baseIndex + 9] = textureIndex;
-
-            Renderer2D.setVertexCount(baseIndex + VERTEX_SIZE_FLOATS);
-        }
-
-        Renderer2D.setIndexCount(Renderer2D.getIndexCount() + INDICES_PER_QUAD);
+        gridShader.unbind();
     }
 
     public static void endScene() {
@@ -80,5 +94,9 @@ public class Renderer3D {
 
     public static void cleanup() {
         Logger.info(Logger.System.RENDERER, "3D Context terminated.");
+        if (gridShader != null) gridShader.cleanup();
+        glDeleteVertexArrays(gridVAO);
+        glDeleteBuffers(gridVBO);
+        glDeleteBuffers(gridEBO);
     }
 }

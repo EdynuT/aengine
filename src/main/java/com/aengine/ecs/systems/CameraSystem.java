@@ -9,7 +9,7 @@ import com.aengine.ecs.components.CameraComponent;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.graphics.Camera;
 import org.joml.Vector3f;
-import static org.lwjgl.glfw.GLFW.*; // Import nativo para garantir o chaveamento direto do modo de input se necessário
+import static org.lwjgl.glfw.GLFW.*;
 
 public final class CameraSystem extends System {
 
@@ -87,9 +87,7 @@ public final class CameraSystem extends System {
             // 3. State Machine: Is Right Click Engaged?
             if (Input.isMouseButtonPressed(BUTTON_RIGHT)) {
                 
-                // CRITICAL TWEAK: Hide cursor ONLY when actual physical dragging movement starts
                 if (!isCursorHidden && (Math.abs(deltaX) > 0.0f || Math.abs(deltaY) > 0.0f)) {
-                    // Safe dynamic fallback to get active handle via GLFW current context if Input wrapper isn't global
                     long windowHandle = glfwGetCurrentContext();
                     glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                     isCursorHidden = true;
@@ -98,10 +96,10 @@ public final class CameraSystem extends System {
                 // Modifier state check: SHIFT + RIGHT CLICK (Strafe/Pan mode)
                 if (Input.isKeyPressed(Keys.SHIFT_L) || Input.isKeyPressed(Keys.SHIFT_R)) {
                     if (Math.abs(deltaX) > 0.0f) {
-                        movementDelta.add(new Vector3f(rightDirection).mul(deltaX * mouseSensitivity * 0.1f));
+                        movementDelta.add(new Vector3f(rightDirection).mul(deltaX * mouseSensitivity * 0.01f));
                     }
                     if (Math.abs(deltaY) > 0.0f) {
-                        movementDelta.sub(new Vector3f(forwardDirection).mul(deltaY * mouseSensitivity * 0.1f));
+                        movementDelta.sub(new Vector3f(forwardDirection).mul(deltaY * mouseSensitivity * 0.01f));
                     }
                 } else {
                     // Standard State: RIGHT CLICK ONLY (Orbit/Look mode)
@@ -109,15 +107,11 @@ public final class CameraSystem extends System {
                         currentYaw += deltaX * mouseSensitivity;
                         currentPitch -= deltaY * mouseSensitivity;
 
-                        if (currentPitch > 89.0f)  currentPitch = 89.0f;
-                        if (currentPitch < -89.0f) currentPitch = -89.0f;
-
-                        nativeCamera.setYaw(currentYaw);
-                        nativeCamera.setPitch(currentPitch);
+                        if (currentPitch > 89.9f)  currentPitch = 89.9f;
+                        if (currentPitch < -89.9f) currentPitch = -89.9f;
                     }
                 }
             } else {
-                // 4. Release State: If button is let go, restore hardware cursor profile instantly
                 if (isCursorHidden) {
                     long windowHandle = glfwGetCurrentContext();
                     glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -125,7 +119,7 @@ public final class CameraSystem extends System {
                 }
             }
 
-            // 5. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
+            // 4. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
             if (Input.isKeyPressed(Keys.SPACE)) {
                 movementDelta.add(new Vector3f(verticalUp).mul(speedModifier));
             }
@@ -133,11 +127,18 @@ public final class CameraSystem extends System {
                 movementDelta.sub(new Vector3f(verticalUp).mul(speedModifier));
             }
 
+            // Apply calculated structural translations straight to component storage
             if (movementDelta.lengthSquared() > 0.0f) {
                 transform.position.add(movementDelta);
             }
 
+            // Enforce unified matrix synchronization block inside the camera subsystem to prevent frame stalls
             nativeCamera.setPosition(transform.position.x, transform.position.y, transform.position.z);
+            nativeCamera.setYaw(currentYaw);
+            nativeCamera.setPitch(currentPitch);
+            
+            // Invoke the baseline matrix getter to evaluate or flag dirty states internally
+            nativeCamera.getViewProjection(); 
         }
     }
 }

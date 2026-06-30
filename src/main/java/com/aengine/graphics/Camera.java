@@ -15,6 +15,11 @@ public class Camera {
     private float yaw   = -90.0f;
     private float pitch = 0.0f;
 
+    // Allocation-free static mathematical hooks to secure L1/L2 cache lines
+    private final Vector3f targetLookBuffer = new Vector3f();
+    private final Vector3f upVectorBuffer   = new Vector3f(0.0f, 1.0f, 0.0f);
+    private final Vector3f frontDirection   = new Vector3f();
+
     private Camera(Type type) {
         this.type = type;
     }
@@ -22,7 +27,7 @@ public class Camera {
     /** Create a 2D orthographic camera */
     public static Camera orthographic(float left, float right, float bottom, float top) {
         Camera cam = new Camera(Type.ORTHOGRAPHIC);
-        cam.projection.ortho(left, right, bottom, top, -1.0f, 1.0f);
+        cam.projection.setOrtho(left, right, bottom, top, -1.0f, 1.0f);
         cam.recalculate();
         return cam;
     }
@@ -30,25 +35,32 @@ public class Camera {
     /** Create a 3D perspective camera */
     public static Camera perspective(float fovDegrees, float aspectRatio, float near, float far) {
         Camera cam = new Camera(Type.PERSPECTIVE);
-        cam.projection.perspective((float) Math.toRadians(fovDegrees), aspectRatio, near, far);
+        cam.projection.setPerspective((float) Math.toRadians(fovDegrees), aspectRatio, near, far);
         cam.recalculate();
         return cam;
     }
 
     public void recalculate() {
         if (type == Type.ORTHOGRAPHIC) {
-            view.identity().translate(-position.x, -position.y, 0);
+            view.identity().translate(-position.x, -position.y, 0.0f);
         } else {
-            Vector3f front = new Vector3f(
-                (float)(Math.cos(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch))),
-                (float)(Math.sin(Math.toRadians(pitch))),
-                (float)(Math.sin(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)))
-            ).normalize();
-            view.identity().lookAt(position,
-                new Vector3f(position).add(front),
-                new Vector3f(0, 1, 0));
+            double radYaw = Math.toRadians(yaw);
+            double radPitch = Math.toRadians(pitch);
+
+            frontDirection.x = (float) (Math.cos(radYaw) * Math.cos(radPitch));
+            frontDirection.y = (float) Math.sin(radPitch);
+            frontDirection.z = (float) (Math.sin(radYaw) * Math.cos(radPitch));
+            frontDirection.normalize();
+
+            // Perform calculation inside localized vector references to isolate memory allocations
+            position.add(frontDirection, targetLookBuffer);
+            
+            // Reconstruct the View Matrix pointing smoothly towards the directional target
+            view.identity().lookAt(position, targetLookBuffer, upVectorBuffer);
         }
-        viewProjection.set(projection).mul(view);
+        
+        // Enforce the standard hardware matrix layout order: ViewProjection = Projection * View
+        projection.mul(view, viewProjection);
     }
 
     public void setPosition(float x, float y, float z)  { position.set(x, y, z); recalculate(); }

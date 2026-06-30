@@ -2,6 +2,7 @@ package com.aengine;
 
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
+import com.aengine.graphics.Camera;
 import com.aengine.utils.ProjectWizard;
 import com.aengine.utils.FileSystem;
 import com.aengine.utils.Logger;
@@ -12,7 +13,6 @@ import com.aengine.ecs.systems.CameraSystem;
 
 import java.io.File;
 
-import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
@@ -21,10 +21,13 @@ public class Main extends Engine {
     private CameraSystem cameraSystem;
     private int cameraEntity;
 
-    // Allocation-free temporary structural containers for environmental layout
-    private static final Vector2f GROUND_POSITION = new Vector2f(0.0f, -1.5f); 
-    private static final Vector2f GROUND_SIZE     = new Vector2f(5000.0f, 5000.0f);    
-    private static final Vector4f GROUND_COLOR    = new Vector4f(0.35f, 0.35f, 0.36f, 1.0f); // Slate Light Gray Floor
+    public enum RenderMode { MODE_2D, MODE_3D }
+    private static RenderMode activeRenderMode = RenderMode.MODE_3D;
+
+    // Allocation-free temporary structural containers for 3D physical environment alignment
+    private static final Vector3f GROUND_POSITION = new Vector3f(0.0f, -1.5f, 0.0f); 
+    private static final Vector3f GROUND_SIZE = new Vector3f(1000.0f, 1.0f, 1000.0f);   
+    private static final Vector4f GROUND_COLOR    = new Vector4f(0.50f, 0.50f, 0.50f, 1.0f); // Light Gray Floor
 
     // Shared execution state capturing target path sent from external process host
     private static String activeProjectPath;
@@ -46,7 +49,6 @@ public class Main extends Engine {
             java.io.File projectDir = new java.io.File(activeProjectPath);
             if (!projectDir.exists() || !projectDir.isDirectory()) {
                 Logger.warn(Logger.System.CORE, "Target workspace not found. Deploying Project Wizard Bootstrap at: " + activeProjectPath);
-                // Dynamically build the ProjectRoot layout structures (.aengine/, assets/, config/)
                 ProjectWizard.createProject(System.getProperty("user.home"), "AeternumSandbox");
             }
             
@@ -61,20 +63,37 @@ public class Main extends Engine {
         
         // Atmospheric sky blue background clear color registration
         Renderer2D.setClearColor(0.45f, 0.65f, 0.85f, 1.0f);
-        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
 
         cameraSystem = new CameraSystem();
-
-        // 1. Spawn the dynamic flight camera entity into the shared engine ecosystem
         cameraEntity = registry.createEntity();
         registry.addComponent(cameraEntity, new TransformComponent(new Vector3f(0.0f, 0.0f, 5.0f)));
-        registry.addComponent(cameraEntity, new CameraComponent(45.0f, 1920.0f, 1080.0f, 0.1f, 100.0f, true));
 
-        // 2. Spawn static world assets for spatial evaluation mapping
-        for (int i = 0; i < 3; i++) {
-            int entity = registry.createEntity();
-            registry.addComponent(entity, new TransformComponent(new Vector3f(i * 2.5f - 2.5f, 0.0f, 0.0f)));
-            registry.addComponent(entity, new SpriteComponent(new Vector4f(0.2f, 0.5f, i * 0.3f + 0.3f, 1.0f)));
+        if (activeRenderMode == RenderMode.MODE_3D) {
+            Logger.info(Logger.System.RENDERER, "Enforcing Core 3D Perspective execution pipeline.");
+            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+            
+            // True activates 3D Perspective projection matrix calculation inside CameraComponent
+            registry.addComponent(cameraEntity, new CameraComponent(45.0f, getWindow().getWidth(), getWindow().getHeight(), 0.1f, 1000.0f, true));
+            
+            // Spawn static world assets scattered across X and Z planes for depth testing
+            for (int i = 0; i < 3; i++) {
+                int entity = registry.createEntity();
+                registry.addComponent(entity, new TransformComponent(new Vector3f(i * 2.5f - 2.5f, 0.0f, -i * 2.0f)));
+                registry.addComponent(entity, new SpriteComponent(new Vector4f(0.2f, 0.5f, i * 0.3f + 0.3f, 1.0f)));
+            }
+        } else {
+            Logger.info(Logger.System.RENDERER, "Enforcing Core 2D Orthographic execution pipeline. Z-Axis dropped.");
+            org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+            
+            // False enforces 2D Orthographic projection matrix calculation, dropping spatial depth distortions
+            registry.addComponent(cameraEntity, new CameraComponent(0.0f, getWindow().getWidth(), getWindow().getHeight(), -1.0f, 1.0f, false));
+            
+            // Spawn static world assets locked at Z = 0.0f to prevent pipeline artifacts
+            for (int i = 0; i < 3; i++) {
+                int entity = registry.createEntity();
+                registry.addComponent(entity, new TransformComponent(new Vector3f(i * 2.5f - 2.5f, 0.0f, 0.0f)));
+                registry.addComponent(entity, new SpriteComponent(new Vector4f(0.2f, i * 0.3f + 0.3f, 0.5f, 1.0f)));
+            }
         }
     }
 
@@ -91,13 +110,12 @@ public class Main extends Engine {
 
     @Override
     protected void onRender() {
-        var cameraPool = registry.getPool(com.aengine.ecs.components.CameraComponent.class);
-        com.aengine.graphics.Camera activeCamera = null;
+        var cameraPool = registry.getPool(CameraComponent.class);
+        Camera activeCamera = null;
 
         if (cameraPool != null) {
-            com.aengine.ecs.components.CameraComponent[] cameras = cameraPool.getRawComponents();
+            CameraComponent[] cameras = cameraPool.getRawComponents();
             int totalCameras = cameraPool.size();
-            
             for (int i = 0; i < totalCameras; i++) {
                 if (cameras[i] != null && cameras[i].primary) {
                     activeCamera = cameras[i].camera;
@@ -106,31 +124,30 @@ public class Main extends Engine {
             }
         }
 
-        if (activeCamera == null) {
-            return;
+        if (activeCamera == null) return;
+
+        Renderer3D.beginScene(activeCamera);
+
+        // --- RENDER PHYSICAL ENVIRONMENT (THE GROUND) ---
+        if (activeRenderMode == RenderMode.MODE_3D) {
+            // Rotates the structural quad -90 degrees on the X-axis to lay it flat perpendicular to Y
+            Renderer3D.drawPlane(GROUND_POSITION, new Vector3f(0.0f, 0.0f, 0.0f), GROUND_SIZE, GROUND_COLOR);
         }
-
-        com.aengine.graphics.Renderer2D.beginScene(activeCamera);
-
-        // --- RENDER ENVIRONMENT ENVIRONMENT (THE GROUND) ---
-        com.aengine.graphics.Renderer2D.drawQuad(GROUND_POSITION, GROUND_SIZE, GROUND_COLOR);
 
         // --- RENDER ECS DYNAMIC ENTITIES SET ---
         var entities = registry.getEntitiesWith(
-            com.aengine.ecs.components.TransformComponent.class, 
-            com.aengine.ecs.components.SpriteComponent.class
+            TransformComponent.class, 
+            SpriteComponent.class
         );
 
         for (int i = 0; i < entities.size(); i++) {
             int entityID = entities.get(i);
-            
-            var transform = registry.getComponent(entityID, com.aengine.ecs.components.TransformComponent.class);
-            var sprite = registry.getComponent(entityID, com.aengine.ecs.components.SpriteComponent.class);
-            
-            com.aengine.graphics.Renderer2D.drawEntityQuad(transform, sprite);
+            var transform = registry.getComponent(entityID, TransformComponent.class);
+            var sprite = registry.getComponent(entityID, SpriteComponent.class);
+            Renderer2D.drawEntityQuad(transform, sprite);
         }
 
-        com.aengine.graphics.Renderer2D.endScene();
+        Renderer3D.endScene();
     }
 
     @Override
@@ -140,12 +157,20 @@ public class Main extends Engine {
         Renderer2D.cleanup();
     }
 
+    public static RenderMode getActiveRenderMode() { return activeRenderMode; }
+
     public static void main(String[] args) {
-        // Evaluate input arguments dispatched by the Rust process wrapper
-        if (args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
-            activeProjectPath = args[0];
-        } else {
-            // Default decoupled fallback to prevent JVM execution crash during standalone testing
+        for (String arg : args) {
+            if (arg.equalsIgnoreCase("--2d")) {
+                activeRenderMode = RenderMode.MODE_2D;
+            } else if (arg.equalsIgnoreCase("--3d")) {
+                activeRenderMode = RenderMode.MODE_3D;
+            } else if (arg != null && !arg.trim().isEmpty() && !arg.startsWith("-")) {
+                activeProjectPath = arg;
+            }
+        }
+
+        if (activeProjectPath == null) {
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("win")) {
                 activeProjectPath = System.getProperty("user.home") + "\\AeternumSandbox";

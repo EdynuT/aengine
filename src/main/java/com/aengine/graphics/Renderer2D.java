@@ -1,10 +1,9 @@
 package com.aengine.graphics;
 
 import org.joml.Matrix4f;
-import org.joml.Vector2f;
+import org.joml.Vector3f;
 import org.joml.Vector4f;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL20;
+import org.joml.Vector2f;
 import com.aengine.utils.FileUtils;
 import com.aengine.utils.Logger;
 
@@ -48,17 +47,15 @@ public class Renderer2D {
     };
 
     public static void init() {
-        Logger.info(Logger.System.RENDERER, "Initializing decoupled 2D Batch Renderer pipeline...");
+        Logger.info(Logger.System.RENDERER, "Initializing decoupled 2D/3D Hybrid Batch Renderer pipeline...");
+
+        // Ensure hardware capability mapping is bound and active before allocating buffers
+        HardwareCapabilities.initialize();
+        maxTextureSlots = HardwareCapabilities.getMaxTextureSlots();
 
         renderer = RenderContext.createRenderer();
         renderer.init();
         
-        int[] maxSlots = new int[1];
-        GL11.glGetIntegerv(GL20.GL_MAX_TEXTURE_IMAGE_UNITS, maxSlots);
-        maxTextureSlots = maxSlots[0]; 
-        
-        Logger.info(Logger.System.RENDERER, "Hardware Texture Slots identified: %d units available.", maxTextureSlots);
-
         String vertSrc = FileUtils.readResource("/shaders/opengl/texture.vert");
         String fragSrc = FileUtils.readAndInjectResource("/shaders/opengl/texture.frag", maxTextureSlots);
         
@@ -115,51 +112,35 @@ public class Renderer2D {
         startBatch();
     }
 
-    public static void drawQuad(Vector2f position, Vector2f size, Vector4f color) {
+    public static void drawQuad(Vector3f position, Vector3f size, Vector4f color) {
         drawQuad(position, size, null, color);
     }
 
-    public static void drawQuad(Vector2f position, Vector2f size, TextureAPI texture) {
+    public static void drawQuad(Vector3f position, Vector3f size, TextureAPI texture) {
         drawQuad(position, size, texture, new Vector4f(1.0f));
     }
 
-    public static void drawQuad(Vector2f position, Vector2f size, TextureAPI texture, Vector4f tint) {
+    public static void drawQuad(Vector3f position, Vector3f size, TextureAPI texture, Vector4f tint) {
         if (indexCount >= MAX_INDICES) {
             nextBatch();
         }
 
-        float textureIndex = -1.0f;
-        
-        if (texture != null) {
-            for (int i = 0; i < textureSlotIndex; i++) {
-                if (textureSlots[i].getID() == texture.getID()) {
-                    textureIndex = (float) i;
-                    break;
-                }
-            }
-
-            if (textureIndex == -1.0f) {
-                if (textureSlotIndex >= maxTextureSlots) {
-                    nextBatch();
-                }
-                textureSlots[textureSlotIndex] = texture;
-                textureIndex = (float) textureSlotIndex;
-                textureSlotIndex++;
-            }
-        }
+        float textureIndex = getOrCreateTextureIndex(texture);
 
         // Mutate transformation data within the static matrix registry to ensure zero-heap allocation
         transformMatrix.identity()
-                       .translate(position.x, position.y, 0.0f)
-                       .scale(size.x, size.y, 1.0f);
+                       .translate(position)
+                       .scale(size);
+
+        // Capture the absolute top base index where this specific quad sequence block starts
+        int baseIndex = vertexCount;
 
         for (int i = 0; i < VERTICES_PER_QUAD; i++) {
             Vector4f transformedPos = new Vector4f(LOCAL_VERTEX_POSITIONS[i]).mul(transformMatrix);
 
-            int baseIndex = vertexCount;
             vertexBuffer[baseIndex + 0] = transformedPos.x;
             vertexBuffer[baseIndex + 1] = transformedPos.y;
-            vertexBuffer[baseIndex + 2] = 0.0f; 
+            vertexBuffer[baseIndex + 2] = transformedPos.z; 
             vertexBuffer[baseIndex + 3] = LOCAL_UV_COORDS[i].x;
             vertexBuffer[baseIndex + 4] = LOCAL_UV_COORDS[i].y;
             vertexBuffer[baseIndex + 5] = tint.x;
@@ -168,10 +149,13 @@ public class Renderer2D {
             vertexBuffer[baseIndex + 8] = tint.w;
             vertexBuffer[baseIndex + 9] = textureIndex;
 
-            vertexCount += VERTEX_SIZE_FLOATS;
+            // Move the local writing head pointer forward by exactly one vertex size unit
+            baseIndex += VERTEX_SIZE_FLOATS;
         }
 
-        indexCount += INDICES_PER_QUAD;
+        // Finalize the batch state by incrementing global tracker metrics only after safe allocation pass
+        vertexCount += (VERTICES_PER_QUAD * VERTEX_SIZE_FLOATS);
+        indexCount  += INDICES_PER_QUAD;
     }
 
     // Static allocation-free math hooks to handle complex 2D/3D matrix rotations layout
@@ -179,7 +163,7 @@ public class Renderer2D {
 
     /**
      * Specialized ECS integration path. Evaluates packed component data arrays sequentially 
-     * without creating auxiliary wrapper objects during batch submission.
+     * without creating auxiliary wrapper objects during batch submission. Supports full 3D rotations.
      */
     public static void drawEntityQuad(com.aengine.ecs.components.TransformComponent transform, com.aengine.ecs.components.SpriteComponent sprite) {
         if (indexCount >= MAX_INDICES) {
@@ -189,12 +173,15 @@ public class Renderer2D {
         // Fetch dynamic hardware texture slot mappings via pre-existing optimized cache scanner
         float textureIndex = getOrCreateTextureIndex(sprite.texture);
 
-        // Enforce strict zero-allocation matrix construction
-        // Z-axis is used here as a layered depth sorting channel to prevent pixel overlapping artifacts
+        // Enforce strict zero-allocation matrix construction supporting complete pitch, yaw and roll Euler rotations
         transformMatrix.identity()
-                       .translate(transform.position.x, transform.position.y, transform.position.z)
-                       .rotateZ((float) Math.toRadians(transform.rotation.z)) // Absolute rotation support for 2D sprites
-                       .scale(transform.scale.x, transform.scale.y, 1.0f);
+                       .translate(transform.position)
+                       .rotateXYZ(
+                           (float) Math.toRadians(transform.rotation.x),
+                           (float) Math.toRadians(transform.rotation.y),
+                           (float) Math.toRadians(transform.rotation.z)
+                       )
+                       .scale(transform.scale);
 
         for (int i = 0; i < VERTICES_PER_QUAD; i++) {
             // Stream position values into shared static vector container to shield L1 cache from object allocation
@@ -203,7 +190,7 @@ public class Renderer2D {
             int baseIndex = vertexCount;
             vertexBuffer[baseIndex + 0] = tempVertexPos.x;
             vertexBuffer[baseIndex + 1] = tempVertexPos.y;
-            vertexBuffer[baseIndex + 2] = tempVertexPos.z; // Layer depth channel injected into rendering pipeline
+            vertexBuffer[baseIndex + 2] = tempVertexPos.z; // Complete Z positioning injected into rendering pipeline
             vertexBuffer[baseIndex + 3] = LOCAL_UV_COORDS[i].x;
             vertexBuffer[baseIndex + 4] = LOCAL_UV_COORDS[i].y;
             vertexBuffer[baseIndex + 5] = sprite.color.x;
@@ -232,6 +219,26 @@ public class Renderer2D {
     
     public static float getOrCreateTextureIndex(TextureAPI texture) {
         if (texture == null) return -1.0f;
+        
+        // Intercept and evaluate asset metrics before submitting allocation handles
+        int textureWidth = texture.getWidth();
+        int textureHeight = texture.getHeight();
+        int maxHardwareSize = HardwareCapabilities.getMaxTextureSize();
+
+        if (textureWidth > 4096 || textureHeight > 4096) {
+            Logger.warn(Logger.System.RENDERER, 
+                "Performance Warning: Texture [ID: %d] payload is heavy (%dx%d px). " +
+                "Consider utilizing the AEngine optimization pipeline to compress this asset into a native block format.",
+                texture.getID(), textureWidth, textureHeight
+            );
+        }
+
+        if (textureWidth > maxHardwareSize || textureHeight > maxHardwareSize) {
+            Logger.error(Logger.System.RENDERER, 
+                "Hardware Limit Violation: Texture [ID: %d] size (%dx%d px) exceeds maximum GPU capabilities (%dx%d px). Rejection imminent.",
+                texture.getID(), textureWidth, textureHeight, maxHardwareSize, maxHardwareSize
+            );
+        }
         
         // Linear cache scan to find already bound hardware asset handles
         for (int i = 0; i < textureSlotIndex; i++) {

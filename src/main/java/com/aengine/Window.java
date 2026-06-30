@@ -1,5 +1,6 @@
 package com.aengine;
 
+import com.aengine.graphics.HardwareCapabilities;
 import com.aengine.utils.Logger;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
@@ -40,19 +41,42 @@ public class Window {
         glfwWindowHint(GLFW_VISIBLE,   GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        // --- DYNAMIC HARDWARE RESOLUTION INTERCEPTION ---
-        long primaryMonitor = glfwGetPrimaryMonitor();
-        if (primaryMonitor != NULL) {
-            GLFWVidMode vidMode = glfwGetVideoMode(primaryMonitor);
-            if (vidMode != null) {
-                // Mutate standard settings
-                width = vidMode.width();
-                height = vidMode.height();
-                Logger.info(Logger.System.WINDOW, "Hardware display metrics detected: %dx%d", width, height);
+        // --- ADAPTIVE HARDWARE MULTI-MONITOR RESOLUTION INTERCEPTION ---
+        long targetMonitor = glfwGetPrimaryMonitor();
+        org.lwjgl.PointerBuffer monitors = glfwGetMonitors();
+        
+        if (monitors != null && monitors.hasRemaining()) {
+            if (monitors.remaining() > 1) {
+                Logger.debug(Logger.System.WINDOW, "Multi-monitor environment detected. Resolving primary canvas dynamically...");
+                
+                long highestResMonitor = targetMonitor;
+                int maxCalculatedArea = 0;
+
+                while (monitors.hasRemaining()) {
+                    long monitorPtr = monitors.get();
+                    GLFWVidMode mode = glfwGetVideoMode(monitorPtr);
+                    
+                    if (mode != null) {
+                        int currentArea = mode.width() * mode.height();
+                        if (currentArea > maxCalculatedArea) {
+                            maxCalculatedArea = currentArea;
+                            highestResMonitor = monitorPtr;
+                        }
+                    }
+                }
+                targetMonitor = highestResMonitor;
             }
         }
 
-        // Force window to start maximized to avoid ugly borders or incorrect centering styles
+        if (targetMonitor != NULL) {
+            GLFWVidMode vidMode = glfwGetVideoMode(targetMonitor);
+            if (vidMode != null) {
+                this.width = vidMode.width();
+                this.height = vidMode.height();
+                Logger.info(Logger.System.WINDOW, "Hardware display metrics finalized: %dx%d", this.width, this.height);
+            }
+        }
+
         glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
 
         Logger.debug(Logger.System.WINDOW, "Instantiating native window '%s' (%dx%d)...", title, width, height);
@@ -69,9 +93,8 @@ public class Window {
             Logger.trace(Logger.System.WINDOW, "Viewport hardware sync updated to: %dx%d", w, h);
         });
 
-        // Safe positioning block — evaluated only if not running borderless fullscreen modes
         if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
-            GLFWVidMode vidMode = glfwGetVideoMode(primaryMonitor);
+            GLFWVidMode vidMode = glfwGetVideoMode(targetMonitor);
             if (vidMode != null) {
                 glfwSetWindowPos(handle,
                     (vidMode.width()  - width)  / 2,
@@ -87,13 +110,8 @@ public class Window {
         Logger.info(Logger.System.RENDERER, "Binding LWJGL OpenGL capabilities to current hardware thread...");
         GL.createCapabilities();
 
-        // Query driver telemetry metadata to intercept Mesa/AMD or legacy Intel specific bugs
-        String vendor   = glGetString(GL_VENDOR);
-        String renderer = glGetString(GL_RENDERER);
-        String version  = glGetString(GL_VERSION);
-        Logger.info(Logger.System.RENDERER, "GPU Vendor : %s", vendor);
-        Logger.info(Logger.System.RENDERER, "Hardware   : %s", renderer);
-        Logger.info(Logger.System.RENDERER, "GL Version : %s", version);
+        // Initialize and delegate telemetry resolution directly to the hardware ledger
+        HardwareCapabilities.initialize();
 
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glEnable(GL_DEPTH_TEST);

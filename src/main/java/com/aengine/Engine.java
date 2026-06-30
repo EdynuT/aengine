@@ -63,7 +63,6 @@ public abstract class Engine {
         window.init();
         Input.init(window.getHandle());
 
-        // CRITICAL FIX: Instantiate FrameBuffer matching the dynamic physical metrics resolved by GLFW
         frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
 
         if (gameClassName != null) {
@@ -100,10 +99,10 @@ public abstract class Engine {
             if (currentState == EngineState.EDITOR) {
                 onUpdate(deltaTime);
                 
-                frameBuffer.bind();
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                // frameBuffer.bind();
+                // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 onRender();
-                frameBuffer.unbind();
+                // frameBuffer.unbind();
                 
                 // Here you can render the final FrameBuffer texture pass straight to the maximized screen quad
             } else if (currentState == EngineState.LAUNCHER) {

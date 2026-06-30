@@ -1,5 +1,6 @@
 package com.aengine.ecs.systems;
 
+import com.aengine.Main;
 import com.aengine.ecs.ComponentPool;
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.System;
@@ -7,13 +8,8 @@ import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.graphics.Renderer2D;
 import com.aengine.utils.Logger;
-import org.joml.Vector2f;
 
 public final class RenderSystem extends System {
-
-    // Thread-local temporary buffers to eliminate allocation spikes inside the render loop
-    private final Vector2f tempPosition = new Vector2f();
-    private final Vector2f tempScale = new Vector2f();
 
     @Override
     public void update(Registry registry, float deltaTime) {
@@ -28,6 +24,8 @@ public final class RenderSystem extends System {
         int[] denseToEntity = spritePool.getRawDenseToEntity();
         int totalElements = spritePool.size();
 
+        boolean is2DMode = Main.getActiveRenderMode() == Main.RenderMode.MODE_2D;
+
         for (int i = 0; i < totalElements; i++) {
             int entityID = denseToEntity[i];
             SpriteComponent sprite = sprites[i];
@@ -38,15 +36,19 @@ public final class RenderSystem extends System {
                 continue;
             }
 
-            // Downsample Vector3f coordinates to match Renderer2D expectations
-            tempPosition.set(transform.position.x, transform.position.y);
-            tempScale.set(transform.scale.x, transform.scale.y);
+            // Enforce strict 2D constraints by hard-resetting depth and pitch/yaw rotations directly
+            if (is2DMode) {
+                transform.position.z = 0.0f;
+                transform.rotation.x = 0.0f;
+                transform.rotation.y = 0.0f;
+            }
 
+            // Stream raw 3D vectors directly to the Renderer2D pipeline to eliminate local memory downsampling overhead
             if (sprite.texture != null) {
-                Renderer2D.drawQuad(tempPosition, tempScale, sprite.texture);
+                Renderer2D.drawQuad(transform.position, transform.scale, sprite.texture);
                 Logger.trace(Logger.System.RENDERER, "RenderSystem submitted textured quad for Entity ID: %d", entityID);
             } else {
-                Renderer2D.drawQuad(tempPosition, tempScale, sprite.color);
+                Renderer2D.drawQuad(transform.position, transform.scale, sprite.color);
                 Logger.trace(Logger.System.RENDERER, "RenderSystem submitted colored quad for Entity ID: %d", entityID);
             }
         }
