@@ -58,6 +58,7 @@ public class Main extends Engine {
             String rawAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "src";
             String vfsAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "baked";
             com.aengine.utils.AssetBaker.bakeDirectory(rawAssetsDir, vfsAssetsDir);
+            com.aengine.network.TelemetryServer.start();
         } catch (Exception e) {
             Logger.error(Logger.System.CORE, "VFS Handshake critical failure. Halting engine initialization pipeline.");
             throw new RuntimeException("Critical core infrastructure failure during VFS mount", e);
@@ -169,6 +170,7 @@ public class Main extends Engine {
         Logger.info(Logger.System.CORE, "Terminating active workspace runtime contexts. Executing hardware cleanup...");
         Renderer3D.cleanup();
         Renderer2D.cleanup();
+        com.aengine.network.TelemetryServer.stop();
     }
 
     public static RenderMode getActiveRenderMode() { return activeRenderMode; }
