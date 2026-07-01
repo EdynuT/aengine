@@ -38,14 +38,24 @@ The initial bootstrap deploys a standardized layout blueprint for game developme
 ```text
 ProjectRoot/
 ├── .aengine/               # Local cache, metadata and system descriptors
-├── assets/                 # Uncompressed development assets
-│   ├── textures/           # Source bitmaps (.atex)
-│   ├── shaders/            # Custom GLSL source code files
-│   └── audio/              # Sound wave arrays (.wav, .ogg)
-├── assets_src/
-│   └── textures/           # Image textures (.png, .jpg, .jpeg)
+│   └── cache/
+├── assets/                 
+│   ├── baked/              # Comompressed development assets
+│   │   ├── textures/       # Source bitmaps (.atex)
+│   │   ├── shaders/        
+│   │   ├── models/         
+│   │   └── audio/          
+│   ├── src/
+│   │   ├── textures/       # Image textures (.png, .jpg, .jpeg)
+│   │   ├── models/         # Custom objects (.obj)
+│   │   └── audio/          # Sound wave arrays (.wav, .ogg)
+│   ├── data/
+│   ├── prefabs/
+│   ├── scenes/
+│   └── scripts/
 ├── config/
 │   └── project.json        # Manifest descriptor (Project Name, Version, Target API)
+├── logs/                   
 └── build/                  # Compiled target distribution packs
 ```
 ---

@@ -55,8 +55,8 @@ public class Main extends Engine {
             }
             
             FileSystem.mountProject(activeProjectPath);
-            String rawAssetsDir = activeProjectPath + File.separator + "assets_src";
-            String vfsAssetsDir = activeProjectPath + File.separator + "assets";
+            String rawAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "src";
+            String vfsAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "baked";
             com.aengine.utils.AssetBaker.bakeDirectory(rawAssetsDir, vfsAssetsDir);
         } catch (Exception e) {
             Logger.error(Logger.System.CORE, "VFS Handshake critical failure. Halting engine initialization pipeline.");
@@ -102,7 +102,7 @@ public class Main extends Engine {
             for (int i = 0; i < 3; i++) {
                 int entityID = registry.createEntity();
                 registry.addComponent(entityID, new TransformComponent(new Vector3f(i * 2.5f - 2.5f, 0.0f, 0.0f))); // Colocados lado a lado no eixo X, no Z = 0.0f
-                TextureAPI texture = new OpenGLTexture("assets://textures/caixa.atex");
+                TextureAPI texture = new OpenGLTexture("assets://baked/textures/caixa.atex");
                 SpriteComponent sprite = new SpriteComponent(new Vector4f(1.0f, 1.0f, 1.0f, 1.0f));
                 sprite.texture = texture;
                 registry.addComponent(entityID, sprite);
