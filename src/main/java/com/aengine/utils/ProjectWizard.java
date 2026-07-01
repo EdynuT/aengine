@@ -32,6 +32,7 @@ public class ProjectWizard {
 
         // 2. Define standard subdirectory layout arrays
         String[] subDirectories = {
+            "assets_src/textures",
             "assets/textures",
             "assets/shaders",
             "assets/audio",

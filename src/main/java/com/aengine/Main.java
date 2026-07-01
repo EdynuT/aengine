@@ -55,6 +55,9 @@ public class Main extends Engine {
             }
             
             FileSystem.mountProject(activeProjectPath);
+            String rawAssetsDir = activeProjectPath + File.separator + "assets_src";
+            String vfsAssetsDir = activeProjectPath + File.separator + "assets";
+            com.aengine.utils.AssetBaker.bakeDirectory(rawAssetsDir, vfsAssetsDir);
         } catch (Exception e) {
             Logger.error(Logger.System.CORE, "VFS Handshake critical failure. Halting engine initialization pipeline.");
             throw new RuntimeException("Critical core infrastructure failure during VFS mount", e);
@@ -69,7 +72,11 @@ public class Main extends Engine {
 
         cameraSystem = new CameraSystem();
         cameraEntity = registry.createEntity();
-        registry.addComponent(cameraEntity, new TransformComponent(new Vector3f(0.0f, 0.0f, 5.0f)));
+        
+        // O AJUSTE ESTÁ AQUI: 
+        // Se for 3D, a câmara recua 5 metros. Se for 2D, ela fica no Z=0 junto com os sprites.
+        float cameraZ = (activeRenderMode == RenderMode.MODE_3D) ? 5.0f : 0.0f;
+        registry.addComponent(cameraEntity, new TransformComponent(new Vector3f(0.0f, 0.0f, cameraZ)));
 
         if (activeRenderMode == RenderMode.MODE_3D) {
             Logger.info(Logger.System.RENDERER, "Enforcing Core 3D Perspective execution pipeline.");
@@ -89,13 +96,13 @@ public class Main extends Engine {
             org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
             
             // False enforces 2D Orthographic projection matrix calculation, dropping spatial depth distortions
-            registry.addComponent(cameraEntity, new CameraComponent(0.0f, getWindow().getWidth(), getWindow().getHeight(), -1.0f, 1.0f, false));
+            registry.addComponent(cameraEntity, new CameraComponent(0.0f, getWindow().getWidth(), getWindow().getHeight(), -1.0f, 100.0f, false));
             
             // Spawn static world assets locked at Z = 0.0f to prevent pipeline artifacts
             for (int i = 0; i < 3; i++) {
                 int entityID = registry.createEntity();
-                registry.addComponent(entityID, new TransformComponent(new Vector3f(0.0f, 1.0f, -3.0f)));
-                TextureAPI texture = new OpenGLTexture("assets://textures/caixa.png");
+                registry.addComponent(entityID, new TransformComponent(new Vector3f(i * 2.5f - 2.5f, 0.0f, 0.0f))); // Colocados lado a lado no eixo X, no Z = 0.0f
+                TextureAPI texture = new OpenGLTexture("assets://textures/caixa.atex");
                 SpriteComponent sprite = new SpriteComponent(new Vector4f(1.0f, 1.0f, 1.0f, 1.0f));
                 sprite.texture = texture;
                 registry.addComponent(entityID, sprite);
@@ -105,7 +112,7 @@ public class Main extends Engine {
 
     @Override
     protected void onUpdate(float deltaTime) {
-        // com.aengine.utils.FPSTracker.update(deltaTime);
+        // com.aengine.utils.FPSTracker.update(deltaTime);  // Do not remove this line. It is used for internal FPS tracking and debugging purposes.
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }

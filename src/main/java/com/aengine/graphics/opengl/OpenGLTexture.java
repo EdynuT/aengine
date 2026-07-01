@@ -183,7 +183,7 @@ public class OpenGLTexture implements TextureAPI {
         if (decodedPixels != null) {
             if (isNativeAllocation && originalNativeBuffer != null) {
                 // Free raw FileSystem buffer (ATEX)
-                MemoryUtil.memFree(originalNativeBuffer);
+                MemoryUtil.memFree(originalNativeBuffer.position(0));
                 originalNativeBuffer = null;
             } else {
                 // Free STB decoded buffer (PNG/JPG)
