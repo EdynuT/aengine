@@ -132,18 +132,23 @@ Windows requires the Microsoft Edge WebView2 runtime (usually pre-installed on W
 ### Executing the Runtime Environment
 The framework dynamically switches execution pipelines at startup using JVM command-line arguments. You can pass these parameters straight through Gradle using the `--args` flag.
 
-* **1. Standard 2D Pipeline (Default)**
-  Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
+* **1. Standard 3D Pipeline (Default)**
+  This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
 
   ```bash
   ./gradlew run
   ```
-
-* **2. Hybrid Core 3D Perspective Pipeline**
-  Enforces the 3D projection subsystem layout. This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
+  Or
 
   ```bash
   ./gradlew run --args="--3d"
+  ```
+
+* **2. Hybrid Core 2D Perspective Pipeline**
+    Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
+
+  ```bash
+  ./gradlew run --args="--2d"
   ```
 
 ### Starting the Interface Development Workspace
