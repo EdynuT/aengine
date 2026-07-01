@@ -223,8 +223,8 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 
 - [x] Asynchronous Multi-Threaded Asset Streamer: Move stbi_load_from_memory decoding routines to an asynchronous Thread Pool Worker queue, restricting Main Thread execution exclusively to final high-speed VRAM blitting operations (glTexImage2D).
 
+- [x] Asset Baking & Packaging Pipeline: Develop an offline tool to compile raw .png and text assets into optimized, compressed, custom .atex binary chunks and single .pak file streams for distribution.
+
 - [ ] Architecture Realignment — Segregate ImGui Dependencies: Isolate and deprecate Dear ImGui from structural window wrappers. Retain ImGui execution paths exclusively for intra-viewport debug overlays running inside the active LWJGL hardware thread, shifting window-frame layout responsibility entirely to the WebKit/Tauri frontend context.
 
 - [ ] Local Socket IPC Daemon: Implement a lightweight local loopback TCP socket connection between the Tauri frontend wrapper and the Java Core to stream real-time framework telemetry (FPS counters, active ECS allocations, and structural logs) directly into the UI dashboard.
-
-- [ ] Asset Baking & Packaging Pipeline: Develop an offline tool to compile raw .png and text assets into optimized, compressed, custom .atex binary chunks and single .pak file streams for distribution.
