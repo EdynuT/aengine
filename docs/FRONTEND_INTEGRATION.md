@@ -75,34 +75,48 @@ tauri::async_runtime::spawn(async move {
 });
 ```
 
-### 3. Asset Ingestion Pipeline (Action Commands)
-While telemetry is a continuous stream from the engine, user actions in the Editor (like importing a new texture) must send commands to the engine.
+### 3. Viewport Rendering Pipeline (The FBO Bridge)
+The Core Engine does not render directly to the OS window. It renders the game world into a virtual VRAM texture (Frame Buffer Object). Because the Tauri WebKit frontend cannot access GPU VRAM directly, we utilize **Shared Memory (Memory-Mapped Files)** to bridge the pixels from the Java backend to the Rust frontend at 60 FPS with zero network overhead.
 
-#### 3.1. The Hermetic Project Rule
-The engine relies on a strict zero-decode binary pipeline (`.atex` files). The UI must never reference files stored randomly on the user's OS. The project folder must remain completely self-contained.
+#### 3.1. The Backend Responsibility (Java/OpenGL)
+At the end of every render pass, the engine extracts the FBO pixels using `glReadPixels` and writes the raw RGB byte array into a Memory-Mapped File (e.g., `/dev/shm/aengine_viewport` on Linux or a memory-mapped buffer on Windows). 
 
-The Workflow:
+* Format: Raw RGB (3 bytes per pixel)
+* Resolution: Dynamic (Matches the Editor's Viewport pane dimensions).
+* Synchronization: The Java engine will flip a boolean flag at the start of the memory block when a new frame is fully written.
 
-1. User clicks "Import Texture" in the UI.
+#### 3.2. The Frontend Responsibility (Rust + Tauri)
+Do **NOT** attempt to send 60FPS video frames via Tauri events (`emit_all`) or Base64 strings. It will crash the WebKit DOM due to excessive memory allocation.
 
-2. Tauri opens a native OS File Dialog allowing the user to pick an image.
+**The Implementation Protocol:**
+1. **Rust Custom Protocol:** The Tauri backend must register a custom URI scheme (e.g., `aengine://viewport`).
+2. **Memory Interception:** When the WebKit frontend requests an image from this scheme, the Rust handler reads the raw RGB bytes from the Memory-Mapped File, wraps them in a standard image format header (like BMP or uncompressed PNG in-memory), and returns the byte stream to WebKit.
+3. **HTML Canvas / Image:** The frontend UI uses a standard HTML `<img>` tag or `<canvas>`. A Javascript `requestAnimationFrame` loop constantly updates the image source to fetch the latest frame.
 
-3. Crucial Step: The Tauri Rust backend must copy this file directly into the engine's raw asset directory: `assets/source/textures/map.png`.
+**Example WebKit Implementation (JS/TS):**
 
-4. The engine's Kernel-Level Watcher (or an explicit IPC command) will detect the new file, automatically trigger the `AssetBaker`, compile it to `assets/baked/textures/map.atex`, and hot-reload the VRAM.
+```javascript
+const viewportImg = document.getElementById("viewport-display");
 
-#### 3.2. Future Command Contract
-For actions that require direct state mutation (e.g., changing an entity's position or requesting an asset import via IPC), the frontend will eventually dispatch JSON payloads back to the Java server following this structure:
-
-```json
-{
-  "command": "ASSET_IMPORT",
-  "payload": {
-    "sourcePath": "path/to/map.png",
-    "targetCategory": "textures",
-    "targetEntityId": 4
-  }
+function requestNextFrame() {
+    // Appending a timestamp forces WebKit to bypass the browser cache
+    viewportImg.src = `aengine://viewport/frame?ts=${performance.now()}`;
+    requestAnimationFrame(requestNextFrame);
 }
+
+// Start the 60FPS render loop in the UI
+requestAnimationFrame(requestNextFrame);
+```
+
+**Example Tauri Setup (Rust):**
+
+```rust
+tauri::Builder::default()
+    .register_uri_scheme_protocol("aengine", move |app, request| {
+        // 1. Read the Shared Memory block updated by Java
+        // 2. Format as an image buffer
+        // 3. Return tauri::http::ResponseBuilder with the bytes
+    })
 ```
 
 ### 4. Design Philosophy & Constraints
