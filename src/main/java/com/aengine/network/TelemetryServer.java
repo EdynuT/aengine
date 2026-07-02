@@ -1,6 +1,8 @@
 package com.aengine.network;
 
 import com.aengine.utils.Logger;
+import com.aengine.ecs.Registry;
+import com.aengine.utils.FPSTracker;
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
@@ -16,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * HARDWARE CONTEXT: ZERO-ALLOCATION LOCAL IPC DAEMON
  * Establishes a Non-Blocking TCP loopback interface to stream engine telemetry to the Tauri WebKit frontend.
- * Enforces a strict 10Hz tick rate and reuses direct memory buffers to bypass JVM Garbage Collection.
+ * Execution is strictly driven by the Engine's Main Thread to prevent ECS Data Races.
  */
 public final class TelemetryServer {
 
@@ -71,43 +73,33 @@ public final class TelemetryServer {
                 }
             });
 
-            // Spin up the 10Hz transmission loop in an isolated Daemon Thread
-            Thread daemon = new Thread(TelemetryServer::telemetryLoop);
-            daemon.setDaemon(true);
-            daemon.setName("AEngine-Telemetry-Daemon");
-            daemon.start();
+            // NOTICE: The autonomous Daemon Thread (telemetryLoop) was completely removed.
+            // Dispatching is now safely dictated by Main.java at a fixed UI threshold.
 
         } catch (IOException e) {
             Logger.error(Logger.System.CORE, "Failed to bind Telemetry IPC Daemon: %s", e.getMessage());
         }
     }
 
-    private static void telemetryLoop() {
-        while (isRunning.get()) {
-            try {
-                // 10Hz throttle (100ms delay) to prevent network saturation and UI lockups
-                Thread.sleep(100);
+    /**
+     * Extracts current engine state and dispatches the JSON payload over TCP.
+     * MUST be called from the Main Thread to guarantee thread-safe ECS Registry reads.
+     */
+    public static void dispatch(Registry registry) {
+        if (!isRunning.get()) return;
 
-                if (activeClient != null && activeClient.isOpen()) {
-                    dispatchPayload();
-                } else {
-                    // If no client is attached, discard queued logs to prevent memory leaks
-                    if (!logQueue.isEmpty()) logQueue.clear();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+        if (activeClient == null || !activeClient.isOpen()) {
+            // If no frontend is attached, silently drain the log queue to prevent memory leaks
+            if (!logQueue.isEmpty()) logQueue.clear();
+            return;
         }
-    }
 
-    private static void dispatchPayload() {
         // Reset StringBuilder cursor without reallocating memory
         JSON_BUILDER.setLength(0);
 
-        // Fetch placeholder metrics (To be replaced with actual Engine state getters)
-        int currentFps = 0; // Replace with: FPSTracker.getCurrentFPS()
-        int activeEntities = 0; // Replace with: Registry.getActiveEntityCount()
+        // Extract live Engine metrics safely
+        int currentFps = FPSTracker.getCurrentFPS();
+        int activeEntities = registry.getEntityCount();
 
         // Construct JSON Payload manually to avoid heavy Reflection-based parsers like GSON
         JSON_BUILDER.append("{\"type\":\"TELEMETRY_TICK\",\"data\":{");

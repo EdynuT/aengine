@@ -99,12 +99,26 @@ public abstract class Engine {
             if (currentState == EngineState.EDITOR) {
                 onUpdate(deltaTime);
                 
-                // frameBuffer.bind();
-                // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                onRender();
-                // frameBuffer.unbind();
+                // 1. ENGINE RENDER PASS (Virtual Texture in VRAM)
+                frameBuffer.bind();
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 
-                // Here you can render the final FrameBuffer texture pass straight to the maximized screen quad
+                onRender(); 
+                
+                frameBuffer.unbind();
+                
+                // 2. PHYSICAL DISPLAY RENDER PASS (Physical Monitor)
+                // Restore the viewport to the actual window dimensions
+                org.lwjgl.opengl.GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
+                
+                // Clear the physical screen (prevents visual artifacts or "hall of mirrors")
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                // =====================================================================
+                // FRONTEND INJECTION HERE
+                // Rendered scene is now contained in the ID: frameBuffer.getTextureID()
+                // =====================================================================
+                
             } else if (currentState == EngineState.LAUNCHER) {
                 // Future fallback logic for host UI processing if required
             }

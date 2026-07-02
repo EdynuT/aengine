@@ -61,6 +61,13 @@ public final class Registry {
     }
 
     /**
+     * Returns the total amount of instantiated entities currently active in the ECS.
+     */
+    public int getEntityCount() {
+        return activeEntities.size();
+    }
+
+    /**
      * L1/L2 CACHE LOCALITY OPTIMIZED VIEW MATCHER.
      * Iterates strictly over the smallest contiguous dense array in memory,
      * dropping O(N) global entity iteration in favor of O(K) subset linear iteration.

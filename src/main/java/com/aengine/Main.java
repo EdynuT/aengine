@@ -23,8 +23,14 @@ public class Main extends Engine {
 
     private CameraSystem cameraSystem;
     private int cameraEntity;
+    
+    // Physics Time-Step variables
     private float accumulator = 0.0f;
     private static final float TIME_STEP = 1.0f / 60.0f; // 60Hz
+
+    // Telemetry Throttling variables
+    private float telemetryAccumulator = 0.0f;
+    private static final float TELEMETRY_INTERVAL = 0.1f; // 10Hz UI Refresh Rate
 
     private com.aengine.ecs.systems.PhysicsSystem physicsSystem;
     private com.aengine.ecs.systems.ScriptSystem scriptSystem;
@@ -35,7 +41,7 @@ public class Main extends Engine {
     // Allocation-free temporary structural containers for 3D physical environment alignment
     private static final Vector3f GROUND_POSITION = new Vector3f(0.0f, -1.5f, 0.0f); 
     private static final Vector3f GROUND_SIZE = new Vector3f(1024.0f, 1.0f, 1024.0f);
-    private static final Vector4f GROUND_COLOR    = new Vector4f(0.50f, 0.50f, 0.50f, 1.0f); // Light Gray Floor
+    private static final Vector4f GROUND_COLOR = new Vector4f(0.50f, 0.50f, 0.50f, 1.0f); // Light Gray Floor
 
     // Shared execution state capturing target path sent from external process host
     private static String activeProjectPath;
@@ -75,7 +81,7 @@ public class Main extends Engine {
         Renderer3D.init();
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f)
-        // Gray backgrund for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
+        // Gray background for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
         Renderer2D.setClearColor(0.30f, 0.30f, 0.30f, 1.0f);
 
         cameraSystem = new CameraSystem();
@@ -130,6 +136,17 @@ public class Main extends Engine {
         // Visual systems operate freely, without Hz restriction
         cameraSystem.update(registry, deltaTime);
         Input.update();
+
+        // =========================================================
+        // ENGINE RUNTIME TELEMETRY DISPATCH (Thread-Safe)
+        // =========================================================
+        telemetryAccumulator += deltaTime;
+        if (telemetryAccumulator >= TELEMETRY_INTERVAL) {
+            // Dispatch state strictly from the Main Thread to avoid ECS data races.
+            // The network server must handle the JSON serialization and socket push.
+            com.aengine.network.TelemetryServer.dispatch(registry);
+            telemetryAccumulator = 0.0f;
+        }
     }
 
     @Override
