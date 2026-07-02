@@ -31,11 +31,26 @@ public class ProjectWizard {
         Logger.info(Logger.System.CORE, "Deploying project layout blueprint for '%s'...", projectName);
 
         // 2. Define standard subdirectory layout arrays
-        String[] subDirectories = {
-            "assets/textures",
-            "assets/shaders",
-            "assets/audio",
+            String[] subDirectories = {
+            // Source assets (Pre-processed by AssetBaker)
+            "assets/src/textures",
+            "assets/src/audio",
+            "assets/src/models",    // Future .obj / .fbx
+
+            // Optimized runtime files (Read by the Engine via VFS)
+            "assets/baked/textures",      // .atex
+            "assets/baked/audio",         // Future .ogg / .wav optimized
+            "assets/baked/models",        // Future custom binary models
+            "assets/baked/shaders",       // .vert / .frag
+
+            // Data-Driven Design (Read natively as JSON/Text)
+            "assets/data/prefabs",       // Serialized entity blueprints
+            "assets/data/scenes",        // Serialized scene graphs
+            "assets/data/scripts",       // Serialized script data
+
+            // Infrastructure
             "config",
+            "logs",
             ".aengine/cache"
         };
 

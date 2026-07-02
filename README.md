@@ -38,12 +38,24 @@ The initial bootstrap deploys a standardized layout blueprint for game developme
 ```text
 ProjectRoot/
 ├── .aengine/               # Local cache, metadata and system descriptors
-├── assets/                 # Uncompressed development assets
-│   ├── textures/           # Source bitmaps (.png, .tga)
-│   ├── shaders/            # Custom GLSL source code files
-│   └── audio/              # Sound wave arrays (.wav, .ogg)
+│   └── cache/
+├── assets/                 
+│   ├── baked/              # Comompressed development assets
+│   │   ├── textures/       # Source bitmaps (.atex)
+│   │   ├── shaders/        
+│   │   ├── models/         
+│   │   └── audio/          
+│   ├── src/
+│   │   ├── textures/       # Image textures (.png, .jpg, .jpeg)
+│   │   ├── models/         # Custom objects (.obj)
+│   │   └── audio/          # Sound wave arrays (.wav, .ogg)
+│   ├── data/
+│   ├── prefabs/
+│   ├── scenes/
+│   └── scripts/
 ├── config/
 │   └── project.json        # Manifest descriptor (Project Name, Version, Target API)
+├── logs/                   
 └── build/                  # Compiled target distribution packs
 ```
 ---
@@ -51,19 +63,19 @@ ProjectRoot/
 ## Running the Development Workspace
 Clone the repository to your workspace
 
-- **Windows**
-```powershell
-git clone [https://github.com/EdynuT/AEngine.git](https://github.com/EdynuT/AEngine.git)
+* **Windows**
+  ```powershell
+  git clone https://github.com/EdynuT/AEngine.git
+  
+  cd .\path\to\AEngine
+  ```
 
-cd .\path\to\AEngine
-```
+* **Linux**
+  ```bash
+  git clone https://github.com/EdynuT/AEngine.git
 
-- **Linux**
-```bash
-git clone [https://github.com/EdynuT/AEngine.git](https://github.com/EdynuT/AEngine.git)
-
-cd ./path/to/AEngine
-```
+  cd ./path/to/AEngine
+  ```
 
 ### Prerequisites
 
@@ -74,7 +86,7 @@ Before launching the development workspace, ensure your target operating system 
 * **Java 25 (OpenJDK)** configured in your global system environment path.
 * **Rust Toolchain (v1.80+)** installed via rustup:
   ```bash
-  curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
   ```
 #### 2. Native WebKit Runtimes 
 
@@ -129,15 +141,39 @@ Windows requires the Microsoft Edge WebView2 runtime (usually pre-installed on W
   npm install -g @tauri-apps/cli@next
   ```
 
-### Starting the Development Workspace
+### Executing the Runtime Environment
+The framework dynamically switches execution pipelines at startup using JVM command-line arguments. You can pass these parameters straight through Gradle using the `--args` flag.
+
+* **1. Standard 3D Pipeline (Default)**
+  This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
+
+  ```bash
+  ./gradlew run
+  ```
+  Or
+
+  ```bash
+  ./gradlew run --args="--3d"
+  ```
+
+* **2. Hybrid Core 2D Perspective Pipeline**
+    Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
+
+  ```bash
+  ./gradlew run --args="--2d"
+  ```
+
+### Starting the Interface Development Workspace
 To kickstart the Tauri v2 Hub Wizard in development mode (which automatically watches for changes in both the Rust backend and the HTML/CSS frontend assets):
+
+* **1. Running the Interface**
 
   ```bash
   tauri dev
   ```
-  **Note:** If you installed via `cargo install`, the bare alias might require you to run `cargo tauri dev`, which works natively and identically across all platforms.
+  **_Note:_** If you installed via `cargo install`, the bare alias might require you to run `cargo tauri dev`, which works natively and identically across all platforms.
 
-Compiling build for final distribuition (.msi, .exe, .deb, AppImage):
+* **2. Compiling for Distribuition:**
 
   ```bash
   tauri build
@@ -148,6 +184,8 @@ Compiling build for final distribuition (.msi, .exe, .deb, AppImage):
   ```bash
   cargo tauri build
   ```
+
+  **_Note:_** For more information about interface updates check [docs/FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md)
 
 ---
 
@@ -194,16 +232,37 @@ Compiling build for final distribuition (.msi, .exe, .deb, AppImage):
 
 - [x] Native Subprocess Handshake — IPC Command Pipeline mapping between Rust/JS and JVM Argument injection.
 
+- [x] Decouple 2D/3D Specialized Render Pipelines: Enforce strict segregation between 2D Batching and 3D Mesh Pipelines. Project Initialization manifests (project.json) must explicitly declare target dimensions to cull unnecessary buffer overheads.
+
+- [x] Dynamic Vertex Layout Texture Slating: Complete integration of texture indices (in float a_TexIndex) inside Renderer2D/3D batches to enforce single draw-call execution frames using GPU hardware slots dynamically.
+
+- [x] Procedural Infinite Grid Pipeline — Implemented an angle-aware screen-space analytic grid (1.0f, 4.0f, 16.0f units) utilizing isotropic hardware derivatives (fwidth) to negate sub-sampling aliasing.
+
+- [x] ECS Cache Locality Optimization: Definitively bridge Entity and Component update loops into contiguous memory tables to guarantee optimal CPU L1/L2 cache locality.
+
+- [x] Asynchronous Multi-Threaded Asset Streamer: Move stbi_load_from_memory decoding routines to an asynchronous Thread Pool Worker queue, restricting Main Thread execution exclusively to final high-speed VRAM blitting operations (glTexImage2D).
+
+- [x] Asset Baking & Packaging Pipeline: Develop an offline tool to compile raw .png and text assets into optimized, compressed, custom .atex binary chunks and single .pak file streams for distribution.
+
+- [x] Data-Driven Scene & Prefab Architecture: Implement deterministic JSON parsers (using libraries like Gson/Jackson) to instantiate ECS components dynamically from `.entity` and `.scene` files, completely decoupling level design from hardcoded Java execution.
+
+- [x] Kernel-Level Asset Hot-Reloading: Deploy an OS-level `WatchService` (inotify/ReadDirectoryChangesW) daemon on the `assets_src` directory to trigger automatic recompilation via `AssetBaker` and instant VRAM injection during runtime with zero polling overhead.
+
+- [x] Scripting Language Bridge: Explore polyglot execution (e.g., LuaJ or GraalVM JS) to allow hot-pluggable gameplay scripts that can mutate ECS state without recompiling the Java Core.
+
+- [x] Local Socket IPC Daemon: Implement a lightweight local loopback TCP socket connection between the Tauri frontend wrapper and the Java Core to stream real-time framework telemetry (FPS counters, active ECS allocations, and structural logs) directly into the UI dashboard.
+
+- [ ] Tauri WebKit Editor Dashboard: Finalize the Rust/Svelte (or Vue/React) frontend wrapper to intercept the 10Hz TCP telemetry loopback, visualizing real-time ECS allocation metrics, FPS graphs, and intercepted Logger streams.
+
+- [ ] Physics & Collision Pipeline: Integrate a dedicated physics thread (evaluating custom AABB/SAT solvers or native Box2D/Jolt bindings) synchronized with the ECS Transform components using fixed-timestep interpolation.
+
+- [ ] Broad Phase Physics (Spatial Hashing): Replace the current $O(N^2)$ brute-force intersection loop with a deterministic Spatial Hash Grid to rescue CPU cycles.
+  - Implement an $O(1)$ insertion pipeline converting 2D/3D Transform spatial coordinates into 1D HashMap bucket IDs using prime number hashing (e.g., `(floor(x / cellSize) * 73856093) ^ (floor(y / cellSize) * 19349663)`).
+  - Restrict Narrow Phase (AABB/SAT) evaluations strictly to entities sharing the same or adjacent spatial buckets.
+  - Prepare the isolated Collision Resolution solver (Impulse/Velocity projection) to execute immediately after the Broad Phase filter.
+
+- [ ] Spatial Audio Engine: Implement OpenAL native bindings for 3D positional audio, streaming `.ogg` files through the async worker pool to prevent Main Thread stuttering during heavy soundscape decoding.
+
+- [ ] Advanced Rendering Techniques: Expand the Shader subsystem to support Framebuffer Objects (FBOs) for post-processing, Shadow Mapping, and a rudimentary Physically Based Rendering (PBR) pipeline decoupled from the 2D Batch Renderer.
+
 - [ ] Architecture Realignment — Segregate ImGui Dependencies: Isolate and deprecate Dear ImGui from structural window wrappers. Retain ImGui execution paths exclusively for intra-viewport debug overlays running inside the active LWJGL hardware thread, shifting window-frame layout responsibility entirely to the WebKit/Tauri frontend context.
-
-- [ ] Local Socket IPC Daemon: Implement a lightweight local loopback TCP socket connection between the Tauri frontend wrapper and the Java Core to stream real-time framework telemetry (FPS counters, active ECS allocations, and structural logs) directly into the UI dashboard.
-
-- [ ] Decouple 2D/3D Specialized Render Pipelines: Enforce strict segregation between 2D Batching and 3D Mesh Pipelines. Project Initialization manifests (project.json) must explicitly declare target dimensions to cull unnecessary buffer overheads.
-
-- [ ] Dynamic Vertex Layout Texture Slating: Complete integration of texture indices (in float a_TexIndex) inside Renderer2D/3D batches to enforce single draw-call execution frames using GPU hardware slots dynamically.
-
-- [ ] Asynchronous Multi-Threaded Asset Streamer: Move stbi_load_from_memory decoding routines to an asynchronous Thread Pool Worker queue, restricting Main Thread execution exclusively to final high-speed VRAM blitting operations (glTexImage2D).
-
-- [ ] Asset Baking & Packaging Pipeline: Develop an offline tool to compile raw .png and text assets into optimized, compressed, custom .atex binary chunks and single .pak file streams for distribution.
-
-- [ ] ECS Cache Locality Optimization: Definitively bridge Entity and Component update loops into contiguous memory tables to guarantee optimal CPU L1/L2 cache locality.

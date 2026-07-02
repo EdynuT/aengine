@@ -5,7 +5,7 @@ plugins {
 }
 
 group   = 'com.aengine'
-version = '0.8.0'
+version = '0.11.0'
 
 java {
     toolchain {
@@ -43,18 +43,17 @@ dependencies {
     implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
     api "org.joml:joml:${jomlVersion}"
 
-    // Dear ImGui Java Bindings
-    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
-    implementation "io.github.spair:imgui-java-lwjgl3:${imguiVersion}"
-
     // Native Platforms Resolvers
     runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:${lwjglNatives}"
     runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:${lwjglNatives}"
     runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:${lwjglNatives}"
     runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:${lwjglNatives}"
+
+    // Json parsing library for configuration and serialization
+    implementation 'com.google.code.gson:gson:2.10.1'
     
-    // Native Binaries for Dear ImGui Java Bindings
-    runtimeOnly "io.github.spair:imgui-java-${imguiPlatform}:${imguiVersion}"
+    // Embedded Lua Virtual Machine
+    implementation 'org.luaj:luaj-jse:3.0.1'
 }
 
 application {

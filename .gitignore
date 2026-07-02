@@ -9,7 +9,6 @@ bin/
 
 # IDE
 .vscode/
-.vscode/*
 .idea/
 *.iml
 

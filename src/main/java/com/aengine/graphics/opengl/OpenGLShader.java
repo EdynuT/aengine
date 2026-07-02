@@ -13,6 +13,7 @@ import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.lwjgl.opengl.GL11.GL_FALSE;
 import static org.lwjgl.opengl.GL20.*;
 
 public class OpenGLShader implements ShaderAPI {
@@ -93,13 +94,18 @@ public class OpenGLShader implements ShaderAPI {
     @Override public void setVec3(String name, Vector3f v)   { glUniform3f(location(name), v.x, v.y, v.z); }
     @Override public void setVec4(String name, Vector4f v)   { glUniform4f(location(name), v.x, v.y, v.z, v.w); }
 
+    // Allocation-free static continuous flat array memory hook for matrix updates
+    private final float[] matrixBuffer = new float[16];
+
     @Override
     public void setMat4(String name, Matrix4f mat) {
         int loc = location(name);
         if (loc != -1) {
-            FloatBuffer buf = BufferUtils.createFloatBuffer(16);
-            mat.get(buf);
-            glUniformMatrix4fv(loc, false, buf);
+            // 1. Dump direct column-major float values straight into the reusable flat array
+            mat.get(matrixBuffer);
+            
+            // 2. Stream the flat array natively through the JNI bridge down to the AMD driver
+            glUniformMatrix4fv(loc, false, matrixBuffer);
         }
     }
 

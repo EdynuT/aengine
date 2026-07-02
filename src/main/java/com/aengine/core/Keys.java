@@ -1,4 +1,4 @@
-package com.aengine;
+package com.aengine.core;
 
 import static org.lwjgl.glfw.GLFW.*;
 

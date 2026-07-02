@@ -11,7 +11,31 @@ public final class Registry {
     private int entityCounter = 0;
     private final List<Integer> freeEntities = new ArrayList<>();
     private final Map<Class<?>, ComponentPool<?>> componentPools = new HashMap<>();
-    private final List<Integer> activeEntities = new ArrayList<>(); // Track baseline allocated set tokens
+    private final List<Integer> activeEntities = new ArrayList<>(); 
+
+    /*
+     * FastEntityView completely eliminates Java Heap allocations (new ArrayList<Integer>) 
+     * during the game loop. It uses a raw primitive int[] array to prevent Integer boxing,
+     * maintaining a perfectly contiguous memory block for systems to iterate over.
+     */
+    public static final class FastEntityView {
+        public int[] data = new int[128];
+        public int size = 0;
+
+        public void add(int entity) {
+            if (size == data.length) {
+                // Resize linearly to preserve memory locality
+                data = java.util.Arrays.copyOf(data, data.length * 2);
+            }
+            data[size++] = entity;
+        }
+        public int get(int index) { return data[index]; }
+        public int size() { return size; }
+        public void clear() { size = 0; }
+    }
+
+    // Pre-allocated reusable buffer for component queries. Prevents GC spikes.
+    private final FastEntityView viewBuffer = new FastEntityView();
 
     public int createEntity() {
         int id;
@@ -37,29 +61,62 @@ public final class Registry {
     }
 
     /**
-     * Fetches a fast iterable collection list filtering matching dynamic component flags.
-     * Temporary view strategy before moving to strict automated Bitset grouping layout structures.
+     * Returns the total amount of instantiated entities currently active in the ECS.
      */
-    public List<Integer> getEntitiesWith(Class<?>... componentTypes) {
-        List<Integer> viewList = new ArrayList<>();
+    public int getEntityCount() {
+        return activeEntities.size();
+    }
+
+    /**
+     * L1/L2 CACHE LOCALITY OPTIMIZED VIEW MATCHER.
+     * Iterates strictly over the smallest contiguous dense array in memory,
+     * dropping O(N) global entity iteration in favor of O(K) subset linear iteration.
+     */
+    public FastEntityView getEntitiesWith(Class<?>... componentTypes) {
+        viewBuffer.clear();
         
-        for (int i = 0; i < activeEntities.size(); i++) {
-            int entity = activeEntities.get(i);
+        if (componentTypes.length == 0) return viewBuffer;
+
+        // 1. Find the smallest pool to drive the iteration (Hardware Prefetching Anchor)
+        ComponentPool<?> smallestPool = null;
+        int minSize = Integer.MAX_VALUE;
+
+        for (Class<?> type : componentTypes) {
+            ComponentPool<?> pool = componentPools.get(type);
+            // If any requested component doesn't exist or is empty, the intersection is absolutely zero.
+            if (pool == null || pool.size() == 0) return viewBuffer; 
+            
+            if (pool.size() < minSize) {
+                minSize = pool.size();
+                smallestPool = pool;
+            }
+        }
+
+        // 2. Linear iteration over contiguous dense memory array.
+        // The CPU L1 Cache will aggressively prefetch 'denseEntities' because it is accessed sequentially.
+        int[] denseEntities = smallestPool.getRawDenseToEntity();
+        
+        for (int i = 0; i < minSize; i++) {
+            int entity = denseEntities[i];
             boolean match = true;
             
             for (Class<?> type : componentTypes) {
-                ComponentPool<?> pool = componentPools.get(type);
-                if (pool == null || !pool.has(entity)) {
-                    match = false;
-                    break;
+                ComponentPool<?> poolToVerify = componentPools.get(type);
+                if (poolToVerify != smallestPool) {
+                    // O(1) jump into the Sparse Array to verify intersection
+                    if (!poolToVerify.has(entity)) {
+                        match = false;
+                        break;
+                    }
                 }
             }
             
             if (match) {
-                viewList.add(entity);
+                viewBuffer.add(entity);
             }
         }
-        return viewList;
+        
+        return viewBuffer;
     }
 
     @SuppressWarnings("unchecked")

@@ -57,8 +57,15 @@ public class Logger {
                 originInfo = caller.getFileName() + ":" + caller.getLineNumber();
             }
 
+            // 1. Standard console output with ANSI color coding for terminal readability
             java.lang.System.out.printf("[%s] %s%-5s%s [%-8s] [%s] %s%n", 
                 timestamp, lvl.color, lvl.name(), RESET, sys.label, originInfo, formattedMsg);
+
+            // 2. IPC branch: Clean payload for the TelemetryServer (Removes ANSI codes to maintain JSON integrity)
+            String telemetryPayload = String.format("[%s] %-5s [%-8s] [%s] %s", 
+                timestamp, lvl.name(), sys.label, originInfo, formattedMsg);
+            
+            com.aengine.network.TelemetryServer.enqueueLog(telemetryPayload);
         }
     }
 

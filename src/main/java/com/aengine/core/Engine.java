@@ -1,4 +1,4 @@
-package com.aengine;
+package com.aengine.core;
 
 import com.aengine.graphics.FrameBuffer;
 import com.aengine.utils.Logger;
@@ -26,10 +26,10 @@ public abstract class Engine {
     private static final long CHECK_INTERVAL_MS = 1000; 
 
     public enum EngineState { LAUNCHER, EDITOR }
-    private EngineState currentState = EngineState.LAUNCHER; 
+    private EngineState currentState = EngineState.EDITOR; // Instantiating as EDITOR for standalone fallback execution
 
-    public Engine(String title, int width, int height) {
-        this.window = new Window(title, width, height);
+    public Engine(String title) {
+        this.window = new Window(title);
         this.registry = new Registry(); 
     }
 
@@ -63,7 +63,7 @@ public abstract class Engine {
         window.init();
         Input.init(window.getHandle());
 
-        frameBuffer = new FrameBuffer(1920, 1080);
+        frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
 
         if (gameClassName != null) {
             reloadGameCode();
@@ -93,15 +93,36 @@ public abstract class Engine {
             org.lwjgl.glfw.GLFW.glfwPollEvents(); 
             Input.update();
 
+            // Clear hardware buffers once at the beginning of the frame execution step
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
             if (currentState == EngineState.EDITOR) {
                 onUpdate(deltaTime);
+                
+                // 1. ENGINE RENDER PASS (Virtual Texture in VRAM)
                 frameBuffer.bind();
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                onRender();
+                
+                onRender(); 
+                
                 frameBuffer.unbind();
+                
+                // 2. PHYSICAL DISPLAY RENDER PASS (Physical Monitor)
+                // Restore the viewport to the actual window dimensions
+                org.lwjgl.opengl.GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
+                
+                // Clear the physical screen (prevents visual artifacts or "hall of mirrors")
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                // =====================================================================
+                // FRONTEND INJECTION HERE
+                // Rendered scene is now contained in the ID: frameBuffer.getTextureID()
+                // =====================================================================
+                
+            } else if (currentState == EngineState.LAUNCHER) {
+                // Future fallback logic for host UI processing if required
             }
 
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             window.swapBuffers();
         }
         Logger.info(Logger.System.CORE, "Break condition detected. Terminating main loop...");

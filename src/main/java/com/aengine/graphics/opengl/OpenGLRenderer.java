@@ -66,9 +66,13 @@ public class OpenGLRenderer implements RendererAPI {
 
     @Override
     public void drawBatch(float[] vertices, int vertexCount, int indexCount) {
-        // Push dynamic frame buffer array slices into the bounded memory layout
+        if (indexCount == 0) return;
+
         quadVBO.bind();
-        glBufferSubData(GL_ARRAY_BUFFER, 0, vertices);
+        
+        // Push ONLY the active initialized float slice into the VBO storage memory.
+        // This isolates the data boundary and prevents driver-level memory drops.
+        glBufferSubData(GL_ARRAY_BUFFER, 0, java.util.Arrays.copyOfRange(vertices, 0, vertexCount));
 
         quadVAO.bind();
         glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
