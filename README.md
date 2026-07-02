@@ -242,7 +242,7 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 
 - [x] Asset Baking & Packaging Pipeline: Develop an offline tool to compile raw .png and text assets into optimized, compressed, custom .atex binary chunks and single .pak file streams for distribution.
 
-- [ ] Data-Driven Scene & Prefab Architecture: Implement deterministic JSON parsers (using libraries like Gson/Jackson) to instantiate ECS components dynamically from `.entity` and `.scene` files, completely decoupling level design from hardcoded Java execution.
+- [x] Data-Driven Scene & Prefab Architecture: Implement deterministic JSON parsers (using libraries like Gson/Jackson) to instantiate ECS components dynamically from `.entity` and `.scene` files, completely decoupling level design from hardcoded Java execution.
 
 - [x] Kernel-Level Asset Hot-Reloading: Deploy an OS-level `WatchService` (inotify/ReadDirectoryChangesW) daemon on the `assets_src` directory to trigger automatic recompilation via `AssetBaker` and instant VRAM injection during runtime with zero polling overhead.
 
