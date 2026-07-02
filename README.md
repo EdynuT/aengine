@@ -185,7 +185,7 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
   cargo tauri build
   ```
 
-  **_Note:_** For more information about interface updates check [FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md)
+  **_Note:_** For more information about interface updates check [docs/FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md)
 
 ---
 
