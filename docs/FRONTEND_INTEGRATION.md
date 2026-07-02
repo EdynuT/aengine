@@ -7,19 +7,14 @@ AEngine operates on a strictly decoupled architecture. The Core Engine (Java/Ope
 
 The two systems do not share memory. They communicate via a zero-allocation, local TCP Loopback connection (IPC). This ensures that the UI can crash, reload, or freeze without ever dropping a frame in the Core Engine's execution loop.
 
-### 2. The Telemetry IPC Daemon (Read-Only Stream)
-The Core Engine hosts an asynchronous, non-blocking TCP server. As soon as the engine initializes, it binds to the local loopback interface.
+### 2. The Telemetry IPC Daemon (Runtime-Driven Stream)
+The Core Engine hosts an asynchronous, non-blocking TCP socket server bound to `127.0.0.1:8080`. 
 
-- Host: `127.0.0.1`
-
-- Port: `8080`
-
-- Protocol: Raw TCP (Not WebSockets)
-
-- Tick Rate: 10 Hz (100ms intervals)
+To prevent multi-threading data races (e.g., reading ECS state while the physics thread modifies it), the Telemetry Server operates completely passively. It does not possess an internal timer. 
 
 #### 2.1. The Data Contract (JSON)
-Every 100ms, the Java backend dispatches a serialized JSON payload containing the engine's current state. The frontend must parse this JSON to update the Dashboard UI.
+The telemetry dispatch is explicitly controlled by the Engine's primary Runtime (Main Thread). 
+To prevent choking the frontend WebKit DOM with 160+ JSON parses per second (which would freeze the Editor UI), the engine's `onUpdate()` loop utilizes a delta-time accumulator. It throttles the dispatch to a UI-friendly interval (typically every 0.1 seconds), capturing the exact memory state of that specific frame.
 
 Payload Schema:
 
