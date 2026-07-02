@@ -1,6 +1,6 @@
 package com.aengine.ecs.systems;
 
-import com.aengine.core.Main;
+import com.aengine.Main;
 import com.aengine.ecs.ComponentPool;
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.System;

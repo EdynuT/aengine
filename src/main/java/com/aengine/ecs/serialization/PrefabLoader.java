@@ -3,6 +3,10 @@ package com.aengine.ecs.serialization;
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.ecs.components.SpriteComponent;
+import com.aengine.ecs.components.ColliderComponent;
+import com.aengine.ecs.components.ColliderType;
+import com.aengine.ecs.components.RigidbodyComponent;
+import com.aengine.ecs.components.ScriptComponent;
 import com.aengine.graphics.opengl.OpenGLTexture;
 import com.aengine.utils.FileSystem;
 import com.aengine.utils.Logger;
@@ -70,6 +74,49 @@ public class PrefabLoader {
                     }
                     
                     activeRegistry.addComponent(entityId, sprite);
+                }
+                
+                // Parse Collider
+                if (components.has("ColliderComponent")) {
+                    JsonObject colData = components.getAsJsonObject("ColliderComponent");
+                    
+                    // Extract enumerated type (Default: AABB)
+                    String typeStr = colData.has("type") ? colData.get("type").getAsString() : "AABB";
+                    ColliderType type = ColliderType.valueOf(typeStr);
+                    
+                    ColliderComponent collider = new ColliderComponent(type);
+                    
+                    fillVector3(colData, "size", collider.size);
+                    fillVector3(colData, "offset", collider.offset);
+                    
+                    activeRegistry.addComponent(entityId, collider);
+                }
+
+                // Parse Rigidbody
+                if (components.has("RigidbodyComponent")) {
+                    JsonObject rigidData = components.getAsJsonObject("RigidbodyComponent");
+                    RigidbodyComponent rb = new RigidbodyComponent();
+                    
+                    if (rigidData.has("mass")) rb.mass = rigidData.get("mass").getAsFloat();
+                    if (rigidData.has("restitution")) rb.restitution = rigidData.get("restitution").getAsFloat();
+                    if (rigidData.has("friction")) rb.friction = rigidData.get("friction").getAsFloat();
+                    if (rigidData.has("isKinematic")) rb.isKinematic = rigidData.get("isKinematic").getAsBoolean();
+                    
+                    fillVector3(rigidData, "velocity", rb.velocity);
+                    
+                    activeRegistry.addComponent(entityId, rb);
+                }
+                
+                // Parse Script
+                if (components.has("ScriptComponent")) {
+                    JsonObject scriptData = components.getAsJsonObject("ScriptComponent");
+                    ScriptComponent script = new ScriptComponent();
+                    
+                    if (scriptData.has("scriptPath")) {
+                        script.scriptPath = scriptData.get("scriptPath").getAsString();
+                    }
+                    
+                    activeRegistry.addComponent(entityId, script);
                 }
             }
 

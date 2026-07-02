@@ -1,10 +1,13 @@
-package com.aengine.core;
+package com.aengine;
 
 import java.io.File;
 
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
+import com.aengine.core.Engine;
+import com.aengine.core.Input;
+import com.aengine.core.Keys;
 import com.aengine.ecs.components.CameraComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
@@ -20,6 +23,11 @@ public class Main extends Engine {
 
     private CameraSystem cameraSystem;
     private int cameraEntity;
+    private float accumulator = 0.0f;
+    private static final float TIME_STEP = 1.0f / 60.0f; // 60Hz
+
+    private com.aengine.ecs.systems.PhysicsSystem physicsSystem;
+    private com.aengine.ecs.systems.ScriptSystem scriptSystem;
 
     public enum RenderMode { MODE_2D, MODE_3D }
     private static RenderMode activeRenderMode = RenderMode.MODE_3D;
@@ -72,6 +80,8 @@ public class Main extends Engine {
 
         cameraSystem = new CameraSystem();
         cameraEntity = registry.createEntity();
+        physicsSystem = new com.aengine.ecs.systems.PhysicsSystem();
+        scriptSystem = new com.aengine.ecs.systems.ScriptSystem();
         
         // If is 3D, the camera recedes 5 meters. If is 2D, it stays at Z=0 along with the sprites.
         float cameraZ = (activeRenderMode == RenderMode.MODE_3D) ? 5.0f : 0.0f;
@@ -95,12 +105,29 @@ public class Main extends Engine {
 
     @Override
     protected void onUpdate(float deltaTime) {
-        // com.aengine.utils.FPSTracker.update(deltaTime);  // Do not remove this line. It is used for internal FPS tracking and debugging purposes.
+        com.aengine.utils.FPSTracker.update(deltaTime);
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }
 
-        // Tick hardware camera updates before dispatching geometry rendering frames
+        // Executes the logic programmed in the Lua files
+        scriptSystem.update(registry, deltaTime);
+
+        // "Spiral of Death" protection: Prevents a massive OS lag from locking the game in an infinite loop
+        if (deltaTime > 0.25f) {
+            deltaTime = 0.25f;
+        }
+
+        // The accumulator absorbs the variable time from the renderer
+        accumulator += deltaTime;
+
+        // Physics consumes the absorbed time in perfectly equal slices
+        while (accumulator >= TIME_STEP) {
+            physicsSystem.update(registry, TIME_STEP);
+            accumulator -= TIME_STEP;
+        }
+
+        // Visual systems operate freely, without Hz restriction
         cameraSystem.update(registry, deltaTime);
         Input.update();
     }
