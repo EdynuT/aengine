@@ -23,7 +23,11 @@ public class ScriptSystem {
             ScriptComponent script = registry.getComponent(entity, ScriptComponent.class);
             TransformComponent transform = registry.getComponent(entity, TransformComponent.class);
 
-            // 1. Lazy Initialization: 
+            // Defensive null guard: with the physics syncLock in place this should never
+            // fire, but protects against future multi-threaded ECS changes.
+            if (script == null || transform == null) continue;
+
+            // 1. Lazy Initialization:
             // Compiles the script only the first time the entity runs in the loop.
             if (script.luaGlobals == null && script.scriptPath != null) {
                 initializeScript(script, transform);

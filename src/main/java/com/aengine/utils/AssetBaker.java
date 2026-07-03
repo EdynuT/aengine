@@ -2,11 +2,18 @@ package com.aengine.utils;
 
 import org.lwjgl.stb.STBImage;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.stb.STBVorbis;
+import org.lwjgl.system.MemoryUtil;
+
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteOrder;
 import java.nio.ByteBuffer;
+import java.nio.ShortBuffer;
 import java.nio.IntBuffer;
 import java.nio.channels.FileChannel;
 import java.util.concurrent.ExecutorService;
@@ -23,6 +30,7 @@ public final class AssetBaker {
 
     // "ATEX" encoded in ASCII Hex
     public static final int MAGIC_NUMBER = 0x41544558; 
+    public static final int MAGIC_NUMBER_AUDIO = 0x41415544; 
     public static final int VERSION = 1;
 
     private AssetBaker() {}
@@ -72,11 +80,13 @@ public final class AssetBaker {
                 String name = file.getName().toLowerCase();
                 if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
                     pool.submit(() -> {
-                        if (compileTexture(file, rootSourceDir, rootTargetDir)) {
-                            successTracker.incrementAndGet();
-                        } else {
-                            failTracker.incrementAndGet();
-                        }
+                        if (compileTexture(file, rootSourceDir, rootTargetDir)) successTracker.incrementAndGet();
+                        else failTracker.incrementAndGet();
+                    });
+                } else if (name.endsWith(".ogg") || name.endsWith(".wav")) {
+                    pool.submit(() -> {
+                        if (compileAudio(file, rootSourceDir, rootTargetDir)) successTracker.incrementAndGet();
+                        else failTracker.incrementAndGet();
                     });
                 }
             }
@@ -136,5 +146,113 @@ public final class AssetBaker {
             Logger.error(Logger.System.ASSET, "I/O Fault writing .atex binary: %s", e.getMessage());
             return false;
         }
+    }
+
+    public static boolean compileAudio(File sourceFile, File rootSourceDir, File rootTargetDir) {
+        String relativePath = sourceFile.getAbsolutePath().substring(rootSourceDir.getAbsolutePath().length());
+        String targetExtensionPath = relativePath.substring(0, relativePath.lastIndexOf('.')) + ".aaud";
+        File outputFile = new File(rootTargetDir, targetExtensionPath);
+        outputFile.getParentFile().mkdirs();
+
+        String name = sourceFile.getName().toLowerCase();
+
+        if (name.endsWith(".ogg")) {
+            // OGG → STBVorbis decode into unmanaged native memory
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                IntBuffer channels   = stack.mallocInt(1);
+                IntBuffer sampleRate = stack.mallocInt(1);
+
+                ShortBuffer pcm = STBVorbis.stb_vorbis_decode_filename(
+                    sourceFile.getAbsolutePath(), channels, sampleRate);
+
+                if (pcm == null) {
+                    Logger.error(Logger.System.ASSET, "Vorbis decode failure on %s", sourceFile.getName());
+                    return false;
+                }
+
+                int numChannels = channels.get(0);
+                int sRate       = sampleRate.get(0);
+                int payloadSize = pcm.capacity() * 2; // 2 bytes per 16-bit short sample
+
+                try (FileOutputStream fos = new FileOutputStream(outputFile);
+                     FileChannel channel = fos.getChannel()) {
+                    channel.write(buildAudHeader(numChannels, sRate, payloadSize));
+                    // Zero-Copy Blit: cast native ShortBuffer pointer directly to ByteBuffer
+                    channel.write(MemoryUtil.memByteBuffer(MemoryUtil.memAddress(pcm), payloadSize));
+                }
+
+                org.lwjgl.system.libc.LibCStdlib.free(pcm);
+                return true;
+
+            } catch (Exception e) {
+                Logger.error(Logger.System.ASSET, "I/O Fault writing .aaud from OGG: %s", e.getMessage());
+                return false;
+            }
+
+        } else if (name.endsWith(".wav")) {
+            // WAV → Java AudioSystem decode with Auto-Conversion
+            try (AudioInputStream baseAis = AudioSystem.getAudioInputStream(sourceFile)) {
+                AudioFormat baseFormat = baseAis.getFormat();
+                AudioInputStream decodedAis = baseAis;
+
+                // Auto-convert to 16-bit PCM Signed (Little-Endian) if the source is 8-bit, 24-bit, or 32-bit float
+                if (baseFormat.getEncoding() != AudioFormat.Encoding.PCM_SIGNED || baseFormat.getSampleSizeInBits() != 16) {
+                    AudioFormat targetFormat = new AudioFormat(
+                        AudioFormat.Encoding.PCM_SIGNED,
+                        baseFormat.getSampleRate(),
+                        16, // Force 16-bit
+                        baseFormat.getChannels(),
+                        baseFormat.getChannels() * 2, // Frame size (channels * 2 bytes)
+                        baseFormat.getSampleRate(),
+                        false // Little-endian (standard for our native buffer)
+                    );
+
+                    if (AudioSystem.isConversionSupported(targetFormat, baseFormat)) {
+                        decodedAis = AudioSystem.getAudioInputStream(targetFormat, baseAis);
+                    } else {
+                        Logger.warn(Logger.System.ASSET, "Bake skipped: WAV format unsupported and cannot be auto-converted -> %s", sourceFile.getName());
+                        return false;
+                    }
+                }
+
+                int    numChannels = decodedAis.getFormat().getChannels();
+                int    sRate       = (int) decodedAis.getFormat().getSampleRate();
+                byte[] audioBytes  = decodedAis.readAllBytes();
+                int    payloadSize = audioBytes.length;
+
+                try (FileOutputStream fos = new FileOutputStream(outputFile);
+                     FileChannel channel = fos.getChannel()) {
+                    channel.write(buildAudHeader(numChannels, sRate, payloadSize));
+                    ByteBuffer payload = ByteBuffer.allocateDirect(payloadSize);
+                    payload.put(audioBytes).flip();
+                    channel.write(payload);
+                }
+
+                // Close the converted stream if a new one was created
+                if (decodedAis != baseAis) {
+                    decodedAis.close();
+                }
+                return true;
+
+            } catch (Exception e) {
+                Logger.error(Logger.System.ASSET, "I/O Fault writing .aaud from WAV: %s", e.getMessage());
+                return false;
+            }
+        }
+
+        Logger.warn(Logger.System.ASSET, "Unsupported audio format: %s", sourceFile.getName());
+        return false;
+    }
+
+    /** Builds the 20-byte AAUD header common to both OGG and WAV baked files. */
+    private static ByteBuffer buildAudHeader(int numChannels, int sampleRate, int payloadSize) {
+        // Header layout (20 bytes): Magic(4) + Type(4) + Channels(4) + SampleRate(4) + PayloadLength(4)
+        ByteBuffer header = ByteBuffer.allocateDirect(20).order(ByteOrder.nativeOrder());
+        header.putInt(MAGIC_NUMBER_AUDIO);
+        header.putInt(0); // Type 0 = Raw PCM
+        header.putInt(numChannels);
+        header.putInt(sampleRate);
+        header.putInt(payloadSize);
+        return header.flip();
     }
 }

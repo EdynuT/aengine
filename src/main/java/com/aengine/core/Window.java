@@ -122,7 +122,7 @@ public class Window {
         // DISABLE V-SYNC FOR UNLIMITED FPS RENDERING
         // 0 = No fps limit
         // 1 = Locked to monitor's refresh rate
-        org.lwjgl.glfw.GLFW.glfwSwapInterval(0);
+        org.lwjgl.glfw.GLFW.glfwSwapInterval(1);
         org.lwjgl.glfw.GLFW.glfwShowWindow(handle);
     }
 

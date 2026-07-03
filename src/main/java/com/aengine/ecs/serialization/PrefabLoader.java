@@ -62,7 +62,8 @@ public class PrefabLoader {
                     
                     if (spriteData.has("texture")) {
                         String texturePath = spriteData.get("texture").getAsString();
-                        sprite.texture = com.aengine.graphics.AssetManager.getTexture(texturePath); 
+                        sprite.texture = com.aengine.graphics.AssetManager.getTexture(texturePath);
+                        sprite.texturePath = texturePath;
                     }
                     
                     if (spriteData.has("color")) {
