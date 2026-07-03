@@ -82,7 +82,7 @@ public final class PhysicsThread extends Thread {
      * Start the physics simulation loop.
      * Safe to call only once — subsequent calls are ignored if already running.
      */
-    public void startPhysics() {
+    public void init() {
         if (running) return;
         running = true;
         start();
@@ -94,7 +94,7 @@ public final class PhysicsThread extends Thread {
      * Signal the physics loop to stop and block until the thread terminates.
      * Safe to call from any thread.
      */
-    public void stopPhysics() {
+    public void cleanup() {
         running = false;
         interrupt();
         boolean cleanStop = false;

@@ -38,7 +38,7 @@ public final class TelemetryServer {
 
     private TelemetryServer() {}
 
-    public static void start() {
+    public static void init() {
         Logger.info(Logger.System.CORE, "Starting Telemetry IPC Daemon...");
         if (isRunning.get()) return;
 
@@ -150,7 +150,7 @@ public final class TelemetryServer {
         }
     }
 
-    public static void stop() {
+    public static void cleanup() {
         isRunning.set(false);
         try {
             if (activeClient != null && activeClient.isOpen()) activeClient.close();

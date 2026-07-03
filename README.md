@@ -263,6 +263,12 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 
 - [x] Spatial Audio Engine: Implement OpenAL native bindings for 3D positional audio, streaming `.ogg` files through the async worker pool to prevent Main Thread stuttering during heavy soundscape decoding.
 
+- [ ] Native OpenAL Audio Pipeline (.aaud Engine): Instantiate the LWJGL OpenAL context and develop a dedicated `AudioSystem` to consume the custom `.aaud` binary format. Route Raw PCM payloads directly into static `alBufferData` for zero-latency SFX, and implement an async worker thread with Ring-Buffers for streaming heavy BGM tracks without stalling the Main Thread.
+
+- [ ] Zero-Copy Viewport Bridge (Memory-Mapped IPC): Implement a native shared-memory interface (e.g., `MappedByteBuffer` or `/dev/shm`) to stream the offscreen FrameBuffer Object (FBO) pixels directly to the Tauri WebKit frontend at 60Hz. This circumvents TCP socket bottlenecks and guarantees zero-allocation cross-process video streaming.
+
+- [ ] ECS Relational Scene Graph (Transform Hierarchies): Expand the currently flat DOD Registry to support parent-child entity relationships. Implement a dirty-flag topological sort algorithm to efficiently compute Global Transforms from Local Transforms in contiguous memory blocks, enabling complex nested prefabs in the Editor.
+
 - [ ] Tauri WebKit Editor Dashboard: Finalize the Rust/Svelte (or Vue/React) frontend wrapper to intercept the 10Hz TCP telemetry loopback, visualizing real-time ECS allocation metrics, FPS graphs, and intercepted Logger streams.
 
 - [ ] Advanced Rendering Techniques: Expand the Shader subsystem to support Framebuffer Objects (FBOs) for post-processing, Shadow Mapping, and a rudimentary Physically Based Rendering (PBR) pipeline decoupled from the 2D Batch Renderer.

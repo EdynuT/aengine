@@ -7,24 +7,43 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 import imgui.ImGui;
+
+import com.aengine.audio.AudioDevice;
 import com.aengine.core.Engine;
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
-import com.aengine.debug.DebugOverlay;
+
 import com.aengine.ecs.components.CameraComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
+import com.aengine.ecs.serialization.SceneLoader;
+import com.aengine.ecs.systems.AudioSystem;
 import com.aengine.ecs.systems.CameraSystem;
+import com.aengine.ecs.systems.PhysicsSystem;
+import com.aengine.ecs.systems.ScriptSystem;
+
+import com.aengine.debug.DebugOverlay;
+
 import com.aengine.editor.EditorState;
 import com.aengine.editor.EntityFactory;
 import com.aengine.editor.SceneSerializer;
+
 import com.aengine.graphics.AssetManager;
 import com.aengine.graphics.Camera;
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
+
+import com.aengine.network.TelemetryServer;
+
+import com.aengine.physics.PhysicsThread;
+
+import com.aengine.utils.AssetBaker;
+import com.aengine.utils.AssetWatcher;
 import com.aengine.utils.FileSystem;
+import com.aengine.utils.FPSTracker;
 import com.aengine.utils.Logger;
 import com.aengine.utils.ProjectWizard;
+
 
 public class Main extends Engine {
 
@@ -33,13 +52,16 @@ public class Main extends Engine {
     
     // Dedicated physics thread — 120 Hz fixed-timestep loop, fully decoupled from the render rate.
     // All ECS Transform writes from the physics side are guarded by physicsThread.getSyncLock().
-    private com.aengine.physics.PhysicsThread physicsThread;
+    private PhysicsThread physicsThread;
+    private ScriptSystem scriptSystem;
+
+    // Audio System — 60 Hz update loop, fully decoupled from the render rate.
+    private AudioSystem audioSystem;
 
     // Telemetry Throttling variables
     private float telemetryAccumulator = 0.0f;
     private static final float TELEMETRY_INTERVAL = 0.1f; // 10Hz UI Refresh Rate
 
-    private com.aengine.ecs.systems.ScriptSystem scriptSystem;
 
     // =========================================================================
     // Editor state — pre-allocated scratch buffers to avoid per-frame GC churn.
@@ -88,31 +110,34 @@ public class Main extends Engine {
             FileSystem.mountProject(activeProjectPath);
             String rawAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "src";
             String vfsAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "baked";
-            com.aengine.utils.AssetBaker.bakeDirectory(rawAssetsDir, vfsAssetsDir);
-            com.aengine.utils.AssetWatcher.start(activeProjectPath); 
-            com.aengine.network.TelemetryServer.start();
+            AssetBaker.bakeDirectory(rawAssetsDir, vfsAssetsDir);
+            AssetWatcher.start(activeProjectPath); 
+            TelemetryServer.init();
         } catch (Exception e) {
             Logger.error(Logger.System.CORE, "VFS Handshake critical failure. Halting engine initialization pipeline.");
             throw new RuntimeException("Critical core infrastructure failure during VFS mount", e);
         }
 
+        AudioDevice.init();
+        
         Renderer2D.init();
         Renderer3D.init();
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
         // Gray background for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
         Renderer2D.setClearColor(0.30f, 0.30f, 0.30f, 1.0f);
-
+        
+        audioSystem = new AudioSystem();
         cameraSystem = new CameraSystem();
         cameraEntity = registry.createEntity();
         // Construct PhysicsSystem, wrap it in a dedicated background thread, and start it.
         // The thread runs at 120 Hz with its own fixed-timestep accumulator and
         // spiral-of-death protection — no accumulator needed on the main thread.
-        com.aengine.ecs.systems.PhysicsSystem physicsSystem = new com.aengine.ecs.systems.PhysicsSystem();
-        physicsThread = new com.aengine.physics.PhysicsThread(registry, physicsSystem);
-        physicsThread.startPhysics();
+        PhysicsSystem physicsSystem = new PhysicsSystem();
+        physicsThread = new PhysicsThread(registry, physicsSystem);
+        physicsThread.init();
 
-        scriptSystem = new com.aengine.ecs.systems.ScriptSystem();
+        scriptSystem = new ScriptSystem();
         
         // If is 3D, the camera recedes 5 meters. If is 2D, it stays at Z=0 along with the sprites.
         float cameraZ = (activeRenderMode == RenderMode.MODE_3D) ? 5.0f : 0.0f;
@@ -130,13 +155,13 @@ public class Main extends Engine {
             registry.addComponent(cameraEntity, new CameraComponent(0.0f, getWindow().getWidth(), getWindow().getHeight(), -1.0f, 100.0f, false));
             
             // HARDWARE CONTEXT: Data-Driven Instantiation
-            com.aengine.ecs.serialization.SceneLoader.load(registry, "assets://data/scenes/level_01.scene");
+            SceneLoader.load(registry, "assets://data/scenes/level_01.scene");
         }
     }
 
     @Override
     protected void onUpdate(float deltaTime) {
-        com.aengine.utils.FPSTracker.update(deltaTime); // Update FPS tracker for telemetry dispatch. Do not remove.
+        FPSTracker.update(deltaTime); // Update FPS tracker for telemetry dispatch. Do not remove.
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }
@@ -155,6 +180,7 @@ public class Main extends Engine {
         // Holding the lock here blocks at most one 8.3 ms physics step per frame,
         // well within the 16 ms render budget at 60 Hz.
         synchronized (physicsThread.getSyncLock()) {
+            audioSystem.update (registry, deltaTime);
             scriptSystem.update(registry, deltaTime);
             cameraSystem.update(registry, deltaTime);
         }
@@ -168,7 +194,7 @@ public class Main extends Engine {
         if (telemetryAccumulator >= TELEMETRY_INTERVAL) {
             // Dispatch state strictly from the Main Thread to avoid ECS data races.
             // The network server must handle the JSON serialization and socket push.
-            com.aengine.network.TelemetryServer.dispatch(registry);
+            TelemetryServer.dispatch(registry);
             telemetryAccumulator = 0.0f;
         }
     }
@@ -231,10 +257,11 @@ public class Main extends Engine {
         Logger.info(Logger.System.CORE, "Terminating active workspace runtime contexts. Executing hardware cleanup...");
         // Stop the physics thread first to prevent it from accessing the registry
         // after the renderers and VFS have been torn down.
-        physicsThread.stopPhysics();
+        physicsThread.cleanup();
         Renderer3D.cleanup();
         Renderer2D.cleanup();
-        com.aengine.network.TelemetryServer.stop();
+        AudioDevice.cleanup();
+        TelemetryServer.cleanup();
     }
 
     @Override
@@ -266,7 +293,7 @@ public class Main extends Engine {
 
         // ── Engine Stats ──────────────────────────────────────────────────────
         ImGui.begin("Engine Stats", DebugOverlay.showEnginePanel());
-        ImGui.text(String.format("FPS      : %d", com.aengine.utils.FPSTracker.getCurrentFPS()));
+        ImGui.text(String.format("FPS      : %d", FPSTracker.getCurrentFPS()));
         ImGui.text(String.format("Mode     : %s", activeRenderMode));
         ImGui.text(String.format("Entities : %d", registry.getEntityCount()));
         ImGui.separator();

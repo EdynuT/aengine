@@ -51,6 +51,10 @@ dependencies {
 
     // Json parsing library for configuration and serialization
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // OpenAL - Spatialized Audio API for 3D sound
+    implementation "org.lwjgl:lwjgl-openal:${lwjglVersion}"
+    runtimeOnly "org.lwjgl:lwjgl-openal:${lwjglVersion}:${lwjglNatives}"
     
     // Embedded Lua Virtual Machine
     implementation 'org.luaj:luaj-jse:3.0.1'
