@@ -252,17 +252,17 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 
 - [x] Local Socket IPC Daemon: Implement a lightweight local loopback TCP socket connection between the Tauri frontend wrapper and the Java Core to stream real-time framework telemetry (FPS counters, active ECS allocations, and structural logs) directly into the UI dashboard.
 
-- [ ] Tauri WebKit Editor Dashboard: Finalize the Rust/Svelte (or Vue/React) frontend wrapper to intercept the 10Hz TCP telemetry loopback, visualizing real-time ECS allocation metrics, FPS graphs, and intercepted Logger streams.
+- [x] Physics & Collision Pipeline: Integrate a dedicated physics thread (evaluating custom AABB/SAT solvers or native Box2D/Jolt bindings) synchronized with the ECS Transform components using fixed-timestep interpolation.
 
-- [ ] Physics & Collision Pipeline: Integrate a dedicated physics thread (evaluating custom AABB/SAT solvers or native Box2D/Jolt bindings) synchronized with the ECS Transform components using fixed-timestep interpolation.
-
-- [ ] Broad Phase Physics (Spatial Hashing): Replace the current $O(N^2)$ brute-force intersection loop with a deterministic Spatial Hash Grid to rescue CPU cycles.
+- [x] Broad Phase Physics (Spatial Hashing): Replace the current $O(N^2)$ brute-force intersection loop with a deterministic Spatial Hash Grid to rescue CPU cycles.
   - Implement an $O(1)$ insertion pipeline converting 2D/3D Transform spatial coordinates into 1D HashMap bucket IDs using prime number hashing (e.g., `(floor(x / cellSize) * 73856093) ^ (floor(y / cellSize) * 19349663)`).
   - Restrict Narrow Phase (AABB/SAT) evaluations strictly to entities sharing the same or adjacent spatial buckets.
   - Prepare the isolated Collision Resolution solver (Impulse/Velocity projection) to execute immediately after the Broad Phase filter.
 
+- [x] Architecture Realignment — Segregate ImGui Dependencies: Isolate and deprecate Dear ImGui from structural window wrappers. Retain ImGui execution paths exclusively for intra-viewport debug overlays running inside the active LWJGL hardware thread, shifting window-frame layout responsibility entirely to the WebKit/Tauri frontend context.
+
 - [ ] Spatial Audio Engine: Implement OpenAL native bindings for 3D positional audio, streaming `.ogg` files through the async worker pool to prevent Main Thread stuttering during heavy soundscape decoding.
 
-- [ ] Advanced Rendering Techniques: Expand the Shader subsystem to support Framebuffer Objects (FBOs) for post-processing, Shadow Mapping, and a rudimentary Physically Based Rendering (PBR) pipeline decoupled from the 2D Batch Renderer.
+- [ ] Tauri WebKit Editor Dashboard: Finalize the Rust/Svelte (or Vue/React) frontend wrapper to intercept the 10Hz TCP telemetry loopback, visualizing real-time ECS allocation metrics, FPS graphs, and intercepted Logger streams.
 
-- [ ] Architecture Realignment — Segregate ImGui Dependencies: Isolate and deprecate Dear ImGui from structural window wrappers. Retain ImGui execution paths exclusively for intra-viewport debug overlays running inside the active LWJGL hardware thread, shifting window-frame layout responsibility entirely to the WebKit/Tauri frontend context.
+- [ ] Advanced Rendering Techniques: Expand the Shader subsystem to support Framebuffer Objects (FBOs) for post-processing, Shadow Mapping, and a rudimentary Physically Based Rendering (PBR) pipeline decoupled from the 2D Batch Renderer.

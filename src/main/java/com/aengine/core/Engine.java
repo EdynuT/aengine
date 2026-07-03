@@ -1,5 +1,6 @@
 package com.aengine.core;
 
+import com.aengine.debug.DebugOverlay;
 import com.aengine.graphics.FrameBuffer;
 import com.aengine.utils.Logger;
 import com.aengine.ecs.Registry;
@@ -23,7 +24,7 @@ public abstract class Engine {
     private String gameClassName;
     private long lastKnownModificationTime = 0;
     private long lastReloadCheckTime = 0;
-    private static final long CHECK_INTERVAL_MS = 1000; 
+    private static final long CHECK_INTERVAL_MS = 1000;
 
     public enum EngineState { LAUNCHER, EDITOR }
     private EngineState currentState = EngineState.EDITOR; // Instantiating as EDITOR for standalone fallback execution
@@ -62,6 +63,10 @@ public abstract class Engine {
         Logger.info(Logger.System.CORE, "Initializing core engine components...");
         window.init();
         Input.init(window.getHandle());
+
+        // Initialise ImGui AFTER Input so ImGui's GLFW callback installation chains
+        // onto Input's callbacks rather than replacing them silently.
+        DebugOverlay.init(window.getHandle());
 
         frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
 
@@ -117,8 +122,12 @@ public abstract class Engine {
                 // =====================================================================
                 // FRONTEND INJECTION HERE
                 // Rendered scene is now contained in the ID: frameBuffer.getTextureID()
+                // ImGui composites debug panels + the viewport image on the default FBO.
                 // =====================================================================
-                
+                DebugOverlay.beginFrame();
+                onDebugRender(frameBuffer.getTextureID());
+                DebugOverlay.endFrame();
+
             } else if (currentState == EngineState.LAUNCHER) {
                 // Future fallback logic for host UI processing if required
             }
@@ -150,10 +159,13 @@ public abstract class Engine {
     private void cleanup() {
         Logger.info(Logger.System.CORE, "Executing engine teardown sequence...");
         onCleanup();
-        
+
+        // Overlay must be shut down before the GLFW window is destroyed
+        DebugOverlay.cleanup();
+
         if (frameBuffer != null) frameBuffer.cleanup();
         window.cleanup();
-        
+
         Logger.info(Logger.System.CORE, "Engine lifecycle shutdown complete.");
     }
 
@@ -165,5 +177,33 @@ public abstract class Engine {
     protected abstract void onInit();
     protected abstract void onUpdate(float deltaTime);
     protected abstract void onRender();
+
+    /**
+     * Called each frame after the scene FBO is complete but before buffer swap.
+     * Submit all ImGui windows here. The default implementation renders the scene
+     * FBO as a dockable "Viewport" ImGui panel.
+     *
+     * <p>Subclasses should call {@code super.onDebugRender(viewportTextureID)} first
+     * to preserve the Viewport panel, then append additional debug windows.</p>
+     *
+     * @param viewportTextureID OpenGL texture ID of the rendered scene FrameBuffer
+     */
+    protected void onDebugRender(int viewportTextureID) {
+        DebugOverlay.renderViewport(viewportTextureID,
+            window.getWidth(), window.getHeight(), this::onViewportContextMenu);
+    }
+
+    /**
+     * Override to inject ImGui menu items into the right-click context menu that
+     * appears when the user right-clicks inside the Viewport image panel.
+     *
+     * <p>This method is called from within an active ImGui popup context, so only
+     * {@code ImGui.menuItem}, {@code ImGui.beginMenu}/{@code endMenu}, separators,
+     * and similar popup-safe widgets should be submitted here.</p>
+     *
+     * <p>Default implementation is empty (no context menu items).</p>
+     */
+    protected void onViewportContextMenu() {}
+
     protected abstract void onCleanup();
 }

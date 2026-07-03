@@ -25,13 +25,13 @@ ext {
     String osName = System.getProperty("os.name").toLowerCase()
     if (osName.contains("win")) {
         lwjglNatives = 'natives-windows'
-        imguiPlatform = 'natives-windows'
+        imguiNatives = 'windows'
     } else if (osName.contains("mac")) {
         lwjglNatives = 'natives-macos'
-        imguiPlatform = 'natives-macos'
+        imguiNatives = 'macos'
     } else {
         lwjglNatives = 'natives-linux'
-        imguiPlatform = 'natives-linux'
+        imguiNatives = 'linux'
     }
 }
 
@@ -54,6 +54,12 @@ dependencies {
     
     // Embedded Lua Virtual Machine
     implementation 'org.luaj:luaj-jse:3.0.1'
+
+    // Dear ImGui debug overlay — restricted to the LWJGL OpenGL viewport.
+    // The binding + LWJGL3 backend are compile-time; the native lib is runtime-only.
+    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
+    implementation "io.github.spair:imgui-java-lwjgl3:${imguiVersion}"
+    runtimeOnly   "io.github.spair:imgui-java-natives-${imguiNatives}:${imguiVersion}"
 }
 
 application {
