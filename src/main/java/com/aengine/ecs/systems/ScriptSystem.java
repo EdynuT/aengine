@@ -11,7 +11,6 @@ import org.luaj.vm2.lib.jse.CoerceJavaToLua;
 import org.luaj.vm2.lib.jse.JsePlatform;
 
 import java.io.File;
-import java.util.List;
 
 public class ScriptSystem {
 

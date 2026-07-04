@@ -4,8 +4,6 @@ import com.aengine.graphics.opengl.OpenGLTexture;
 import com.aengine.utils.Logger;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.lwjgl.openal.AL10;
-
 /**
  * HARDWARE CONTEXT: VRAM CACHE & HOT-RELOAD ROUTER
  * Prevents redundant GPU allocations and routes OS-level mutation events to active hardware pointers.
@@ -52,7 +50,7 @@ public class AssetManager {
                 return -1;
             }
 
-            int type = mbb.getInt(); // 0 = Raw PCM
+            mbb.getInt(); // type: 0 = Raw PCM
             int channels = mbb.getInt();
             int sampleRate = mbb.getInt();
             int payloadSize = mbb.getInt();

@@ -10,7 +10,6 @@ public class OpenGLRenderer implements RendererAPI {
     private OpenGLVAO quadVAO;
     private OpenGLVBO quadVBO;
     private OpenGLEBO quadEBO;
-    private int vertexSizeFloats;
 
     @Override
     public void init() {
@@ -21,8 +20,6 @@ public class OpenGLRenderer implements RendererAPI {
 
     @Override
     public void initBatchBuffers(int maxVertices, int maxIndices, int vertexSizeFloats) {
-        this.vertexSizeFloats = vertexSizeFloats;
-
         quadVAO = new OpenGLVAO();
         quadVBO = new OpenGLVBO();
         quadEBO = new OpenGLEBO();

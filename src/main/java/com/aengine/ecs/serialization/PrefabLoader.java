@@ -7,14 +7,12 @@ import com.aengine.ecs.components.ColliderComponent;
 import com.aengine.ecs.components.ColliderType;
 import com.aengine.ecs.components.RigidbodyComponent;
 import com.aengine.ecs.components.ScriptComponent;
-import com.aengine.graphics.opengl.OpenGLTexture;
 import com.aengine.utils.FileSystem;
 import com.aengine.utils.Logger;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.joml.Vector3f;
-import org.joml.Vector4f;
 
 import java.io.File;
 import java.io.FileReader;

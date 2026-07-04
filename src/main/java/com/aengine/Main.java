@@ -177,7 +177,7 @@ public class Main extends Engine {
 
     @Override
     protected void onUpdate(float deltaTime) {
-        FPSTracker.update(deltaTime);
+        FPSTracker.update(deltaTime);    // Optional: Enable FPS tracking for telemetry dispatch. Comment it but DO NOT REMOVE
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }
@@ -488,6 +488,17 @@ public class Main extends Engine {
         }
 
         ImGui.end();
+
+        // Deferred entity deletion — applied after the hierarchy loop to avoid modifying the registry mid-frame
+        if (pendingDeleteEntity != -1) {
+            synchronized (physicsThread.getSyncLock()) {
+                if (EditorState.getSelectedEntity() == pendingDeleteEntity) {
+                    EditorState.deselect();
+                }
+                registry.destroyEntity(pendingDeleteEntity);
+            }
+            pendingDeleteEntity = -1;
+        }
     }
 
     // =========================================================================

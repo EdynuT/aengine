@@ -563,10 +563,8 @@ public final class NarrowPhase {
 
         for (int i = 0; i < 3; i++) {
             Vector3f ai = axA[i];
-            float hAi = (i == 0) ? hAx : (i == 1) ? hAy : hAz;
             for (int j = 0; j < 3; j++) {
                 Vector3f bj = axB[j];
-                float hBj = (j == 0) ? hBx : (j == 1) ? hBy : hBz;
 
                 float Lx = ai.y * bj.z - ai.z * bj.y;
                 float Ly = ai.z * bj.x - ai.x * bj.z;

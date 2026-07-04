@@ -192,7 +192,7 @@ public final class AssetBaker {
             // WAV → Java AudioSystem decode with Auto-Conversion
             try (AudioInputStream baseAis = AudioSystem.getAudioInputStream(sourceFile)) {
                 AudioFormat baseFormat = baseAis.getFormat();
-                AudioInputStream decodedAis = baseAis;
+                AudioInputStream decodedAis;
 
                 // Auto-convert to 16-bit PCM Signed (Little-Endian) if the source is 8-bit, 24-bit, or 32-bit float
                 if (baseFormat.getEncoding() != AudioFormat.Encoding.PCM_SIGNED || baseFormat.getSampleSizeInBits() != 16) {
@@ -212,6 +212,8 @@ public final class AssetBaker {
                         Logger.warn(Logger.System.ASSET, "Bake skipped: WAV format unsupported and cannot be auto-converted -> %s", sourceFile.getName());
                         return false;
                     }
+                } else {
+                    decodedAis = baseAis;
                 }
 
                 try (AudioInputStream ais = decodedAis) {

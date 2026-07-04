@@ -6,13 +6,10 @@ import com.aengine.ecs.components.AudioSourceComponent;
 import com.aengine.ecs.components.CameraComponent;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.graphics.AssetManager;
-import org.joml.Vector3f;
 
 import static org.lwjgl.openal.AL10.*;
 
 public final class AudioSystem extends System {
-
-    private final Vector3f listenerPos = new Vector3f();
 
     @Override
     public void update(Registry registry, float deltaTime) {

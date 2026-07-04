@@ -38,9 +38,10 @@ public final class SharedMemory {
             // 4 bytes per pixel (Red, Green, Blue, Alpha)
             currentBufferSize = width * height * 4;
 
-            RandomAccessFile raf = new RandomAccessFile(shmFile, "rw");
-            raf.setLength(currentBufferSize); // Pre-allocate the file in RAM
-            channel = raf.getChannel();
+            try (RandomAccessFile raf = new RandomAccessFile(shmFile, "rw")) {
+                raf.setLength(currentBufferSize); // Pre-allocate the file in RAM
+                channel = raf.getChannel();
+            }
 
             // Maps the file directly to Java's native memory (outside the Heap)
             mappedBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, currentBufferSize);

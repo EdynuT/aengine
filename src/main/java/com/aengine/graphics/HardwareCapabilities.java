@@ -90,7 +90,7 @@ public final class HardwareCapabilities {
         try {
             if (os.contains("win")) {
                 // Execute hardware pipeline query against Windows Management Instrumentation (WMI)
-                Process process = Runtime.getRuntime().exec("wmic cpu get name");
+                Process process = Runtime.getRuntime().exec(new String[]{"wmic", "cpu", "get", "name"});
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                     reader.readLine(); // Skip header layout entry line
                     String line;
@@ -103,7 +103,7 @@ public final class HardwareCapabilities {
                 }
             } else {
                 // Execute direct VFS stream interrogation against Unix hardware descriptors layout
-                Process process = Runtime.getRuntime().exec("cat /proc/cpuinfo");
+                Process process = Runtime.getRuntime().exec(new String[]{"cat", "/proc/cpuinfo"});
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                     String line;
                     while ((line = reader.readLine()) != null) {

@@ -26,7 +26,7 @@ public class OpenGLTexture implements TextureAPI {
     private static final ExecutorService ASSET_STREAMING_POOL = Executors.newFixedThreadPool(4, runnable -> {
         Thread worker = new Thread(runnable);
         worker.setDaemon(true); // Fixes terminal lockup: JVM kills this thread when Main finishes
-        worker.setName("AEngine-AssetWorker-" + worker.getId());
+        worker.setName("AEngine-AssetWorker-" + worker.threadId());
         return worker;
     });
 
@@ -96,10 +96,10 @@ public class OpenGLTexture implements TextureAPI {
                 return;
             }
 
-            int version = rawData.getInt();
+            rawData.getInt(); // version (unused)
             this.width = rawData.getInt();
             this.height = rawData.getInt();
-            int channels = rawData.getInt(); // Always 4 (RGBA)
+            rawData.getInt(); // channels (always 4, RGBA)
 
             // Slice the buffer: creates a new ByteBuffer view starting at position 20 (payload start)
             this.decodedPixels = rawData.slice(); 
