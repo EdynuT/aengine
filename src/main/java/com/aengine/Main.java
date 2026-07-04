@@ -9,6 +9,7 @@ import org.joml.Vector4f;
 import imgui.ImGui;
 
 import com.aengine.audio.AudioDevice;
+
 import com.aengine.core.Engine;
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
@@ -33,6 +34,7 @@ import com.aengine.graphics.Camera;
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
 
+import com.aengine.network.SharedMemory;
 import com.aengine.network.TelemetryServer;
 
 import com.aengine.physics.PhysicsThread;
@@ -47,6 +49,12 @@ import com.aengine.utils.ProjectWizard;
 
 public class Main extends Engine {
 
+    public enum EngineState { EDITOR, PLAY }
+    private static EngineState currentState = EngineState.EDITOR;
+    private com.google.gson.JsonObject sceneMemoryBackup = null;
+
+    // --- Editor Camera State ---
+    private float editorFov = 45.0f;
     private CameraSystem cameraSystem;
     private int cameraEntity;
     
@@ -73,8 +81,11 @@ public class Main extends Engine {
     private static final float[]  EDITOR_SCALE = new float[3];
     private static final float[]  EDITOR_COLOR = new float[4];
 
-    // Pending entity to delete (deferred to avoid modifying the ECS during iteration)
+    // --- Editor Drag & Drop State ---
+    private boolean isDraggingEntity = false;
     private int pendingDeleteEntity = -1;
+    private int lastWindowWidth = -1;
+    private int lastWindowHeight = -1;
 
     public enum RenderMode { MODE_2D, MODE_3D }
     private static RenderMode activeRenderMode = RenderMode.MODE_3D;
@@ -94,6 +105,8 @@ public class Main extends Engine {
     @Override
     protected void onInit() {
         Logger.info(Logger.System.CORE, "Initializing core pipeline execution context...");
+        
+        ImGui.getIO().setConfigWindowsMoveFromTitleBarOnly(true);
 
         // Resolve active directory or deploy development workspace bootstrap
         if (activeProjectPath == null || activeProjectPath.trim().isEmpty()) {
@@ -118,8 +131,8 @@ public class Main extends Engine {
             throw new RuntimeException("Critical core infrastructure failure during VFS mount", e);
         }
 
+        SharedMemory.init(getWindow().getWidth(), getWindow().getHeight());
         AudioDevice.init();
-        
         Renderer2D.init();
         Renderer3D.init();
         
@@ -130,12 +143,12 @@ public class Main extends Engine {
         audioSystem = new AudioSystem();
         cameraSystem = new CameraSystem();
         cameraEntity = registry.createEntity();
+        
         // Construct PhysicsSystem, wrap it in a dedicated background thread, and start it.
-        // The thread runs at 120 Hz with its own fixed-timestep accumulator and
-        // spiral-of-death protection — no accumulator needed on the main thread.
         PhysicsSystem physicsSystem = new PhysicsSystem();
         physicsThread = new PhysicsThread(registry, physicsSystem);
         physicsThread.init();
+        physicsThread.setPaused(true); // <--- Editor starts frozen
 
         scriptSystem = new ScriptSystem();
         
@@ -146,7 +159,8 @@ public class Main extends Engine {
         if (activeRenderMode == RenderMode.MODE_3D) {
             Logger.info(Logger.System.RENDERER, "Enforcing Core 3D Perspective execution pipeline.");
             org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
-            registry.addComponent(cameraEntity, new CameraComponent(45.0f, getWindow().getWidth(), getWindow().getHeight(), 0.1f, 1000.0f, true));
+            // Use the editorFov variable instead of the hardcoded value
+            registry.addComponent(cameraEntity, new CameraComponent(editorFov, getWindow().getWidth(), getWindow().getHeight(), 0.1f, 1000.0f, true));
         } else {
             Logger.info(Logger.System.RENDERER, "Enforcing Core 2D Orthographic execution pipeline. Z-Axis dropped.");
             org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
@@ -159,29 +173,94 @@ public class Main extends Engine {
         }
     }
 
+    private boolean wasF5Pressed = false;
+
     @Override
     protected void onUpdate(float deltaTime) {
-        FPSTracker.update(deltaTime); // Update FPS tracker for telemetry dispatch. Do not remove.
+        FPSTracker.update(deltaTime);
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }
+        
+        int currentW = (int) com.aengine.debug.DebugOverlay.getViewportImageW();
+        int currentH = (int) com.aengine.debug.DebugOverlay.getViewportImageH();
+        
+        boolean boundsChanged = (currentW > 0 && currentH > 0 && (currentW != lastWindowWidth || currentH != lastWindowHeight));
+        boolean fovChanged = false;
+
+        // Captura o Scroll do rato para alterar o FOV
+        if (activeRenderMode == RenderMode.MODE_3D) {
+            float scroll = imgui.ImGui.getIO().getMouseWheel();
+            if (scroll != 0.0f) {
+                // Roll up (positive) decreases FOV (Zoom In). Roll down (negative) increases FOV (Zoom Out).
+                // The scroll sensitivity is 10% of the current FOV, ensuring a minimum step of 0.5 degrees
+                // to prevent the zoom from getting mathematically stuck when approaching 1.0f.
+                float zoomSensitivity = Math.max(editorFov * 0.1f, 0.5f);
+                editorFov -= scroll * zoomSensitivity;
+                
+                // Strict mathematical clamping between 1.0f and 120.0f
+                if (editorFov < 1.0f) editorFov = 1.0f;
+                if (editorFov > 120.0f) editorFov = 120.0f;
+                
+                fovChanged = true;
+            }
+        }
+
+        // If the window size changed OR the user used the scroll, rebuild the matrix
+        if (boundsChanged || fovChanged) {
+            if (boundsChanged) {
+                lastWindowWidth = currentW;
+                lastWindowHeight = currentH;
+            }
+
+            synchronized (physicsThread.getSyncLock()) {
+                if (activeRenderMode == RenderMode.MODE_3D) {
+                    registry.addComponent(cameraEntity, new CameraComponent(editorFov, currentW, currentH, 0.1f, 1000.0f, true));
+                } else {
+                    registry.addComponent(cameraEntity, new CameraComponent(0.0f, currentW, currentH, -1.0f, 100.0f, false));
+                }
+            }
+            
+            if (boundsChanged) {
+                Logger.info(Logger.System.CORE, "Viewport Bounds Altered (%dx%d). Recalculating projection matrices.", currentW, currentH);
+            }
+        }
+
+        // --- STATE MACHINE TRANSITION (F5) ---
+        boolean isF5Pressed = Input.isKeyPressed(Keys.F5);
+        if (isF5Pressed && !wasF5Pressed) {
+            if (currentState == EngineState.EDITOR) {
+                Logger.info(Logger.System.CORE, "Entering PLAY Mode. Snapshotting ECS to RAM...");
+                currentState = EngineState.PLAY;
+                EditorState.deselect(); // Clear inspector to prevent editing during simulation
+                // Serialize straight to RAM, bypassing disk IO
+                sceneMemoryBackup = SceneSerializer.serializeScene(registry, "RAM_BACKUP");
+                physicsThread.setPaused(false);
+            } else {
+                Logger.info(Logger.System.CORE, "Entering EDITOR Mode. Restoring ECS from RAM...");
+                currentState = EngineState.EDITOR;
+                physicsThread.setPaused(true);
+                // Wipe dynamic entities cleanly
+                synchronized (physicsThread.getSyncLock()) {
+                    registry.clearScene();
+                    SceneLoader.load(registry, sceneMemoryBackup);
+                }
+            }
+        }
+        wasF5Pressed = isF5Pressed;
 
         // Cap deltaTime before any system update to prevent spiral-of-death if the main
         // thread falls behind (e.g., during asset loading or OS scheduling spikes).
         if (deltaTime > 0.25f) deltaTime = 0.25f;
 
         // Guard all registry access with the physics syncLock.
-        //
-        // The PhysicsThread calls registry.getEntitiesWith() concurrently, which overwrites
-        // the FastEntityView shared viewBuffer. Without synchronisation, ScriptSystem and
-        // CameraSystem may receive null components for entities whose IDs were overwritten
-        // by a physics query — causing an NPE on the main thread.
-        //
-        // Holding the lock here blocks at most one 8.3 ms physics step per frame,
-        // well within the 16 ms render budget at 60 Hz.
         synchronized (physicsThread.getSyncLock()) {
-            audioSystem.update (registry, deltaTime);
-            scriptSystem.update(registry, deltaTime);
+            
+            if (currentState == EngineState.PLAY) {
+                audioSystem.update(registry, deltaTime);
+                scriptSystem.update(registry, deltaTime);
+            }
+            // Camera operates freely in both modes
             cameraSystem.update(registry, deltaTime);
         }
 
@@ -202,12 +281,6 @@ public class Main extends Engine {
     @Override
     protected void onRender() {
         // Acquire the physics sync lock for the duration of this render pass.
-        //
-        // The physics thread continuously writes Transform positions; reading them
-        // without synchronisation could produce a torn frame (half-old, half-new positions).
-        // Holding the lock here prevents any physics step from starting until the render
-        // frame completes. At 120 Hz physics / 60 Hz render the lock is contested at most
-        // twice per render frame, each for ~1-2 ms — well within the 16 ms frame budget.
         synchronized (physicsThread.getSyncLock()) {
 
             var cameraPool = registry.getPool(CameraComponent.class);
@@ -279,20 +352,44 @@ public class Main extends Engine {
                                DebugOverlay.getViewportClickNdcY());
         }
 
-        // ── Deferred entity deletion ──────────────────────────────────────────
-        // Applied here so the deletion never happens mid-iteration inside the
-        // Hierarchy loop below.
-        if (pendingDeleteEntity != -1) {
-            synchronized (physicsThread.getSyncLock()) {
-                registry.destroyEntity(pendingDeleteEntity);
+        if (isDraggingEntity && EditorState.hasSelection()) {
+            if (ImGui.isMouseDown(0)) { // 0 = Left Mouse Button pressed
+                Camera camera = getActiveCamera();
+                if (camera != null) {
+                    float dxPixels = ImGui.getIO().getMouseDeltaX();
+                    float dyPixels = ImGui.getIO().getMouseDeltaY();
+
+                    if (dxPixels != 0.0f || dyPixels != 0.0f) {
+                        
+                        // Extract the exact resolution of the active render panel
+                        float vpW = com.aengine.debug.DebugOverlay.getViewportImageW();
+                        float vpH = com.aengine.debug.DebugOverlay.getViewportImageH();
+
+                        // Convert pixel delta to NDC delta using the correct proportions
+                        float ndcDx =  2.0f * (dxPixels / vpW);
+                        float ndcDy = -2.0f * (dyPixels / vpH); // Y inverted
+
+                        Matrix4f invVP = new Matrix4f(camera.getViewProjection()).invert();
+                        float worldDx = invVP.m00() * ndcDx + invVP.m10() * ndcDy;
+                        float worldDy = invVP.m01() * ndcDx + invVP.m11() * ndcDy;
+
+                        TransformComponent t = registry.getComponent(EditorState.getSelectedEntity(), TransformComponent.class);
+                        if (t != null) {
+                            synchronized (physicsThread.getSyncLock()) {
+                                t.position.x += worldDx;
+                                t.position.y += worldDy;
+                            }
+                        }
+                    }
+                }
+            } else {
+                isDraggingEntity = false; // Mouse released, end the drag
             }
-            EditorState.removeName(pendingDeleteEntity);
-            if (EditorState.getSelectedEntity() == pendingDeleteEntity) EditorState.deselect();
-            pendingDeleteEntity = -1;
         }
 
         // ── Engine Stats ──────────────────────────────────────────────────────
         ImGui.begin("Engine Stats", DebugOverlay.showEnginePanel());
+        ImGui.text(String.format("State    : %s", currentState.name()));
         ImGui.text(String.format("FPS      : %d", FPSTracker.getCurrentFPS()));
         ImGui.text(String.format("Mode     : %s", activeRenderMode));
         ImGui.text(String.format("Entities : %d", registry.getEntityCount()));
@@ -496,15 +593,15 @@ public class Main extends Engine {
 
         // Unproject NDC to world space using the inverse view-projection matrix
         Matrix4f invVP = new Matrix4f(camera.getViewProjection()).invert();
-        // Multiply by the column-major inverse: world = invVP * clipPos
         float clipW = 1.0f;
         float worldX = invVP.m00() * ndcX + invVP.m10() * ndcY + invVP.m30() * clipW;
         float worldY = invVP.m01() * ndcX + invVP.m11() * ndcY + invVP.m31() * clipW;
-        // (worldZ and worldW omitted — 2D AABB test only needs X and Y)
 
         int hit = -1;
         var entities = registry.getEntitiesWith(TransformComponent.class, SpriteComponent.class);
-        for (int i = 0; i < entities.size(); i++) {
+        
+        // Inverse iteration (Top-Most First) ensures to select the object that is visually on top
+        for (int i = entities.size() - 1; i >= 0; i--) {
             int eid = entities.get(i);
             TransformComponent t = registry.getComponent(eid, TransformComponent.class);
             if (t == null) continue;
@@ -518,6 +615,7 @@ public class Main extends Engine {
         }
 
         EditorState.select(hit); // hit == -1 deselects
+        isDraggingEntity = (hit != -1); // Locks the state machine in Dragging mode if something is hit
     }
 
     // =========================================================================

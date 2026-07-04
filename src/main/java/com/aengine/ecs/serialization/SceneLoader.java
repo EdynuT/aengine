@@ -1,6 +1,9 @@
 package com.aengine.ecs.serialization;
 
 import com.aengine.ecs.Registry;
+import com.aengine.ecs.components.ColliderComponent;
+import com.aengine.ecs.components.ColliderType;
+import com.aengine.ecs.components.RigidbodyComponent;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.graphics.AssetManager;
@@ -32,91 +35,139 @@ public class SceneLoader {
 
         try (FileReader reader = new FileReader(file)) {
             JsonObject root = gson.fromJson(reader, JsonObject.class);
-            String sceneName = root.has("name") ? root.get("name").getAsString() : "Unnamed_Scene";
-            Logger.info(Logger.System.CORE, "Mounting Scene Workspace: [%s]", sceneName);
-
-            if (root.has("entities")) {
-                JsonArray entities = root.getAsJsonArray("entities");
-                
-                for (JsonElement element : entities) {
-                    JsonObject entityData = element.getAsJsonObject();
-                    
-                    // =========================================================
-                    // MODE 1: Loading by Prefab (Empty Scene / Blueprint)
-                    // =========================================================
-                    if (entityData.has("prefab")) {
-                        String prefabPath = entityData.get("prefab").getAsString();
-                        
-                        int entityId = PrefabLoader.instantiate(activeRegistry, prefabPath);
-                        if (entityId == -1) continue;
-
-                        if (entityData.has("transform")) {
-                            JsonObject transformOverride = entityData.getAsJsonObject("transform");
-                            TransformComponent transform = activeRegistry.getComponent(entityId, TransformComponent.class);
-                            
-                            if (transform != null) {
-                                if (transformOverride.has("position")) {
-                                    JsonArray pos = transformOverride.getAsJsonArray("position");
-                                    transform.position.set(pos.get(0).getAsFloat(), pos.get(1).getAsFloat(), pos.get(2).getAsFloat());
-                                }
-                                if (transformOverride.has("rotation")) {
-                                    JsonArray rot = transformOverride.getAsJsonArray("rotation");
-                                    transform.rotation.set(rot.get(0).getAsFloat(), rot.get(1).getAsFloat(), rot.get(2).getAsFloat());
-                                }
-                                if (transformOverride.has("scale")) {
-                                    JsonArray scale = transformOverride.getAsJsonArray("scale");
-                                    transform.scale.set(scale.get(0).getAsFloat(), scale.get(1).getAsFloat(), scale.get(2).getAsFloat());
-                                }
-                            }
-                        }
-                    } 
-                    // =========================================================
-                    // MODE 2: Inline Loading (File saved by the Editor)
-                    // =========================================================
-                    else if (entityData.has("components")) {
-                        JsonObject components = entityData.getAsJsonObject("components");
-                        int entityId = activeRegistry.createEntity();
-
-                        // Read TransformComponent
-                        if (components.has("TransformComponent")) {
-                            JsonObject tObj = components.getAsJsonObject("TransformComponent");
-                            TransformComponent t = new TransformComponent();
-                            if (tObj.has("position")) {
-                                JsonArray pos = tObj.getAsJsonArray("position");
-                                t.position.set(pos.get(0).getAsFloat(), pos.get(1).getAsFloat(), pos.get(2).getAsFloat());
-                            }
-                            if (tObj.has("rotation")) {
-                                JsonArray rot = tObj.getAsJsonArray("rotation");
-                                t.rotation.set(rot.get(0).getAsFloat(), rot.get(1).getAsFloat(), rot.get(2).getAsFloat());
-                            }
-                            if (tObj.has("scale")) {
-                                JsonArray scale = tObj.getAsJsonArray("scale");
-                                t.scale.set(scale.get(0).getAsFloat(), scale.get(1).getAsFloat(), scale.get(2).getAsFloat());
-                            }
-                            activeRegistry.addComponent(entityId, t);
-                        }
-
-                        // Read SpriteComponent
-                        if (components.has("SpriteComponent")) {
-                            JsonObject sObj = components.getAsJsonObject("SpriteComponent");
-                            SpriteComponent s = new SpriteComponent();
-                            if (sObj.has("texture")) {
-                                s.texturePath = sObj.get("texture").getAsString();
-                                s.texture = AssetManager.getTexture(s.texturePath);
-                            }
-                            if (sObj.has("color")) {
-                                JsonArray color = sObj.getAsJsonArray("color");
-                                s.color.set(color.get(0).getAsFloat(), color.get(1).getAsFloat(), color.get(2).getAsFloat(), color.get(3).getAsFloat());
-                            }
-                            activeRegistry.addComponent(entityId, s);
-                        }
-                    }
-                }
-            }
-            Logger.info(Logger.System.CORE, "Scene [%s] loaded successfully into active ECS.", sceneName);
-            
+            load(activeRegistry, root);
         } catch (Exception e) {
             Logger.error(Logger.System.CORE, "Failed to parse .scene format: %s. Reason: %s", virtualPath, e.getMessage());
         }
+    }
+
+    public static void load(Registry activeRegistry, JsonObject root) {
+        String sceneName = root.has("name") ? root.get("name").getAsString() : "Unnamed_Scene";
+        Logger.info(Logger.System.CORE, "Mounting Scene Workspace: [%s]", sceneName);
+
+        if (root.has("entities")) {
+            JsonArray entities = root.getAsJsonArray("entities");
+            
+            for (JsonElement element : entities) {
+                JsonObject entityData = element.getAsJsonObject();
+                
+                // =========================================================
+                // MODE 1: Loading by Prefab (Empty Scene / Blueprint)
+                // =========================================================
+                if (entityData.has("prefab")) {
+                    String prefabPath = entityData.get("prefab").getAsString();
+                    
+                    int entityId = PrefabLoader.instantiate(activeRegistry, prefabPath);
+                    if (entityId == -1) continue;
+
+                    if (entityData.has("transform")) {
+                        JsonObject transformOverride = entityData.getAsJsonObject("transform");
+                        TransformComponent transform = activeRegistry.getComponent(entityId, TransformComponent.class);
+                        
+                        if (transform != null) {
+                            if (transformOverride.has("position")) {
+                                JsonArray pos = transformOverride.getAsJsonArray("position");
+                                transform.position.set(pos.get(0).getAsFloat(), pos.get(1).getAsFloat(), pos.get(2).getAsFloat());
+                            }
+                            if (transformOverride.has("rotation")) {
+                                JsonArray rot = transformOverride.getAsJsonArray("rotation");
+                                transform.rotation.set(rot.get(0).getAsFloat(), rot.get(1).getAsFloat(), rot.get(2).getAsFloat());
+                            }
+                            if (transformOverride.has("scale")) {
+                                JsonArray scale = transformOverride.getAsJsonArray("scale");
+                                transform.scale.set(scale.get(0).getAsFloat(), scale.get(1).getAsFloat(), scale.get(2).getAsFloat());
+                            }
+                        }
+                    }
+                } 
+                // =========================================================
+                // MODE 2: Inline Loading (File saved by the Editor / RAM Backup)
+                // =========================================================
+                else if (entityData.has("components")) {
+                    JsonObject components = entityData.getAsJsonObject("components");
+                    int entityId = activeRegistry.createEntity();
+
+                    // Read TransformComponent
+                    if (components.has("TransformComponent")) {
+                        JsonObject tObj = components.getAsJsonObject("TransformComponent");
+                        TransformComponent t = new TransformComponent();
+                        if (tObj.has("position")) {
+                            JsonArray pos = tObj.getAsJsonArray("position");
+                            t.position.set(pos.get(0).getAsFloat(), pos.get(1).getAsFloat(), pos.get(2).getAsFloat());
+                        }
+                        if (tObj.has("rotation")) {
+                            JsonArray rot = tObj.getAsJsonArray("rotation");
+                            t.rotation.set(rot.get(0).getAsFloat(), rot.get(1).getAsFloat(), rot.get(2).getAsFloat());
+                        }
+                        if (tObj.has("scale")) {
+                            JsonArray scale = tObj.getAsJsonArray("scale");
+                            t.scale.set(scale.get(0).getAsFloat(), scale.get(1).getAsFloat(), scale.get(2).getAsFloat());
+                        }
+                        activeRegistry.addComponent(entityId, t);
+                    }
+
+                    // Read SpriteComponent
+                    if (components.has("SpriteComponent")) {
+                        JsonObject sObj = components.getAsJsonObject("SpriteComponent");
+                        SpriteComponent s = new SpriteComponent();
+                        if (sObj.has("texture")) {
+                            s.texturePath = sObj.get("texture").getAsString();
+                            s.texture = AssetManager.getTexture(s.texturePath);
+                        }
+                        if (sObj.has("color")) {
+                            JsonArray color = sObj.getAsJsonArray("color");
+                            s.color.set(color.get(0).getAsFloat(), color.get(1).getAsFloat(), color.get(2).getAsFloat(), color.get(3).getAsFloat());
+                        }
+                        activeRegistry.addComponent(entityId, s);
+                    }
+
+                    // Read ColliderComponent
+                    // Read ColliderComponent
+                    if (components.has("ColliderComponent")) {
+                        JsonObject cObj = components.getAsJsonObject("ColliderComponent");
+                        
+                        // 1. Extração da dependência obrigatória do construtor
+                        ColliderType cType = ColliderType.AABB; // Fallback nativo
+                        if (cObj.has("type")) {
+                            cType = ColliderType.valueOf(cObj.get("type").getAsString());
+                        }
+                        
+                        // 2. Instanciação validada pela assinatura da classe
+                        ColliderComponent c = new ColliderComponent(cType);
+                        
+                        // 3. Preenchimento de vetores e flags
+                        if (cObj.has("size")) { 
+                            JsonArray arr = cObj.getAsJsonArray("size"); 
+                            c.size.set(arr.get(0).getAsFloat(), arr.get(1).getAsFloat(), arr.get(2).getAsFloat()); 
+                        }
+                        if (cObj.has("offset")) { 
+                            JsonArray arr = cObj.getAsJsonArray("offset"); 
+                            c.offset.set(arr.get(0).getAsFloat(), arr.get(1).getAsFloat(), arr.get(2).getAsFloat()); 
+                        }
+                        if (cObj.has("isTrigger")) {
+                            c.isTrigger = cObj.get("isTrigger").getAsBoolean();
+                        }
+                        
+                        activeRegistry.addComponent(entityId, c);
+                    }
+
+                    // Read RigidbodyComponent
+                    if (components.has("RigidbodyComponent")) {
+                        JsonObject rbObj = components.getAsJsonObject("RigidbodyComponent");
+                        RigidbodyComponent rb = new RigidbodyComponent();
+                        if (rbObj.has("mass")) { 
+                            rb.mass = rbObj.get("mass").getAsFloat();
+                            // In a real scenario, you might want to recalculate inverse mass here
+                            // if it's cached in the component logic. 
+                        }
+                        if (rbObj.has("friction")) rb.friction = rbObj.get("friction").getAsFloat();
+                        if (rbObj.has("restitution")) rb.restitution = rbObj.get("restitution").getAsFloat();
+                        if (rbObj.has("isKinematic")) rb.isKinematic = rbObj.get("isKinematic").getAsBoolean();
+                        activeRegistry.addComponent(entityId, rb);
+                    }
+                }
+            }
+        }
+        Logger.info(Logger.System.CORE, "Scene [%s] loaded successfully into active ECS.", sceneName);
     }
 }

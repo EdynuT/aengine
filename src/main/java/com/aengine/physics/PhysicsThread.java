@@ -21,9 +21,9 @@ import java.util.concurrent.locks.LockSupport;
  *
  * Example integration in the render loop:
  * <pre>{@code
- *   synchronized (physicsThread.getSyncLock()) {
- *       renderer.drawScene(registry);
- *   }
+ * synchronized (physicsThread.getSyncLock()) {
+ * renderer.drawScene(registry);
+ * }
  * }</pre>
  *
  * Fixed-timestep accumulator and the spiral-of-death protection are handled
@@ -51,6 +51,7 @@ public final class PhysicsThread extends Thread {
     private final Registry     registry;
     private final PhysicsSystem physics;
     private volatile boolean   running = false;
+    private volatile boolean   isPaused = true; // Starts paused in Editor Mode
 
     /**
      * Shared mutex between this thread and any external reader (e.g. the render thread).
@@ -88,6 +89,10 @@ public final class PhysicsThread extends Thread {
         start();
         Logger.info(Logger.System.CORE,
             "PhysicsThread started. Stepping at %d Hz (%.4f s/step).", PHYSICS_HZ, TIME_STEP);
+    }
+
+    public void setPaused(boolean paused) {
+        this.isPaused = paused;
     }
 
     /**
@@ -139,16 +144,21 @@ public final class PhysicsThread extends Thread {
             float dt = (now - lastTime) / 1_000_000_000.0f;
             lastTime = now;
 
-            // Spiral-of-death protection: cap the simulated frame time
-            if (dt > MAX_FRAME_TIME) dt = MAX_FRAME_TIME;
-            accumulator += dt;
+            if (!isPaused) {
+                // Spiral-of-death protection: cap the simulated frame time
+                if (dt > MAX_FRAME_TIME) dt = MAX_FRAME_TIME;
+                accumulator += dt;
 
-            // Consume accumulated time in fixed-size slices
-            while (accumulator >= TIME_STEP) {
-                synchronized (syncLock) {
-                    physics.update(registry, TIME_STEP);
+                // Consume accumulated time in fixed-size slices
+                while (accumulator >= TIME_STEP) {
+                    synchronized (syncLock) {
+                        physics.update(registry, TIME_STEP);
+                    }
+                    accumulator -= TIME_STEP;
                 }
-                accumulator -= TIME_STEP;
+            } else {
+                // Bleed out the accumulator to prevent mass simulation steps upon resume
+                accumulator = 0.0f;
             }
 
             // Park the thread for the remainder of the step budget

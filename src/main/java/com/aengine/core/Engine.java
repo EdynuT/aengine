@@ -69,6 +69,8 @@ public abstract class Engine {
         DebugOverlay.init(window.getHandle());
 
         frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
+        
+        com.aengine.network.SharedMemory.init(window.getWidth(), window.getHeight());
 
         if (gameClassName != null) {
             reloadGameCode();
@@ -98,38 +100,40 @@ public abstract class Engine {
             org.lwjgl.glfw.GLFW.glfwPollEvents(); 
             Input.update();
 
-            // Clear hardware buffers once at the beginning of the frame execution step
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            int vpW = (int) com.aengine.debug.DebugOverlay.getViewportImageW();
+            int vpH = (int) com.aengine.debug.DebugOverlay.getViewportImageH();
+            
+            if (vpW > 0 && vpH > 0) {
+                if (frameBuffer.getWidth() != vpW || frameBuffer.getHeight() != vpH) {
+                    frameBuffer.resize(vpW, vpH);
+                }
+            }
 
             if (currentState == EngineState.EDITOR) {
                 onUpdate(deltaTime);
                 
                 // 1. ENGINE RENDER PASS (Virtual Texture in VRAM)
                 frameBuffer.bind();
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Limpa apenas o FBO
                 
                 onRender(); 
                 
                 frameBuffer.unbind();
+
+                // Extract image 100% clean, before ImGui pollutes the state machine.
+                frameBuffer.dispatchToSharedMemory();
                 
                 // 2. PHYSICAL DISPLAY RENDER PASS (Physical Monitor)
-                // Restore the viewport to the actual window dimensions
                 org.lwjgl.opengl.GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
-                
-                // Clear the physical screen (prevents visual artifacts or "hall of mirrors")
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the monitor
 
-                // =====================================================================
-                // FRONTEND INJECTION HERE
-                // Rendered scene is now contained in the ID: frameBuffer.getTextureID()
-                // ImGui composites debug panels + the viewport image on the default FBO.
-                // =====================================================================
                 DebugOverlay.beginFrame();
                 onDebugRender(frameBuffer.getTextureID());
                 DebugOverlay.endFrame();
 
             } else if (currentState == EngineState.LAUNCHER) {
-                // Future fallback logic for host UI processing if required
+                // Just clear the physical monitor for the launcher state. No FBO rendering needed.
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             }
 
             window.swapBuffers();
@@ -164,6 +168,9 @@ public abstract class Engine {
         DebugOverlay.cleanup();
 
         if (frameBuffer != null) frameBuffer.cleanup();
+
+        com.aengine.network.SharedMemory.cleanup();
+        
         window.cleanup();
 
         Logger.info(Logger.System.CORE, "Engine lifecycle shutdown complete.");

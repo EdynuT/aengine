@@ -119,7 +119,6 @@ public final class AssetBaker {
 
             int width = w.get(0);
             int height = h.get(0);
-            int payloadSize = width * height * 4;
 
             // NIO direct disk blitting. Bypasses Java Heap overhead.
             try (FileOutputStream fos = new FileOutputStream(outputFile);
@@ -215,22 +214,19 @@ public final class AssetBaker {
                     }
                 }
 
-                int    numChannels = decodedAis.getFormat().getChannels();
-                int    sRate       = (int) decodedAis.getFormat().getSampleRate();
-                byte[] audioBytes  = decodedAis.readAllBytes();
-                int    payloadSize = audioBytes.length;
+                try (AudioInputStream ais = decodedAis) {
+                    int    numChannels = ais.getFormat().getChannels();
+                    int    sRate       = (int) ais.getFormat().getSampleRate();
+                    byte[] audioBytes  = ais.readAllBytes();
+                    int    payloadSize = audioBytes.length;
 
-                try (FileOutputStream fos = new FileOutputStream(outputFile);
-                     FileChannel channel = fos.getChannel()) {
-                    channel.write(buildAudHeader(numChannels, sRate, payloadSize));
-                    ByteBuffer payload = ByteBuffer.allocateDirect(payloadSize);
-                    payload.put(audioBytes).flip();
-                    channel.write(payload);
-                }
-
-                // Close the converted stream if a new one was created
-                if (decodedAis != baseAis) {
-                    decodedAis.close();
+                    try (FileOutputStream fos = new FileOutputStream(outputFile);
+                         FileChannel channel = fos.getChannel()) {
+                        channel.write(buildAudHeader(numChannels, sRate, payloadSize));
+                        ByteBuffer payload = ByteBuffer.allocateDirect(payloadSize);
+                        payload.put(audioBytes).flip();
+                        channel.write(payload);
+                    }
                 }
                 return true;
 

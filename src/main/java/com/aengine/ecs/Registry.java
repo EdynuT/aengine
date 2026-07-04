@@ -61,13 +61,6 @@ public final class Registry {
     }
 
     /**
-     * Returns the total amount of instantiated entities currently active in the ECS.
-     */
-    public int getEntityCount() {
-        return activeEntities.size();
-    }
-
-    /**
      * L1/L2 CACHE LOCALITY OPTIMIZED VIEW MATCHER.
      * Iterates strictly over the smallest contiguous dense array in memory,
      * dropping O(N) global entity iteration in favor of O(K) subset linear iteration.
@@ -147,5 +140,40 @@ public final class Registry {
     @SuppressWarnings("unchecked")
     public <T> ComponentPool<T> getPool(Class<T> componentType) {
         return (ComponentPool<T>) componentPools.get(componentType);
+    }
+    
+    /**
+     * Checks if a component exists without allocating extra memory or throwing NPEs.
+     */
+    public boolean hasComponent(int entity, Class<?> componentType) {
+        ComponentPool<?> pool = componentPools.get(componentType);
+        return pool != null && pool.has(entity);
+    }
+
+    /**
+     * Purges all dynamic entities from the world, preserving infrastructure (like the Editor Camera).
+     */
+    public void clearScene() {
+        Logger.info(Logger.System.CORE, "Teardown of dynamic scene entities...");
+        List<Integer> toDestroy = new ArrayList<>();
+        
+        for (int i = 0; i < activeEntities.size(); i++) {
+            int entity = activeEntities.get(i);
+            // Preserve the editor camera
+            if (!hasComponent(entity, com.aengine.ecs.components.CameraComponent.class)) {
+                toDestroy.add(entity);
+            }
+        }
+        
+        for (int entity : toDestroy) {
+            destroyEntity(entity);
+        }
+    }
+
+    /**
+     * Returns the total amount of instantiated entities currently active in the ECS.
+     */
+    public int getEntityCount() {
+        return activeEntities.size();
     }
 }

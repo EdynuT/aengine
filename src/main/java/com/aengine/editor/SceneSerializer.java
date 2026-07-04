@@ -1,6 +1,8 @@
 package com.aengine.editor;
 
 import com.aengine.ecs.Registry;
+import com.aengine.ecs.components.ColliderComponent;
+import com.aengine.ecs.components.RigidbodyComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.utils.FileSystem;
@@ -37,13 +39,9 @@ public final class SceneSerializer {
     // =========================================================================
 
     /**
-     * Writes the current state of all renderable ECS entities to {@code virtualPath}.
-     *
-     * @param registry    the active ECS registry
-     * @param virtualPath VFS path such as {@code "assets://data/scenes/level_01.scene"}
-     * @param sceneName   human-readable scene name stored in the JSON root
+     * Serializes the ECS state directly into a memory JSON Object. Used for RAM backups.
      */
-    public static void save(Registry registry, String virtualPath, String sceneName) {
+    public static JsonObject serializeScene(Registry registry, String sceneName) {
         JsonObject root = new JsonObject();
         root.addProperty("name", sceneName);
 
@@ -76,12 +74,45 @@ public final class SceneSerializer {
                 components.add("SpriteComponent", sObj);
             }
 
+            // --- ColliderComponent ---
+            ColliderComponent c = registry.getComponent(entityId, ColliderComponent.class);
+            if (c != null) {
+                JsonObject cObj = new JsonObject();
+                cObj.addProperty("type", c.type.name());
+                cObj.add("size", toArray(c.size.x, c.size.y, c.size.z));
+                cObj.add("offset", toArray(c.offset.x, c.offset.y, c.offset.z));
+                cObj.addProperty("isTrigger", c.isTrigger);
+                components.add("ColliderComponent", cObj);
+            }
+
+            // --- RigidbodyComponent ---
+            RigidbodyComponent rb = registry.getComponent(entityId, RigidbodyComponent.class);
+            if (rb != null) {
+                JsonObject rbObj = new JsonObject();
+                rbObj.addProperty("mass", rb.mass);
+                rbObj.addProperty("friction", rb.friction);
+                rbObj.addProperty("restitution", rb.restitution);
+                rbObj.addProperty("isKinematic", rb.isKinematic);
+                components.add("RigidbodyComponent", rbObj);
+            }
+
             entityObj.add("components", components);
             entities.add(entityObj);
         }
 
         root.add("entities", entities);
+        return root;
+    }
 
+    /**
+     * Writes the current state of all renderable ECS entities to {@code virtualPath}.
+     *
+     * @param registry    the active ECS registry
+     * @param virtualPath VFS path such as {@code "assets://data/scenes/level_01.scene"}
+     * @param sceneName   human-readable scene name stored in the JSON root
+     */
+    public static void save(Registry registry, String virtualPath, String sceneName) {
+        JsonObject root = serializeScene(registry, sceneName);
         File file = FileSystem.resolve(virtualPath);
         try {
             if (file.getParentFile() != null) file.getParentFile().mkdirs();
@@ -89,7 +120,7 @@ public final class SceneSerializer {
                 writer.write(GSON.toJson(root));
             }
             Logger.info(Logger.System.CORE,
-                "Scene serialized: %d entities → %s", entities.size(), file.getAbsolutePath());
+                "Scene serialized: %d entities → %s", root.getAsJsonArray("entities").size(), file.getAbsolutePath());
         } catch (IOException e) {
             Logger.error(Logger.System.CORE,
                 "Failed to write scene file [%s]: %s", virtualPath, e.getMessage());
