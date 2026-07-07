@@ -10,19 +10,19 @@ The two systems do not share memory. They communicate via a zero-allocation, loc
 **Rendering layers (innermost to outermost):**
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│  Tauri / WebKit window  (OS window frame, editor panels, dashboard)         │
-│                                                                            │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  Tauri / WebKit window  (OS window frame, editor panels, dashboard)             │
+│                                                                                 │
 │    ┌────────────────────────────────────────────────────────────────────────┐   │
-│    │  LWJGL / GLFW native window  (embedded in Tauri via webview)         │   │
-│    │                                                                    │   │
-│    │    Layer 1: OpenGL scene → renders to FBO texture (VRAM)           │   │
-│    │    Layer 2: ImGui overlay → composites FBO texture + debug panels   │   │
-│    │             onto the default framebuffer (GLFW window)             │   │
+│    │  LWJGL / GLFW native window  (embedded in Tauri via webview)           │   │
+│    │                                                                        │   │
+│    │    Layer 1: OpenGL scene → renders to FBO texture (VRAM)               │   │
+│    │    Layer 2: ImGui overlay → composites FBO texture + debug panels      │   │
+│    │             onto the default framebuffer (GLFW window)                 │   │
 │    └────────────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│    TCP 127.0.0.1:8080 ─────────────────── FPS, ECS metrics, Logger    │
-└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+│                                                                                 │
+│    TCP 127.0.0.1:8080 ─────────────────── FPS, ECS metrics, Logger              │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2. The Telemetry IPC Daemon (Runtime-Driven Stream)
