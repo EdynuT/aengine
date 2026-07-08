@@ -2,6 +2,7 @@ package com.aengine.editor;
 
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.components.ColliderComponent;
+import com.aengine.ecs.components.ScriptComponent;
 import com.aengine.ecs.components.RigidbodyComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
@@ -87,6 +88,14 @@ public final class SceneSerializer {
 
             // --- RigidbodyComponent ---
             RigidbodyComponent rb = registry.getComponent(entityId, RigidbodyComponent.class);
+
+            ScriptComponent scriptCmp = registry.getComponent(entityId, ScriptComponent.class);
+            if (scriptCmp != null && scriptCmp.scriptPath != null && !scriptCmp.scriptPath.isEmpty()) {
+                JsonObject scriptObj = new JsonObject();
+                scriptObj.addProperty("scriptPath", scriptCmp.scriptPath);
+                components.add("ScriptComponent", scriptObj);
+            }
+
             if (rb != null) {
                 JsonObject rbObj = new JsonObject();
                 rbObj.addProperty("mass", rb.mass);

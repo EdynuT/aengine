@@ -5,7 +5,7 @@ plugins {
 }
 
 group   = 'com.aengine'
-version = '0.14.0'
+version = '0.15.0'
 
 java {
     toolchain {
@@ -41,6 +41,9 @@ dependencies {
     implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
     implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
     implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+    implementation("org.graalvm.polyglot:polyglot:23.1.2")
+    implementation("org.graalvm.polyglot:js:23.1.2")
+    implementation("black.ninia:jep:4.2.0")
     api "org.joml:joml:${jomlVersion}"
 
     // Native Platforms Resolvers

@@ -5,8 +5,6 @@ import com.aengine.ecs.components.ColliderComponent;
 import com.aengine.ecs.components.ColliderType;
 import com.aengine.ecs.components.RigidbodyComponent;
 import com.aengine.ecs.components.TransformComponent;
-import com.aengine.ecs.components.SpriteComponent;
-import com.aengine.graphics.AssetManager;
 import com.aengine.utils.FileSystem;
 import com.aengine.utils.Logger;
 import com.google.gson.Gson;
@@ -107,35 +105,32 @@ public class SceneLoader {
                     }
 
                     // Read SpriteComponent
-                    if (components.has("SpriteComponent")) {
-                        JsonObject sObj = components.getAsJsonObject("SpriteComponent");
-                        SpriteComponent s = new SpriteComponent();
-                        if (sObj.has("texture")) {
-                            s.texturePath = sObj.get("texture").getAsString();
-                            s.texture = AssetManager.getTexture(s.texturePath);
+                    if (components.has("ScriptComponent")) {
+                        JsonObject scriptObj = components.getAsJsonObject("ScriptComponent");
+                        com.aengine.ecs.components.ScriptComponent scriptCmp = new com.aengine.ecs.components.ScriptComponent();
+                        
+                        if (scriptObj.has("scriptPath")) {
+                            scriptCmp.scriptPath = scriptObj.get("scriptPath").getAsString();
                         }
-                        if (sObj.has("color")) {
-                            JsonArray color = sObj.getAsJsonArray("color");
-                            s.color.set(color.get(0).getAsFloat(), color.get(1).getAsFloat(), color.get(2).getAsFloat(), color.get(3).getAsFloat());
-                        }
-                        activeRegistry.addComponent(entityId, s);
+                        
+                        // O internalRuntimeState começa a null. O ScriptSystem fará a compilação no primeiro frame.
+                        activeRegistry.addComponent(entityId, scriptCmp);
                     }
 
-                    // Read ColliderComponent
                     // Read ColliderComponent
                     if (components.has("ColliderComponent")) {
                         JsonObject cObj = components.getAsJsonObject("ColliderComponent");
                         
-                        // 1. Extração da dependência obrigatória do construtor
+                        // 1. Extraction of the collider type from the JSON, with a fallback to AABB if not specified
                         ColliderType cType = ColliderType.AABB; // Fallback nativo
                         if (cObj.has("type")) {
                             cType = ColliderType.valueOf(cObj.get("type").getAsString());
                         }
                         
-                        // 2. Instanciação validada pela assinatura da classe
+                        // 2. Instantiation of the ColliderComponent with the extracted type
                         ColliderComponent c = new ColliderComponent(cType);
                         
-                        // 3. Preenchimento de vetores e flags
+                        // 3. Filling vectors and flags
                         if (cObj.has("size")) { 
                             JsonArray arr = cObj.getAsJsonArray("size"); 
                             c.size.set(arr.get(0).getAsFloat(), arr.get(1).getAsFloat(), arr.get(2).getAsFloat()); 
