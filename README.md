@@ -44,7 +44,7 @@ ProjectRoot/
 │   │   ├── textures/       # Source bitmaps (.atex)
 │   │   ├── shaders/        
 │   │   ├── models/         
-│   │   └── audio/          
+│   │   └── audio/          # Compiled audio (.aaud)
 │   ├── src/
 │   │   ├── textures/       # Image textures (.png, .jpg, .jpeg)
 │   │   ├── models/         # Custom objects (.obj)

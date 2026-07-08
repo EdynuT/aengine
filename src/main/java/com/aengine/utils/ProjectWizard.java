@@ -39,7 +39,7 @@ public class ProjectWizard {
 
             // Optimized runtime files (Read by the Engine via VFS)
             "assets/baked/textures",      // .atex
-            "assets/baked/audio",         // Future .ogg / .wav optimized
+            "assets/baked/audio",         // .aaud
             "assets/baked/models",        // Future custom binary models
             "assets/baked/shaders",       // .vert / .frag
 
