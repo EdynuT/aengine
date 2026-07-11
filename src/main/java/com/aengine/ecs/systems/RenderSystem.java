@@ -7,7 +7,9 @@ import com.aengine.ecs.System;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.graphics.Renderer2D;
+import com.aengine.graphics.Renderer3D;
 import com.aengine.utils.Logger;
+import org.joml.Vector4f;
 
 public final class RenderSystem extends System {
 
@@ -36,20 +38,32 @@ public final class RenderSystem extends System {
                 continue;
             }
 
-            // Enforce strict 2D constraints by hard-resetting depth and pitch/yaw rotations directly
             if (is2DMode) {
+                // Modo 2D: Trava a profundidade e as rotações (Pitch/Yaw) para manter tudo plano
                 transform.position.z = 0.0f;
                 transform.rotation.x = 0.0f;
                 transform.rotation.y = 0.0f;
-            }
 
-            // Stream raw 3D vectors directly to the Renderer2D pipeline to eliminate local memory downsampling overhead
-            if (sprite.texture != null) {
-                Renderer2D.drawQuad(transform.position, transform.scale, sprite.texture);
-                Logger.trace(Logger.System.RENDERER, "RenderSystem submitted textured quad for Entity ID: %d", entityID);
+                if (sprite.texture != null) {
+                    Renderer2D.drawQuad(transform.position, transform.scale, sprite.texture);
+                } else {
+                    Renderer2D.drawQuad(transform.position, transform.scale, sprite.color);
+                }
             } else {
-                Renderer2D.drawQuad(transform.position, transform.scale, sprite.color);
-                Logger.trace(Logger.System.RENDERER, "RenderSystem submitted colored quad for Entity ID: %d", entityID);
+                // =================================================================
+                // HACK DE DEBUG: MODO 3D
+                // Ignoramos a escala/rotação que o painel do Editor possa ter zerado
+                // e forçamos o cubo a ter volume (1x1x1) e ficar rotacionado na diagonal
+                // para podermos enxergar as quinas e faces perfeitamente.
+                // =================================================================
+                transform.scale.set(1.0f, 1.0f, 1.0f);
+                transform.rotation.set(45.0f, 45.0f, 0.0f);
+
+                // Usa a cor do SpriteComponent ou um azul padrão caso seja nulo
+                Vector4f colorToUse = (sprite.color != null) ? sprite.color : new Vector4f(0.2f, 0.6f, 1.0f, 1.0f);
+                
+                // Despacha a geometria 3D nativa para a placa de vídeo
+                Renderer3D.drawCube(transform.position, transform.rotation, transform.scale, colorToUse);
             }
         }
     }
