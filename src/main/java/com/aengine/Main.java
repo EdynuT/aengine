@@ -218,7 +218,13 @@ public class Main extends Engine {
                 int entityID = entities.get(i);
                 var transform = registry.getComponent(entityID, TransformComponent.class);
                 var sprite    = registry.getComponent(entityID, SpriteComponent.class);
-                Renderer2D.drawEntityQuad(transform, sprite);
+
+                if (activeRenderMode == RenderMode.MODE_3D) {
+                    // Volumetric mesh path — respects the entity's real position/rotation/scale.
+                    Renderer3D.drawCube(transform.position, transform.rotation, transform.scale, sprite.color);
+                } else {
+                    Renderer2D.drawEntityQuad(transform, sprite);
+                }
             }
 
             Renderer3D.endScene();
