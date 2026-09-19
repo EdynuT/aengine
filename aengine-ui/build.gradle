@@ -1,0 +1,96 @@
+// AEngine's in-house UI framework.
+//
+// Design and phased plan: docs/UI_FRAMEWORK_ARCHITECTURE.md
+//
+// This module may depend ONLY on :aengine-core, and within it only on the graphics API
+// interfaces, Window/Input/Keys and Logger/FileSystem. It must never reach into the ECS,
+// the editor, physics or the OpenGL backend package. That restriction is what keeps the
+// framework extractable into its own repository later; see §3 of the design document.
+//
+// The Gradle module graph alone does NOT enforce that: it stops this module importing
+// :aengine-editor, but every package inside :aengine-core is on the compile classpath, so
+// `import com.aengine.ecs.Registry` would compile fine. The checkBoundary task below is
+// what actually enforces it, and it runs as part of compileJava.
+//
+// Currently empty — Phase 2 (UIDrawList) is the first code to land here. The native text
+// stack (lwjgl-freetype / harfbuzz / msdfgen, all published for 3.3.4) is added in Phase 3
+// when L2 starts, not before.
+
+plugins {
+    id 'maven-publish'
+}
+
+dependencies {
+    implementation project(':aengine-core')
+
+    implementation "org.lwjgl:lwjgl:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+}
+
+// ---------------------------------------------------------------------------------------
+// Architectural boundary check.
+//
+// Fails the build when this module imports an engine package it is not allowed to see.
+// Without this the boundary is documentation, not a rule — see the note above.
+// ---------------------------------------------------------------------------------------
+def allowedCorePackages = [
+    'com.aengine.graphics',   // API interfaces only; graphics.opengl is denied below
+    'com.aengine.core',       // Window, Input, Keys, UILayer, RenderMode
+    'com.aengine.utils',      // Logger, FileSystem
+]
+def deniedPackages = [
+    'com.aengine.graphics.opengl',  // backend implementation, not the API
+]
+
+def checkBoundary = tasks.register('checkBoundary') {
+    description = 'Fails if :aengine-ui imports an engine package outside its allowed set.'
+    group = 'verification'
+
+    def sources = fileTree('src/main/java') { include '**/*.java' }
+    inputs.files(sources)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        def violations = []
+        sources.each { file ->
+            file.eachLine { line, number ->
+                def matcher = line =~ /^\s*import\s+(?:static\s+)?(com\.aengine\.[\w.]+)/
+                if (!matcher) return
+                def imported = matcher[0][1]
+                if (imported.startsWith('com.aengine.ui.')) return
+
+                def denied  = deniedPackages.any  { imported == it || imported.startsWith(it + '.') }
+                def allowed = allowedCorePackages.any { imported == it || imported.startsWith(it + '.') }
+
+                if (denied || !allowed) {
+                    violations << "  ${file.name}:${number}  ${imported}"
+                }
+            }
+        }
+        if (violations) {
+            throw new GradleException(
+                "aengine-ui violates its dependency boundary:\n" +
+                violations.join('\n') +
+                "\n\nThe UI framework may only use the graphics API interfaces, Window/Input/Keys\n" +
+                "and Logger/FileSystem. Reaching into the ECS, editor, physics or the OpenGL\n" +
+                "backend breaks the boundary that keeps it extractable.\n" +
+                "See docs/UI_FRAMEWORK_ARCHITECTURE.md §3.")
+        }
+    }
+}
+
+tasks.named('compileJava') { finalizedBy checkBoundary }
+tasks.named('check')       { dependsOn checkBoundary }
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            pom {
+                name = 'AEngine UI'
+                description = 'In-house immediate/retained hybrid UI framework for the AEngine editor'
+            }
+        }
+    }
+    repositories { mavenLocal() }
+}

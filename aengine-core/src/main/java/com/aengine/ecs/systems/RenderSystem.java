@@ -1,6 +1,6 @@
 package com.aengine.ecs.systems;
 
-import com.aengine.Main;
+import com.aengine.core.RenderMode;
 import com.aengine.ecs.ComponentPool;
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.System;
@@ -24,7 +24,7 @@ public final class RenderSystem extends System {
         int[] denseToEntity = spritePool.getRawDenseToEntity();
         int totalElements = spritePool.size();
 
-        boolean is2DMode = Main.getActiveRenderMode() == Main.RenderMode.MODE_2D;
+        boolean is2DMode = RenderMode.is2D();
 
         for (int i = 0; i < totalElements; i++) {
             int entityID = denseToEntity[i];

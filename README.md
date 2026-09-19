@@ -12,7 +12,7 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 |---|---|
 | **Core Language** | Java 25 (OpenJDK) |
 | **Editor Interface** | Dear ImGui (transitional) — migrating to an in-house framework, see [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md) |
-| **Build System** | Gradle 9.1+ (Wrapper orchestrated) |
+| **Build System** | Gradle 9.1+ (Wrapper orchestrated, 3-module graph) |
 | **Graphics Platform** | OpenGL 4.6 Core Profile (Mesa/ACO Optimized) via LWJGL 3.3.4 |
 | **Windowing / Input** | GLFW Native Layer (Wayland & Win32 native hardware deltas) |
 | **Math Engine** | JOML 1.10.5 (SIMD aligned vector transformations) |
@@ -21,6 +21,22 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 ---
 
 ## Engine Architecture Subsystems
+
+### Module Layout
+The build is split into three Gradle modules with a one-way dependency graph:
+
+| Module | Contents | Depends on |
+|---|---|---|
+| `:aengine-core` | Renderer, ECS, physics, audio, assets, scripting | — |
+| `:aengine-ui` | In-house UI framework (empty until Phase 2) | `:aengine-core` |
+| `:aengine-editor` | Editor surface and application host; Dear ImGui confined here | `:aengine-core`, `:aengine-ui` |
+
+`:aengine-core` carries no UI toolkit. The engine loop drives the interface through the
+`com.aengine.core.UILayer` interface, which the editor implements today with Dear ImGui and
+the in-house framework will implement later without touching `Engine`.
+
+`:aengine-ui` is additionally restricted to a subset of core packages, enforced by a
+`checkBoundary` task that fails the build on a disallowed import.
 
 ### Single-Process Architecture
 The engine, editor and interface run inside one JVM process, sharing one address space and one object graph. There is no interprocess bridge, no serialization hop and no external UI runtime: editor panels read engine state directly.
@@ -73,7 +89,6 @@ Clone the repository to your workspace
 * **Linux**
   ```bash
   git clone https://github.com/EdynuT/aengine.git
-
   cd ./aengine
   ```
 
@@ -91,19 +106,19 @@ The framework dynamically switches execution pipelines at startup using JVM comm
   This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
 
   ```bash
-  ./gradlew run
+  ./gradlew :aengine-editor:run
   ```
   Or
 
   ```bash
-  ./gradlew run --args="--3d"
+  ./gradlew :aengine-editor:run --args="--3d"
   ```
 
 * **2. Hybrid Core 2D Perspective Pipeline**
     Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
 
   ```bash
-  ./gradlew run --args="--2d"
+  ./gradlew :aengine-editor:run --args="--2d"
   ```
 
 ---

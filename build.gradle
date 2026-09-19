@@ -1,105 +1,46 @@
-plugins {
-    id 'java-library'
-    id 'application'
-    id 'maven-publish'
-}
+// Root project: shared configuration only. All code lives in the subprojects.
+//
+//   :aengine-core    renderer, ECS, physics, audio, assets, scripting
+//   :aengine-ui      the in-house UI framework (see docs/UI_FRAMEWORK_ARCHITECTURE.md)
+//   :aengine-editor  editor surface and application host
+//
+// The dependency direction is one-way: editor -> ui -> core. It is enforced here by the
+// module graph rather than by convention, so a stray import fails the build.
 
-group   = 'com.aengine'
-version = '0.15.0'
+allprojects {
+    group   = 'com.aengine'
+    version = '0.16.0'
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+    repositories {
+        mavenCentral()
     }
 }
 
-repositories {
-    mavenCentral()
-}
+subprojects {
+    apply plugin: 'java-library'
 
-ext {
-    lwjglVersion = '3.3.4'
-    jomlVersion  = '1.10.5'
-    imguiVersion = '1.86.11' 
-    
-    String osName = System.getProperty("os.name").toLowerCase()
-    if (osName.contains("win")) {
-        lwjglNatives = 'natives-windows'
-        imguiNatives = 'windows'
-    } else if (osName.contains("mac")) {
-        lwjglNatives = 'natives-macos'
-        imguiNatives = 'macos'
-    } else {
-        lwjglNatives = 'natives-linux'
-        imguiNatives = 'linux'
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+        withSourcesJar()
     }
-}
 
-dependencies {
-    // Core Engine Bindings
-    implementation "org.lwjgl:lwjgl:${lwjglVersion}"
-    implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
-    implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
-    implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
-    implementation("org.graalvm.polyglot:polyglot:23.1.2")
-    implementation("org.graalvm.polyglot:js:23.1.2")
-    implementation("black.ninia:jep:4.2.0")
-    api "org.joml:joml:${jomlVersion}"
+    ext {
+        lwjglVersion = '3.3.4'
+        jomlVersion  = '1.10.5'
+        imguiVersion = '1.86.11'
 
-    // Native Platforms Resolvers
-    runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:${lwjglNatives}"
-    runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:${lwjglNatives}"
-    runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:${lwjglNatives}"
-    runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:${lwjglNatives}"
-
-    // Json parsing library for configuration and serialization
-    implementation 'com.google.code.gson:gson:2.10.1'
-
-    // OpenAL - Spatialized Audio API for 3D sound
-    implementation "org.lwjgl:lwjgl-openal:${lwjglVersion}"
-    runtimeOnly "org.lwjgl:lwjgl-openal:${lwjglVersion}:${lwjglNatives}"
-    
-    // Embedded Lua Virtual Machine
-    implementation 'org.luaj:luaj-jse:3.0.1'
-
-    // Dear ImGui debug overlay — restricted to the LWJGL OpenGL viewport.
-    // The binding + LWJGL3 backend are compile-time; the native lib is runtime-only.
-    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
-    implementation "io.github.spair:imgui-java-lwjgl3:${imguiVersion}"
-    runtimeOnly   "io.github.spair:imgui-java-natives-${imguiNatives}:${imguiVersion}"
-}
-
-application {
-    mainClass = 'com.aengine.Main'
-}
-
-run {
-    jvmArgs += [
-        '--enable-native-access=ALL-UNNAMED',
-        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
-        '--add-opens', 'java.base/java.nio=ALL-UNNAMED'
-    ]
-}
-
-java {
-    withSourcesJar()
-}
-
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            pom {
-                name = 'AEngine'
-                description = 'Java 2D/3D graphics engine (OpenGL 3.3 backend)'
-            }
+        String osName = System.getProperty('os.name').toLowerCase()
+        if (osName.contains('win')) {
+            lwjglNatives = 'natives-windows'
+            imguiNatives = 'windows'
+        } else if (osName.contains('mac')) {
+            lwjglNatives = 'natives-macos'
+            imguiNatives = 'macos'
+        } else {
+            lwjglNatives = 'natives-linux'
+            imguiNatives = 'linux'
         }
     }
-    repositories {
-        mavenLocal()
-    }
-}
-
-tasks.named('run') {
-    standardInput = System.in
 }

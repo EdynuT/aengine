@@ -77,7 +77,31 @@ Each is a single change touching engine and UI together. Across two repositories
 becomes two coordinated pull requests and a version dance.
 
 A Gradle module also enforces the dependency direction **at compile time**, which a separate
-repository only does at publish time.
+repository only does at publish time — but only at module granularity. It stops `aengine-ui`
+importing `aengine-editor`, because that module is simply not on its compile classpath.
+
+It does **not** stop `aengine-ui` importing `com.aengine.ecs`. Java outside JPMS has no
+package-level visibility across a jar, so every package in `aengine-core` is visible to
+anything that depends on it. This was verified rather than assumed: a probe file importing
+`com.aengine.ecs.Registry` from `aengine-ui` compiled without complaint.
+
+The package rule below is therefore enforced by a `checkBoundary` task in
+`aengine-ui/build.gradle`, which scans the module's imports and fails the build on a
+violation. It runs as part of `compileJava`, so the rule is checked on every build rather
+than on review. The structurally pure alternative — splitting `aengine-core` so the UI can
+only see a rendering-and-windowing module — stays open if the rule ever needs to be
+stronger than a build check.
+
+### What the split exposed
+
+Splitting the modules immediately surfaced a dependency that had been invisible in the
+single-module build: `RenderSystem` and `CameraSystem` — engine ECS code — imported
+`com.aengine.Main` to read `Main.getActiveRenderMode()`. The engine core depended on the
+application host.
+
+`RenderMode` was moved to `com.aengine.core` as engine state, which is what it always was:
+the systems branching on it must not care which host started the engine. This is the kind
+of drift a module boundary catches on the next build instead of at the next rewrite.
 
 ### Target layout
 
@@ -105,9 +129,11 @@ dependencies {
 - `com.aengine.core.Window`, `Input`, `Keys`
 - `com.aengine.utils.Logger`, `FileSystem`
 
-It must **never** import `com.aengine.ecs.*`, `com.aengine.editor.*`, `com.aengine.physics.*`
-or `com.aengine.network.*`. The moment it does, the framework is no longer extractable and
-this plan's exit route closes.
+It must **never** import `com.aengine.ecs.*`, `com.aengine.editor.*`,
+`com.aengine.physics.*` or `com.aengine.graphics.opengl.*`. The moment it does, the
+framework is no longer extractable and this plan's exit route closes. `checkBoundary`
+enforces exactly this list; widening it means editing that allowlist deliberately, which is
+the point.
 
 ### When to split into its own repository
 

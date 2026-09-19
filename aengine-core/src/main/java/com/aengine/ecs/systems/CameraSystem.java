@@ -2,7 +2,7 @@ package com.aengine.ecs.systems;
 
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
-import com.aengine.Main;
+import com.aengine.core.RenderMode;
 import com.aengine.ecs.ComponentPool;
 import com.aengine.ecs.Registry;
 import com.aengine.ecs.System;
@@ -45,7 +45,7 @@ public final class CameraSystem extends System {
         int totalElements = cameraPool.size();
 
         // Verify if the active render mode is 2D or 3D
-        boolean is2DMode = (Main.getActiveRenderMode() == Main.RenderMode.MODE_2D);
+        boolean is2DMode = RenderMode.is2D();
 
         for (int i = 0; i < totalElements; i++) {
             CameraComponent camComp = cameras[i];

@@ -1,0 +1,40 @@
+// Editor surface and application host.
+//
+// Sits at the top of the dependency graph and is the only module allowed to depend on
+// both :aengine-core and :aengine-ui. Dear ImGui is confined here as a transitional
+// layer: it is installed into the engine through com.aengine.editor.ImGuiUILayer and
+// leaves entirely in Phase 5 of docs/UI_FRAMEWORK_ARCHITECTURE.md.
+
+plugins {
+    id 'application'
+}
+
+dependencies {
+    implementation project(':aengine-core')
+    implementation project(':aengine-ui')
+
+    implementation "org.lwjgl:lwjgl:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+
+    // Scene save/load from the editor
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Transitional editor interface — removed in Phase 5.
+    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
+    implementation "io.github.spair:imgui-java-lwjgl3:${imguiVersion}"
+    runtimeOnly   "io.github.spair:imgui-java-natives-${imguiNatives}:${imguiVersion}"
+}
+
+application {
+    mainClass = 'com.aengine.Main'
+}
+
+tasks.named('run') {
+    standardInput = System.in
+    jvmArgs += [
+        '--enable-native-access=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.nio=ALL-UNNAMED'
+    ]
+}

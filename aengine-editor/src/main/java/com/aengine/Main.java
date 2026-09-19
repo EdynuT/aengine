@@ -11,6 +11,7 @@ import imgui.ImGui;
 import com.aengine.audio.AudioDevice;
 
 import com.aengine.core.Engine;
+import com.aengine.core.RenderMode;
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
 
@@ -80,8 +81,6 @@ public class Main extends Engine {
     private int lastWindowWidth = -1;
     private int lastWindowHeight = -1;
 
-    public enum RenderMode { MODE_2D, MODE_3D }
-    private static RenderMode activeRenderMode = RenderMode.MODE_3D;
 
     // Allocation-free temporary structural containers for 3D physical environment alignment
     private static final Vector3f GROUND_POSITION = new Vector3f(0.0f, -1.5f, 0.0f); 
@@ -145,10 +144,10 @@ public class Main extends Engine {
         scriptSystem = new ScriptSystem();
         
         // If is 3D, the camera recedes 5 meters. If is 2D, it stays at Z=0 along with the sprites.
-        float cameraZ = (activeRenderMode == RenderMode.MODE_3D) ? 5.0f : 0.0f;
+        float cameraZ = (RenderMode.active() == RenderMode.MODE_3D) ? 5.0f : 0.0f;
         registry.addComponent(cameraEntity, new TransformComponent(new Vector3f(0.0f, 0.0f, cameraZ)));
 
-        if (activeRenderMode == RenderMode.MODE_3D) {
+        if (RenderMode.active() == RenderMode.MODE_3D) {
             Logger.info(Logger.System.RENDERER, "Enforcing Core 3D Perspective execution pipeline.");
             org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
             // Use the editorFov variable instead of the hardcoded value
@@ -181,7 +180,7 @@ public class Main extends Engine {
         boolean fovChanged = false;
 
         // Captura o Scroll do rato para alterar o FOV
-        if (activeRenderMode == RenderMode.MODE_3D) {
+        if (RenderMode.active() == RenderMode.MODE_3D) {
             float scroll = imgui.ImGui.getIO().getMouseWheel();
             if (scroll != 0.0f) {
                 // Roll up (positive) decreases FOV (Zoom In). Roll down (negative) increases FOV (Zoom Out).
@@ -206,7 +205,7 @@ public class Main extends Engine {
             }
 
             synchronized (physicsThread.getSyncLock()) {
-                if (activeRenderMode == RenderMode.MODE_3D) {
+                if (RenderMode.active() == RenderMode.MODE_3D) {
                     registry.addComponent(cameraEntity, new CameraComponent(editorFov, currentW, currentH, 0.1f, 1000.0f, true));
                 } else {
                     registry.addComponent(cameraEntity, new CameraComponent(0.0f, currentW, currentH, -1.0f, 100.0f, false));
@@ -283,7 +282,7 @@ public class Main extends Engine {
             Renderer3D.beginScene(activeCamera);
 
             // --- RENDER PHYSICAL ENVIRONMENT (THE GROUND) ---
-            if (activeRenderMode == RenderMode.MODE_3D) {
+            if (RenderMode.active() == RenderMode.MODE_3D) {
                 // Rotates the structural quad -90 degrees on the X-axis to lay it flat perpendicular to Y
                 Renderer3D.drawPlane(GROUND_POSITION, new Vector3f(0.0f, 0.0f, 0.0f), GROUND_SIZE, GROUND_COLOR);
             }
@@ -371,7 +370,7 @@ public class Main extends Engine {
         ImGui.begin("Engine Stats", DebugOverlay.showEnginePanel());
         ImGui.text(String.format("State    : %s", currentState.name()));
         ImGui.text(String.format("FPS      : %d", FPSTracker.getCurrentFPS()));
-        ImGui.text(String.format("Mode     : %s", activeRenderMode));
+        ImGui.text(String.format("Mode     : %s", RenderMode.active()));
         ImGui.text(String.format("Entities : %d", registry.getEntityCount()));
         ImGui.separator();
         ImGui.textDisabled("Project: " + (activeProjectPath != null ? activeProjectPath : "—"));
@@ -430,7 +429,7 @@ public class Main extends Engine {
 
         if (ImGui.button("+ Add Entity")) {
             synchronized (physicsThread.getSyncLock()) {
-                int id = (activeRenderMode == RenderMode.MODE_2D)
+                int id = (RenderMode.active() == RenderMode.MODE_2D)
                     ? EntityFactory.createQuad(registry, 0.0f, 0.0f)
                     : EntityFactory.createCube(registry, 0.0f, 0.0f, 0.0f);
                 EditorState.select(id);
@@ -627,20 +626,20 @@ public class Main extends Engine {
     private void saveCurrentScene() {
         // In 2D mode, save back to the loaded scene file.
         // In 3D mode, no scene file exists by default — save to a default path.
-        String scenePath = (activeRenderMode == RenderMode.MODE_2D)
+        String scenePath = (RenderMode.active() == RenderMode.MODE_2D)
             ? "assets://data/scenes/level_01.scene"
             : "assets://data/scenes/scene_3d.scene";
         SceneSerializer.save(registry, scenePath, "Edited Scene");
     }
 
-    public static RenderMode getActiveRenderMode() { return activeRenderMode; }
+    public static RenderMode getActiveRenderMode() { return RenderMode.active(); }
 
     public static void main(String[] args) {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("--2d")) {
-                activeRenderMode = RenderMode.MODE_2D;
+                RenderMode.setActive(RenderMode.MODE_2D);
             } else if (arg.equalsIgnoreCase("--3d")) {
-                activeRenderMode = RenderMode.MODE_3D;
+                RenderMode.setActive(RenderMode.MODE_3D);
             } else if (arg != null && !arg.trim().isEmpty() && !arg.startsWith("-")) {
                 activeProjectPath = arg;
             }
