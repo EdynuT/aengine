@@ -40,6 +40,7 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             from components.java
+            artifactId = 'aengine-core'
             pom {
                 name = 'AEngine Core'
                 description = 'Java 2D/3D graphics engine runtime (OpenGL 3.3 backend)'

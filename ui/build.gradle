@@ -2,13 +2,13 @@
 //
 // Design and phased plan: docs/UI_FRAMEWORK_ARCHITECTURE.md
 //
-// This module may depend ONLY on :aengine-core, and within it only on the graphics API
+// This module may depend ONLY on :core, and within it only on the graphics API
 // interfaces, Window/Input/Keys and Logger/FileSystem. It must never reach into the ECS,
 // the editor, physics or the OpenGL backend package. That restriction is what keeps the
 // framework extractable into its own repository later; see §3 of the design document.
 //
 // The Gradle module graph alone does NOT enforce that: it stops this module importing
-// :aengine-editor, but every package inside :aengine-core is on the compile classpath, so
+// :editor, but every package inside :core is on the compile classpath, so
 // `import com.aengine.ecs.Registry` would compile fine. The checkBoundary task below is
 // what actually enforces it, and it runs as part of compileJava.
 //
@@ -21,7 +21,7 @@ plugins {
 }
 
 dependencies {
-    implementation project(':aengine-core')
+    implementation project(':core')
 
     implementation "org.lwjgl:lwjgl:${lwjglVersion}"
     implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
@@ -43,7 +43,7 @@ def deniedPackages = [
 ]
 
 def checkBoundary = tasks.register('checkBoundary') {
-    description = 'Fails if :aengine-ui imports an engine package outside its allowed set.'
+    description = 'Fails if :ui imports an engine package outside its allowed set.'
     group = 'verification'
 
     def sources = fileTree('src/main/java') { include '**/*.java' }
@@ -69,7 +69,7 @@ def checkBoundary = tasks.register('checkBoundary') {
         }
         if (violations) {
             throw new GradleException(
-                "aengine-ui violates its dependency boundary:\n" +
+                "The :ui module violates its dependency boundary:\n" +
                 violations.join('\n') +
                 "\n\nThe UI framework may only use the graphics API interfaces, Window/Input/Keys\n" +
                 "and Logger/FileSystem. Reaching into the ECS, editor, physics or the OpenGL\n" +
@@ -86,6 +86,7 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             from components.java
+            artifactId = 'aengine-ui'
             pom {
                 name = 'AEngine UI'
                 description = 'In-house immediate/retained hybrid UI framework for the AEngine editor'

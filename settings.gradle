@@ -1,5 +1,5 @@
 rootProject.name = 'AEngine'
 
-include ':aengine-core'
-include ':aengine-ui'
-include ':aengine-editor'
+include ':core'
+include ':ui'
+include ':editor'

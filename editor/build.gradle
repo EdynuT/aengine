@@ -1,7 +1,7 @@
 // Editor surface and application host.
 //
 // Sits at the top of the dependency graph and is the only module allowed to depend on
-// both :aengine-core and :aengine-ui. Dear ImGui is confined here as a transitional
+// both :core and :ui. Dear ImGui is confined here as a transitional
 // layer: it is installed into the engine through com.aengine.editor.ImGuiUILayer and
 // leaves entirely in Phase 5 of docs/UI_FRAMEWORK_ARCHITECTURE.md.
 
@@ -10,8 +10,8 @@ plugins {
 }
 
 dependencies {
-    implementation project(':aengine-core')
-    implementation project(':aengine-ui')
+    implementation project(':core')
+    implementation project(':ui')
 
     implementation "org.lwjgl:lwjgl:${lwjglVersion}"
     implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"

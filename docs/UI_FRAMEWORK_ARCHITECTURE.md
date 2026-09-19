@@ -77,18 +77,18 @@ Each is a single change touching engine and UI together. Across two repositories
 becomes two coordinated pull requests and a version dance.
 
 A Gradle module also enforces the dependency direction **at compile time**, which a separate
-repository only does at publish time — but only at module granularity. It stops `aengine-ui`
-importing `aengine-editor`, because that module is simply not on its compile classpath.
+repository only does at publish time — but only at module granularity. It stops `:ui`
+importing `:editor`, because that module is simply not on its compile classpath.
 
-It does **not** stop `aengine-ui` importing `com.aengine.ecs`. Java outside JPMS has no
-package-level visibility across a jar, so every package in `aengine-core` is visible to
+It does **not** stop `:ui` importing `com.aengine.ecs`. Java outside JPMS has no
+package-level visibility across a jar, so every package in `:core` is visible to
 anything that depends on it. This was verified rather than assumed: a probe file importing
-`com.aengine.ecs.Registry` from `aengine-ui` compiled without complaint.
+`com.aengine.ecs.Registry` from `:ui` compiled without complaint.
 
 The package rule below is therefore enforced by a `checkBoundary` task in
-`aengine-ui/build.gradle`, which scans the module's imports and fails the build on a
+`ui/build.gradle`, which scans the module's imports and fails the build on a
 violation. It runs as part of `compileJava`, so the rule is checked on every build rather
-than on review. The structurally pure alternative — splitting `aengine-core` so the UI can
+than on review. The structurally pure alternative — splitting `:core` so the UI can
 only see a rendering-and-windowing module — stays open if the rule ever needs to be
 stronger than a build check.
 
@@ -107,23 +107,27 @@ of drift a module boundary catches on the next build instead of at the next rewr
 
 ```
 AEngine/
-├── settings.gradle            include ':aengine-core', ':aengine-ui', ':aengine-editor'
-├── aengine-core/              renderer, ECS, physics, audio, assets, scripting
-├── aengine-ui/                the UI framework — depends on core, knows nothing above it
-└── aengine-editor/            editor panels built with aengine-ui; depends on both
+├── settings.gradle     include ':core', ':ui', ':editor'
+├── core/               renderer, ECS, physics, audio, assets, scripting
+├── ui/                 the UI framework — depends on core, knows nothing above it
+└── editor/             editor panels built with :ui; depends on both
 ```
 
+Directories are short; published artifacts are not. `archivesName` keeps the jars and Maven
+coordinates as `aengine-core`, `aengine-ui` and `aengine-editor`, so the names stay
+unambiguous outside this repository.
+
 ```groovy
-// aengine-ui/build.gradle
+// ui/build.gradle
 dependencies {
-    implementation project(':aengine-core')   // renderer + window + input only
-    // NO dependency on :aengine-editor, and none on the ECS packages.
+    implementation project(':core')   // renderer + window + input only
+    // NO dependency on :editor, and none on the ECS packages.
 }
 ```
 
 ### The rule that matters
 
-`aengine-ui` may import **only**:
+The `:ui` module may import **only**:
 
 - `com.aengine.graphics.*` — the API interfaces, never `com.aengine.graphics.opengl.*`
 - `com.aengine.core.Window`, `Input`, `Keys`
@@ -137,7 +141,7 @@ the point.
 
 ### When to split into its own repository
 
-When `aengine-ui` depends on nothing but "a GL context and a draw list sink" — that is, when
+When `:ui` depends on nothing but "a GL context and a draw list sink" — that is, when
 its only engine imports are the `graphics` interfaces. At that point it has earned
 independence, and extracting a Gradle module into its own repository is an afternoon's work.
 Merging two repositories back together is not.

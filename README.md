@@ -27,15 +27,15 @@ The build is split into three Gradle modules with a one-way dependency graph:
 
 | Module | Contents | Depends on |
 |---|---|---|
-| `:aengine-core` | Renderer, ECS, physics, audio, assets, scripting | — |
-| `:aengine-ui` | In-house UI framework (empty until Phase 2) | `:aengine-core` |
-| `:aengine-editor` | Editor surface and application host; Dear ImGui confined here | `:aengine-core`, `:aengine-ui` |
+| `:core` | Renderer, ECS, physics, audio, assets, scripting | — |
+| `:ui` | In-house UI framework (empty until Phase 2) | `:core` |
+| `:editor` | Editor surface and application host; Dear ImGui confined here | `:core`, `:ui` |
 
-`:aengine-core` carries no UI toolkit. The engine loop drives the interface through the
+`:core` carries no UI toolkit. The engine loop drives the interface through the
 `com.aengine.core.UILayer` interface, which the editor implements today with Dear ImGui and
 the in-house framework will implement later without touching `Engine`.
 
-`:aengine-ui` is additionally restricted to a subset of core packages, enforced by a
+`:ui` is additionally restricted to a subset of core packages, enforced by a
 `checkBoundary` task that fails the build on a disallowed import.
 
 ### Single-Process Architecture
@@ -106,19 +106,19 @@ The framework dynamically switches execution pipelines at startup using JVM comm
   This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
 
   ```bash
-  ./gradlew :aengine-editor:run
+  ./gradlew :editor:run
   ```
   Or
 
   ```bash
-  ./gradlew :aengine-editor:run --args="--3d"
+  ./gradlew :editor:run --args="--3d"
   ```
 
 * **2. Hybrid Core 2D Perspective Pipeline**
     Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
 
   ```bash
-  ./gradlew :aengine-editor:run --args="--2d"
+  ./gradlew :editor:run --args="--2d"
   ```
 
 ---

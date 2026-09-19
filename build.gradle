@@ -1,8 +1,8 @@
 // Root project: shared configuration only. All code lives in the subprojects.
 //
-//   :aengine-core    renderer, ECS, physics, audio, assets, scripting
-//   :aengine-ui      the in-house UI framework (see docs/UI_FRAMEWORK_ARCHITECTURE.md)
-//   :aengine-editor  editor surface and application host
+//   :core    renderer, ECS, physics, audio, assets, scripting
+//   :ui      the in-house UI framework (see docs/UI_FRAMEWORK_ARCHITECTURE.md)
+//   :editor  editor surface and application host
 //
 // The dependency direction is one-way: editor -> ui -> core. It is enforced here by the
 // module graph rather than by convention, so a stray import fails the build.
@@ -24,6 +24,12 @@ subprojects {
             languageVersion = JavaLanguageVersion.of(25)
         }
         withSourcesJar()
+    }
+
+    // Directories are short (core/, ui/, editor/); published artifacts are not, so the
+    // jars and Maven coordinates stay unambiguous outside this repository.
+    base {
+        archivesName = "aengine-${project.name}"
     }
 
     ext {
