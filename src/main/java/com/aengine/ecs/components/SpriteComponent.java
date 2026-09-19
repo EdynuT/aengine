@@ -10,7 +10,8 @@ public final class SpriteComponent {
     /**
      * Virtual path used to load {@link #texture}, e.g. {@code "assets://baked/textures/box.atex"}.
      * Set by {@link com.aengine.ecs.serialization.PrefabLoader} and the editor texture picker
-     * so that {@link com.aengine.editor.SceneSerializer} can round-trip the texture reference.
+     * so that the editor's scene serializer can round-trip the texture reference.
+     * (Named rather than linked: the engine core must not reference the editor module.)
      * {@code null} when the entity has no texture (colour-only sprite).
      */
     public String texturePath = null;

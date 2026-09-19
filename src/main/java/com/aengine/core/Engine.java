@@ -1,6 +1,5 @@
 package com.aengine.core;
 
-import com.aengine.debug.DebugOverlay;
 import com.aengine.graphics.FrameBuffer;
 import com.aengine.utils.Logger;
 import com.aengine.ecs.Registry;
@@ -18,6 +17,15 @@ public abstract class Engine {
     private volatile boolean running;
     private FrameBuffer frameBuffer;
 
+    /** Interface implementation driving the editor surface; never null. */
+    private UILayer ui = UILayer.NONE;
+
+    /**
+     * Hoisted out of the frame loop: {@code this::onViewportContextMenu} allocates a new
+     * capturing lambda on every evaluation, and this one is evaluated once per frame.
+     */
+    private final Runnable viewportContextMenu = this::onViewportContextMenu;
+
     protected final Registry registry; 
 
     private Path targetClassPath;
@@ -32,6 +40,15 @@ public abstract class Engine {
     public Engine(String title) {
         this.window = new Window(title);
         this.registry = new Registry(); 
+    }
+
+    /**
+     * Installs the interface implementation. Must be called before {@link #run()}, since
+     * the layer is initialised during engine startup. Passing {@code null} restores
+     * {@link UILayer#NONE}.
+     */
+    public final void setUILayer(UILayer layer) {
+        this.ui = (layer != null) ? layer : UILayer.NONE;
     }
 
     public final void configureHotReload(String buildDirectory, String fullyQualifiedClassName) {
@@ -64,9 +81,9 @@ public abstract class Engine {
         window.init();
         Input.init(window.getHandle());
 
-        // Initialise ImGui AFTER Input so ImGui's GLFW callback installation chains
+        // Initialise the interface AFTER Input so its GLFW callback installation chains
         // onto Input's callbacks rather than replacing them silently.
-        DebugOverlay.init(window.getHandle());
+        ui.init(window.getHandle());
 
         frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
 
@@ -98,8 +115,8 @@ public abstract class Engine {
             org.lwjgl.glfw.GLFW.glfwPollEvents(); 
             Input.update();
 
-            int vpW = (int) com.aengine.debug.DebugOverlay.getViewportImageW();
-            int vpH = (int) com.aengine.debug.DebugOverlay.getViewportImageH();
+            int vpW = (int) ui.viewportWidth();
+            int vpH = (int) ui.viewportHeight();
             
             if (vpW > 0 && vpH > 0) {
                 if (frameBuffer.getWidth() != vpW || frameBuffer.getHeight() != vpH) {
@@ -122,9 +139,9 @@ public abstract class Engine {
                 org.lwjgl.opengl.GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the monitor
 
-                DebugOverlay.beginFrame();
+                ui.beginFrame();
                 onDebugRender(frameBuffer.getTextureID());
-                DebugOverlay.endFrame();
+                ui.endFrame();
 
             } else if (currentState == EngineState.LAUNCHER) {
                 // Just clear the physical monitor for the launcher state. No FBO rendering needed.
@@ -159,8 +176,8 @@ public abstract class Engine {
         Logger.info(Logger.System.CORE, "Executing engine teardown sequence...");
         onCleanup();
 
-        // Overlay must be shut down before the GLFW window is destroyed
-        DebugOverlay.cleanup();
+        // Interface must be shut down before the GLFW window is destroyed
+        ui.cleanup();
 
         if (frameBuffer != null) frameBuffer.cleanup();
 
@@ -180,26 +197,25 @@ public abstract class Engine {
 
     /**
      * Called each frame after the scene FBO is complete but before buffer swap.
-     * Submit all ImGui windows here. The default implementation renders the scene
-     * FBO as a dockable "Viewport" ImGui panel.
+     * Submit all interface panels here. The default implementation presents the scene
+     * FBO as the viewport surface.
      *
      * <p>Subclasses should call {@code super.onDebugRender(viewportTextureID)} first
-     * to preserve the Viewport panel, then append additional debug windows.</p>
+     * to preserve the viewport, then append their own panels.</p>
      *
      * @param viewportTextureID OpenGL texture ID of the rendered scene FrameBuffer
      */
     protected void onDebugRender(int viewportTextureID) {
-        DebugOverlay.renderViewport(viewportTextureID,
-            window.getWidth(), window.getHeight(), this::onViewportContextMenu);
+        ui.renderViewport(viewportTextureID,
+            window.getWidth(), window.getHeight(), viewportContextMenu);
     }
 
     /**
-     * Override to inject ImGui menu items into the right-click context menu that
-     * appears when the user right-clicks inside the Viewport image panel.
+     * Override to inject menu items into the context menu that appears when the user
+     * right-clicks inside the viewport.
      *
-     * <p>This method is called from within an active ImGui popup context, so only
-     * {@code ImGui.menuItem}, {@code ImGui.beginMenu}/{@code endMenu}, separators,
-     * and similar popup-safe widgets should be submitted here.</p>
+     * <p>This method is called from within an active popup context, so only popup-safe
+     * widgets should be submitted here.</p>
      *
      * <p>Default implementation is empty (no context menu items).</p>
      */

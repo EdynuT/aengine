@@ -93,6 +93,7 @@ public class Main extends Engine {
 
     public Main() {
         super("AEngine - ECS Fly-Camera Runtime");
+        setUILayer(new com.aengine.editor.ImGuiUILayer());
     }
 
     @Override
