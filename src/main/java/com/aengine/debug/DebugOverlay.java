@@ -13,10 +13,9 @@ import com.aengine.utils.Logger;
 /**
  * Manages the lifecycle of the Dear ImGui debug overlay.
  *
- * <p>Architecture constraint: this overlay is <em>exclusively</em> for intra-viewport
- * debug tooling (collision wireframes, entity inspectors, performance metrics).
- * Window-frame layout and editor panels are the responsibility of the Tauri/WebKit
- * frontend, not this class.</p>
+ * <p>Transitional layer: with the Tauri/WebKit frontend removed, this overlay carries the
+ * entire editor surface — viewport compositing, panels, menus and debug tooling — until the
+ * in-house UI framework replaces it. See {@code docs/UI_FRAMEWORK_ARCHITECTURE.md}.</p>
  *
  * <p>Lifecycle:
  * <ol>

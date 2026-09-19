@@ -1,6 +1,6 @@
 # AEngine
 
-A high-performance, multi-API capable graphics engine built in Java and driven by a lightweight, cross-platform frontend orchestrated via Rust and Tauri v2.
+A high-performance, multi-API capable graphics engine built in Java, running as a single self-contained process.
 
 The engine is engineered strictly as a decoupled reusable runtime infrastructure. The structural abstraction layer between application logic and the graphics hardware backend (`RendererAPI`, `ShaderAPI`, `TextureAPI`, `BufferAPI`) guarantees absolute isolation, allowing a seamless future migration from OpenGL to Vulkan without mutating game-space code blocks.
 
@@ -11,9 +11,8 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 | Component | Specification |
 |---|---|
 | **Core Language** | Java 25 (OpenJDK) |
-| **System Orchestrator** | Rust 1.80+ / Tauri v2 (Native OS Interprocess Management) |
-| **Interface Frontend** | Static HTML5 / CSS3 (Grid & Flexbox) / Vanilla JS (Zero-Framework WebKit) |
-| **Build System** | Gradle 9.1+ (Wrapper orchestrated) & Cargo (Rust Package Manager) |
+| **Editor Interface** | Dear ImGui (transitional) — migrating to an in-house framework, see [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md) |
+| **Build System** | Gradle 9.1+ (Wrapper orchestrated) |
 | **Graphics Platform** | OpenGL 4.6 Core Profile (Mesa/ACO Optimized) via LWJGL 3.3.4 |
 | **Windowing / Input** | GLFW Native Layer (Wayland & Win32 native hardware deltas) |
 | **Math Engine** | JOML 1.10.5 (SIMD aligned vector transformations) |
@@ -23,8 +22,10 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 
 ## Engine Architecture Subsystems
 
-### Hybrid IPC Orchestration
-The application architecture splits into two main layers: the Hub Launcher and the Graphics Engine Core. The Frontend Hub uses Tauri v2 (WebKitGtk on Linux / WebView2 on Windows) to manage project state, configuration, and project initialization. When a project is launched, the Rust backend spawns the high-performance Java JVM runtime as an isolated, detached background subprocess, passing target environment variables and VFS paths directly via command-line arguments.
+### Single-Process Architecture
+The engine, editor and interface run inside one JVM process, sharing one address space and one object graph. There is no interprocess bridge, no serialization hop and no external UI runtime: editor panels read engine state directly.
+
+The interface currently renders through Dear ImGui as a transitional layer, and is being replaced by an in-house UI framework. The design and migration plan are in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md).
 
 ### Virtual File System (VFS) & Sandboxing
 All hardware asset paths are evaluated via `FileSystem.resolve()`. It enforces strict boundary sandboxing using system path normalization to prevent directory traversal vulnerabilities. Native asset allocations bypass the JVM heap, using `MemoryUtil.memAlloc` and direct `FileChannel` streams to achieve zero-copy transfers straight to the GPU driver pipelines.
@@ -79,68 +80,11 @@ Clone the repository to your workspace
 
 ### Prerequisites
 
-Before launching the development workspace, ensure your target operating system has the required compilers and native web rendering runtimes installed:
-
-#### 1. Core Languages & Toolchains
+Building and running the engine requires a single toolchain:
 
 * **Java 25 (OpenJDK)** configured in your global system environment path.
-* **Rust Toolchain (v1.80+)** installed via rustup:
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
-#### 2. Native WebKit Runtimes 
 
-* **Windows 10 / 11 (PowerShell Elevated)**
-Windows requires the Microsoft Edge WebView2 runtime (usually pre-installed on Windows 11). If missing, install it along with the C++ build tools using C++ core desktop workloads via Visual Studio Installer or terminal:
-
-  ```powershell
-  winget install Microsoft.EdgeWebView2Runtime
-  winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-  ```
-
-  Install tauri-cli for inteface development
-  ```powershell
-  cargo install tauri-cli --version "^2.0.0"
-  ```
-
-  If you use Node
-  ```powershell
-  npm install -g @tauri-apps/cli@next
-  ```
-
-* **Arch Based**
-
-  ```bash
-  sudo pacman -Syu --needed base-devel webkit2gtk-4.1
-  ```
-
-  ```bash
-  sudo pacman -S tauri-cli
-  ```
-
-  Or you can install via Cargo
-
-  ```bash
-  cargo install tauri-cli --version "^2.0.0"
-  ```
-
-* **Debian Based**
-
-  ```bash
-  sudo apt update
-  sudo apt install -y build-essential libwebkit2gtk-4.1-dev
-  ```
-
-  ```bash
-  cargo install tauri-cli --version "^2.0.0"
-  ```
-
-  NPM alternative if you use Node
-
-  ```bash
-  npm install -g @tauri-apps/cli@next
-  ```
-
+Everything else — LWJGL, GLFW, OpenGL, OpenAL and the native binaries for your platform — is resolved by the Gradle wrapper. No native compiler, no Rust toolchain and no web runtime are needed.
 ### Executing the Runtime Environment
 The framework dynamically switches execution pipelines at startup using JVM command-line arguments. You can pass these parameters straight through Gradle using the `--args` flag.
 
@@ -162,30 +106,6 @@ The framework dynamically switches execution pipelines at startup using JVM comm
   ```bash
   ./gradlew run --args="--2d"
   ```
-
-### Starting the Interface Development Workspace
-To kickstart the Tauri v2 Hub Wizard in development mode (which automatically watches for changes in both the Rust backend and the HTML/CSS frontend assets):
-
-* **1. Running the Interface**
-
-  ```bash
-  tauri dev
-  ```
-  **_Note:_** If you installed via `cargo install`, the bare alias might require you to run `cargo tauri dev`, which works natively and identically across all platforms.
-
-* **2. Compiling for Distribuition:**
-
-  ```bash
-  tauri build
-  ```
-
-  Or
-
-  ```bash
-  cargo tauri build
-  ```
-
-  **_Note:_** For more information about interface updates check [docs/FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md)
 
 ---
 
@@ -228,9 +148,9 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 
 - [x] Blender-style Viewport Navigation: State-driven Editor Camera (CameraSystem).
 
-- [x] Decouple UI/Launcher via WebKit Architecture — Integrated Tauri v2 runtime.
+- [x] ~~Decouple UI/Launcher via WebKit Architecture — Integrated Tauri v2 runtime.~~ **Superseded:** the Tauri/WebKit frontend was removed in favour of a single-process in-house interface.
 
-- [x] Native Subprocess Handshake — IPC Command Pipeline mapping between Rust/JS and JVM Argument injection.
+- [x] ~~Native Subprocess Handshake — IPC Command Pipeline mapping between Rust/JS and JVM Argument injection.~~ **Superseded** alongside the Tauri frontend.
 
 - [x] Decouple 2D/3D Specialized Render Pipelines: Enforce strict segregation between 2D Batching and 3D Mesh Pipelines. Project Initialization manifests (project.json) must explicitly declare target dimensions to cull unnecessary buffer overheads.
 
@@ -250,7 +170,7 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 
 - [x] Scripting Language Bridge: Explore polyglot execution (e.g., LuaJ or GraalVM JS) to allow hot-pluggable gameplay scripts that can mutate ECS state without recompiling the Java Core.
 
-- [x] Local Socket IPC Daemon: Implement a lightweight local loopback TCP socket connection between the Tauri frontend wrapper and the Java Core to stream real-time framework telemetry (FPS counters, active ECS allocations, and structural logs) directly into the UI dashboard.
+- [x] ~~Local Socket IPC Daemon: loopback TCP telemetry stream between the Tauri frontend and the Java Core.~~ **Superseded:** with the UI in-process, telemetry is read directly from engine state.
 
 - [x] Physics & Collision Pipeline: Integrate a dedicated physics thread (evaluating custom AABB/SAT solvers or native Box2D/Jolt bindings) synchronized with the ECS Transform components using fixed-timestep interpolation.
 
@@ -259,16 +179,16 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
   - Restrict Narrow Phase (AABB/SAT) evaluations strictly to entities sharing the same or adjacent spatial buckets.
   - Prepare the isolated Collision Resolution solver (Impulse/Velocity projection) to execute immediately after the Broad Phase filter.
 
-- [x] Architecture Realignment — Segregate ImGui Dependencies: Isolate and deprecate Dear ImGui from structural window wrappers. Retain ImGui execution paths exclusively for intra-viewport debug overlays running inside the active LWJGL hardware thread, shifting window-frame layout responsibility entirely to the WebKit/Tauri frontend context.
+- [x] ~~Architecture Realignment — Segregate ImGui Dependencies: restrict Dear ImGui to intra-viewport debug overlays, shifting window-frame layout to the WebKit/Tauri frontend.~~ **Superseded:** Dear ImGui now owns the full editor surface as a transitional layer until the in-house framework replaces it.
 
 - [x] Spatial Audio Engine: Implement OpenAL native bindings for 3D positional audio, streaming `.ogg` files through the async worker pool to prevent Main Thread stuttering during heavy soundscape decoding.
 
 - [x] Native OpenAL Audio Pipeline (.aaud Engine): Instantiate the LWJGL OpenAL context and develop a dedicated `AudioSystem` to consume the custom `.aaud` binary format. Route Raw PCM payloads directly into static `alBufferData` for zero-latency SFX, and implement an async worker thread with Ring-Buffers for streaming heavy BGM tracks without stalling the Main Thread.
 
-- [x] Zero-Copy Viewport Bridge (Memory-Mapped IPC): Implement a native shared-memory interface (e.g., `MappedByteBuffer` or `/dev/shm`) to stream the offscreen FrameBuffer Object (FBO) pixels directly to the Tauri WebKit frontend at monitor refresh rate. This circumvents TCP socket bottlenecks and guarantees zero-allocation cross-process video streaming.
+- [x] ~~Zero-Copy Viewport Bridge (Memory-Mapped IPC): stream FBO pixels to the Tauri frontend through `/dev/shm` at monitor refresh rate.~~ **Superseded:** the readback is gone entirely — the in-process UI samples the FBO texture directly in VRAM.
 
 - [ ] ECS Relational Scene Graph (Transform Hierarchies): Expand the currently flat DOD Registry to support parent-child entity relationships. Implement a dirty-flag topological sort algorithm to efficiently compute Global Transforms from Local Transforms in contiguous memory blocks, enabling complex nested prefabs in the Editor.
 
-- [ ] Tauri WebKit Editor Dashboard: Finalize the Rust/Svelte (or Vue/React) frontend wrapper to intercept the 10Hz TCP telemetry loopback, visualizing real-time ECS allocation metrics, FPS graphs, and intercepted Logger streams.
+- [ ] In-House UI Framework: Build AEngine's own editor interface framework — SDF-based draw list, MSDF text stack, flex layout and a retained widget tree, under a zero-allocation frame-loop budget. Full design and phased migration plan in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md).
 
 - [ ] Advanced Rendering Techniques: Expand the Shader subsystem to support Framebuffer Objects (FBOs) for post-processing, Shadow Mapping, and a rudimentary Physically Based Rendering (PBR) pipeline decoupled from the 2D Batch Renderer.

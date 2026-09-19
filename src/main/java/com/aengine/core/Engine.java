@@ -69,8 +69,6 @@ public abstract class Engine {
         DebugOverlay.init(window.getHandle());
 
         frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
-        
-        com.aengine.network.SharedMemory.init(window.getWidth(), window.getHeight());
 
         if (gameClassName != null) {
             reloadGameCode();
@@ -120,9 +118,6 @@ public abstract class Engine {
                 
                 frameBuffer.unbind();
 
-                // Extract image 100% clean, before ImGui pollutes the state machine.
-                frameBuffer.dispatchToSharedMemory();
-                
                 // 2. PHYSICAL DISPLAY RENDER PASS (Physical Monitor)
                 org.lwjgl.opengl.GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the monitor
@@ -169,8 +164,6 @@ public abstract class Engine {
 
         if (frameBuffer != null) frameBuffer.cleanup();
 
-        com.aengine.network.SharedMemory.cleanup();
-        
         window.cleanup();
 
         Logger.info(Logger.System.CORE, "Engine lifecycle shutdown complete.");

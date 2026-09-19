@@ -34,9 +34,6 @@ import com.aengine.graphics.Camera;
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
 
-import com.aengine.network.SharedMemory;
-import com.aengine.network.TelemetryServer;
-
 import com.aengine.physics.PhysicsThread;
 
 import com.aengine.utils.AssetBaker;
@@ -65,10 +62,6 @@ public class Main extends Engine {
 
     // Audio System — 60 Hz update loop, fully decoupled from the render rate.
     private AudioSystem audioSystem;
-
-    // Telemetry Throttling variables
-    private float telemetryAccumulator = 0.0f;
-    private static final float TELEMETRY_INTERVAL = 0.1f; // 10Hz UI Refresh Rate
 
 
     // =========================================================================
@@ -125,13 +118,11 @@ public class Main extends Engine {
             String vfsAssetsDir = activeProjectPath + File.separator + "assets" + File.separator + "baked";
             AssetBaker.bakeDirectory(rawAssetsDir, vfsAssetsDir);
             AssetWatcher.start(activeProjectPath); 
-            TelemetryServer.init();
         } catch (Exception e) {
             Logger.error(Logger.System.CORE, "VFS Handshake critical failure. Halting engine initialization pipeline.");
             throw new RuntimeException("Critical core infrastructure failure during VFS mount", e);
         }
 
-        SharedMemory.init(getWindow().getWidth(), getWindow().getHeight());
         AudioDevice.init();
         Renderer2D.init();
         Renderer3D.init();
@@ -177,7 +168,7 @@ public class Main extends Engine {
 
     @Override
     protected void onUpdate(float deltaTime) {
-        FPSTracker.update(deltaTime);    // Optional: Enable FPS tracking for telemetry dispatch. Comment it but DO NOT REMOVE
+        FPSTracker.update(deltaTime);    // Optional: Enable FPS tracking for the editor stats panel. Comment it but DO NOT REMOVE
         if (Input.isKeyPressed(Keys.ESCAPE)) {
             stop();
         }
@@ -265,17 +256,6 @@ public class Main extends Engine {
         }
 
         Input.update();
-
-        // =========================================================
-        // ENGINE RUNTIME TELEMETRY DISPATCH (Thread-Safe)
-        // =========================================================
-        telemetryAccumulator += deltaTime;
-        if (telemetryAccumulator >= TELEMETRY_INTERVAL) {
-            // Dispatch state strictly from the Main Thread to avoid ECS data races.
-            // The network server must handle the JSON serialization and socket push.
-            TelemetryServer.dispatch(registry);
-            telemetryAccumulator = 0.0f;
-        }
     }
 
     @Override
@@ -334,7 +314,6 @@ public class Main extends Engine {
         Renderer3D.cleanup();
         Renderer2D.cleanup();
         AudioDevice.cleanup();
-        TelemetryServer.cleanup();
     }
 
     @Override
