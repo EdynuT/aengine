@@ -14,10 +14,29 @@ package com.aengine.ui;
  */
 public final class UIDrawList {
 
-    /** position(2) + localPos(2) + halfSize(2) + radius(1) + colour(4) — see ui.vert. */
-    public static final int[] VERTEX_LAYOUT = { 2, 2, 2, 1, 4 };
+    /** position(2) + localPos(2) + halfSize(2) + radius(1) + colour(4) + uv(2) + mode(1). */
+    public static final int[] VERTEX_LAYOUT = { 2, 2, 2, 1, 4, 2, 1 };
 
-    public static final int FLOATS_PER_VERTEX = 11;
+    public static final int FLOATS_PER_VERTEX = 16;
+
+    // -----------------------------------------------------------------------------------
+    // Shading modes
+    //
+    // Carried per vertex rather than split across two shader programs. Switching program
+    // between commands would cost a bind per switch, and a frame alternating panels and
+    // text switches constantly. One program that branches on an attribute keeps the whole
+    // frame on a single pipeline.
+    //
+    // The redundancy is accepted: a shape vertex carries unused UVs, a textured vertex
+    // carries unused distance-field parameters. Packing them into shared slots would save
+    // two floats per vertex at the cost of a vertex format nobody can read.
+    // -----------------------------------------------------------------------------------
+
+    /** Rounded-rectangle signed distance field, coloured by the vertex colour. */
+    public static final float MODE_SHAPE = 0.0f;
+
+    /** Samples the bound texture as RGBA, multiplied by the vertex colour. */
+    public static final float MODE_TEXTURE = 1.0f;
 
     private static final int VERTICES_PER_QUAD = 4;
     private static final int INDICES_PER_QUAD  = 6;
@@ -51,9 +70,13 @@ public final class UIDrawList {
     // -----------------------------------------------------------------------------------
 
     private final float[] cmdClip;        // x, y, w, h per command
+    private final int[]   cmdTexture;     // backend texture handle, 0 when untextured
     private final int[]   cmdIndexOffset;
     private final int[]   cmdIndexCount;
     private int cmdCount = 0;
+
+    /** Texture the shapes being accumulated sample from. A change closes the command. */
+    private int currentTexture = 0;
 
     /** Index into the stream where the command currently being accumulated started. */
     private int currentCmdStart = 0;
@@ -68,6 +91,7 @@ public final class UIDrawList {
 
         // Worst case is one command per shape — every shape under a different clip.
         this.cmdClip        = new float[maxQuads * 4];
+        this.cmdTexture     = new int[maxQuads];
         this.cmdIndexOffset = new int[maxQuads];
         this.cmdIndexCount  = new int[maxQuads];
 
@@ -86,6 +110,7 @@ public final class UIDrawList {
         indexCount       = 0;
         cmdCount         = 0;
         currentCmdStart  = 0;
+        currentTexture   = 0;
 
         clipDepth = 0;
         setClip(0, 0.0f, 0.0f, viewportWidth, viewportHeight);
@@ -166,6 +191,7 @@ public final class UIDrawList {
         cmdClip[c + 2] = clipStack[active + 2];
         cmdClip[c + 3] = clipStack[active + 3];
 
+        cmdTexture[cmdCount]     = currentTexture;
         cmdIndexOffset[cmdCount] = currentCmdStart;
         cmdIndexCount[cmdCount]  = pending;
         cmdCount++;
@@ -188,6 +214,11 @@ public final class UIDrawList {
 
         if (vertexCount / VERTICES_PER_QUAD >= maxQuads) return;
 
+        if (currentTexture != 0) {
+            flushCommand();
+            currentTexture = 0;
+        }
+
         float halfW = width  * 0.5f;
         float halfH = height * 0.5f;
 
@@ -203,10 +234,10 @@ public final class UIDrawList {
         int base = vertexCount;
 
         // Counter-clockwise from the top-left, matching the index pattern below.
-        pushVertex(centreX - outerW, centreY - outerH, -outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a);
-        pushVertex(centreX + outerW, centreY - outerH,  outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a);
-        pushVertex(centreX + outerW, centreY + outerH,  outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a);
-        pushVertex(centreX - outerW, centreY + outerH, -outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a);
+        pushVertex(centreX - outerW, centreY - outerH, -outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
+        pushVertex(centreX + outerW, centreY - outerH,  outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
+        pushVertex(centreX + outerW, centreY + outerH,  outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
+        pushVertex(centreX - outerW, centreY + outerH, -outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
 
         indices[indexCount++] = base + 0;
         indices[indexCount++] = base + 1;
@@ -218,7 +249,8 @@ public final class UIDrawList {
 
     private void pushVertex(float px, float py, float lx, float ly,
                             float halfW, float halfH, float radius,
-                            float r, float g, float b, float a) {
+                            float r, float g, float b, float a,
+                            float u, float v, float mode) {
         int i = vertexFloatCount;
 
         vertices[i++] = px;
@@ -232,9 +264,54 @@ public final class UIDrawList {
         vertices[i++] = g;
         vertices[i++] = b;
         vertices[i++] = a;
+        vertices[i++] = u;
+        vertices[i++] = v;
+        vertices[i++] = mode;
 
         vertexFloatCount = i;
         vertexCount++;
+    }
+
+    /**
+     * Submits a textured quad, sampling {@code textureHandle} over the given UV rectangle.
+     *
+     * <p>No rounding and no distance field — the shape is the quad. Changing texture closes
+     * the current command, exactly as changing the clip rectangle does, because a texture
+     * binding is pipeline state too.</p>
+     *
+     * <p>UVs follow the texture's own convention. An OpenGL framebuffer attachment has its
+     * origin at the bottom-left, so presenting one upright means passing {@code v0 = 1} and
+     * {@code v1 = 0}.</p>
+     *
+     * @param textureHandle backend texture handle
+     * @param r,g,b,a       tint multiplied over the sample; use white for the image as-is
+     */
+    public void addTexturedQuad(float x, float y, float width, float height,
+                                float u0, float v0, float u1, float v1,
+                                int textureHandle,
+                                float r, float g, float b, float a) {
+
+        if (vertexCount / VERTICES_PER_QUAD >= maxQuads) return;
+
+        if (textureHandle != currentTexture) {
+            flushCommand();
+            currentTexture = textureHandle;
+        }
+
+        int base = vertexCount;
+
+        // Distance-field parameters are unused in this mode; zero keeps them harmless.
+        pushVertex(x,         y,          0, 0, 0, 0, 0, r, g, b, a, u0, v0, MODE_TEXTURE);
+        pushVertex(x + width, y,          0, 0, 0, 0, 0, r, g, b, a, u1, v0, MODE_TEXTURE);
+        pushVertex(x + width, y + height, 0, 0, 0, 0, 0, r, g, b, a, u1, v1, MODE_TEXTURE);
+        pushVertex(x,         y + height, 0, 0, 0, 0, 0, r, g, b, a, u0, v1, MODE_TEXTURE);
+
+        indices[indexCount++] = base + 0;
+        indices[indexCount++] = base + 1;
+        indices[indexCount++] = base + 2;
+        indices[indexCount++] = base + 2;
+        indices[indexCount++] = base + 3;
+        indices[indexCount++] = base + 0;
     }
 
     float[] vertices()      { return vertices; }
@@ -244,6 +321,7 @@ public final class UIDrawList {
 
     // Command accessors, read by UIRenderer while issuing the frame.
     int   commandCount()             { return cmdCount; }
+    int   commandTexture(int i)      { return cmdTexture[i]; }
     int   commandIndexOffset(int i)  { return cmdIndexOffset[i]; }
     int   commandIndexCount(int i)   { return cmdIndexCount[i]; }
     float commandClipX(int i)        { return cmdClip[i * 4]; }

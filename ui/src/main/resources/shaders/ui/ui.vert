@@ -8,6 +8,8 @@ layout (location = 1) in vec2  a_LocalPos;   // offset from the shape's centre, 
 layout (location = 2) in vec2  a_HalfSize;   // shape half-extents, pixels
 layout (location = 3) in float a_Radius;     // corner radius, pixels
 layout (location = 4) in vec4  a_Color;
+layout (location = 5) in vec2  a_TexCoord;
+layout (location = 6) in float a_Mode;       // 0 = distance field, 1 = texture
 
 uniform vec2 u_ViewportSize;
 
@@ -15,12 +17,16 @@ out vec2  v_LocalPos;
 out vec2  v_HalfSize;
 out float v_Radius;
 out vec4  v_Color;
+out vec2  v_TexCoord;
+out float v_Mode;
 
 void main() {
     v_LocalPos = a_LocalPos;
     v_HalfSize = a_HalfSize;
     v_Radius   = a_Radius;
     v_Color    = a_Color;
+    v_TexCoord = a_TexCoord;
+    v_Mode     = a_Mode;
 
     vec2 ndc = vec2(
         (a_Position.x / u_ViewportSize.x) * 2.0 - 1.0,

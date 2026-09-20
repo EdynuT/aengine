@@ -63,6 +63,7 @@ public final class UIRenderer {
         shader.bind();
         viewportSize.set(viewportWidth, viewportHeight);
         shader.setVec2("u_ViewportSize", viewportSize);
+        shader.setInt("u_Texture", 0);
 
         mesh.upload(drawList.vertices(), drawList.vertexFloats(), drawList.indices(), indexCount);
 
@@ -75,6 +76,8 @@ public final class UIRenderer {
                 (int) drawList.commandClipY(i),
                 (int) drawList.commandClipW(i),
                 (int) drawList.commandClipH(i));
+
+            renderer.bindTexture(0, drawList.commandTexture(i));
 
             mesh.draw(drawList.commandIndexOffset(i), drawList.commandIndexCount(i));
         }

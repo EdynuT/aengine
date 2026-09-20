@@ -67,6 +67,9 @@ public class Main extends Engine {
     private com.aengine.ui.UIRenderer uiRenderer;
     private com.aengine.ui.UIDrawList uiDrawList;
 
+    /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
+    private int sceneTextureID = 0;
+
     // Dedicated physics thread — 120 Hz fixed-timestep loop, fully decoupled from the render rate.
     // All ECS Transform writes from the physics side are guarded by physicsThread.getSyncLock().
     private PhysicsThread physicsThread;
@@ -365,12 +368,34 @@ public class Main extends Engine {
         // Outside the clip again: a marker that must stay whole.
         uiDrawList.addRoundedRect(40.0f, 280.0f, 60.0f, 24.0f, 12.0f, 0.45f, 0.85f, 0.50f, 1.0f);
 
+        // Textured quad: the scene's own framebuffer, presented as a thumbnail through our
+        // pipeline. v is flipped because a GL colour attachment has its origin bottom-left.
+        if (sceneTextureID != 0) {
+            uiDrawList.addTexturedQuad(
+                40.0f, 330.0f, 240.0f, 135.0f,
+                0.0f, 1.0f, 1.0f, 0.0f,
+                sceneTextureID,
+                1.0f, 1.0f, 1.0f, 1.0f);
+
+            // Same texture, tinted and clipped — proves the tint multiplies the sample and
+            // that clipping applies to textured commands too.
+            uiDrawList.pushClipRect(300.0f, 330.0f, 120.0f, 135.0f);
+            uiDrawList.addTexturedQuad(
+                300.0f, 330.0f, 240.0f, 135.0f,
+                0.0f, 1.0f, 1.0f, 0.0f,
+                sceneTextureID,
+                0.45f, 0.75f, 1.0f, 1.0f);
+            uiDrawList.popClipRect();
+        }
+
         uiDrawList.end();
         uiRenderer.render(uiDrawList, w, h);
     }
 
     @Override
     protected void onDebugRender(int viewportTextureID) {
+        sceneTextureID = viewportTextureID; // SCAFFOLDING — see drawUiFirstLight
+
         // Render scene FBO as the main Viewport panel (includes right-click context menu)
         super.onDebugRender(viewportTextureID);
 
