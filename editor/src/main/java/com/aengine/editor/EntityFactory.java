@@ -52,11 +52,14 @@ public final class EntityFactory {
     // =========================================================================
 
     /**
-     * Creates a coloured 1×1×1 sprite-box at {@code (x, y, z)} — intended for 3D mode.
+     * Creates a coloured 1×1×1 cube at {@code (x, y, z)} — intended for 3D mode.
      *
-     * <p>Note: the engine currently renders all sprites as camera-facing quads via
-     * {@code Renderer2D}. In a future mesh pipeline this factory will emit a proper
-     * cube mesh instead.</p>
+     * <p>The active {@code RenderMode} decides how this entity is drawn: in
+     * {@code MODE_3D} the render loop dispatches it to {@code Renderer3D.drawCube} as a
+     * real volumetric mesh; in {@code MODE_2D} it falls back to a flat quad exactly like
+     * {@link #createQuad}. The mesh path currently ignores {@link SpriteComponent#texture}
+     * (solid colour only) — textured cubes require UV coordinates on the cube mesh, not
+     * yet implemented.</p>
      *
      * @return the new entity ID
      */

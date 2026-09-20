@@ -4,8 +4,8 @@ package com.aengine.core;
  * Which render pipeline the engine is running: flat 2D batching or 3D mesh.
  *
  * <p>Selected once at startup (the application host parses {@code --2d} / {@code --3d})
- * and read by engine systems to branch their per-frame behaviour — {@code RenderSystem}
- * picks a batcher, {@code CameraSystem} picks a projection.</p>
+ * and read by engine systems to branch their per-frame behaviour — the render loop picks
+ * between a volumetric mesh and a flat quad, {@code CameraSystem} picks a projection.</p>
  *
  * <p>This lives in the core rather than in the application host because it is engine
  * state, not editor state: the ECS systems that read it must not depend on whichever
