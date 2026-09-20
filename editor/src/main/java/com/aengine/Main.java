@@ -348,14 +348,24 @@ public class Main extends Engine {
         int w = getWindow().getWidth();
         int h = getWindow().getHeight();
 
-        uiDrawList.begin();
+        uiDrawList.begin(w, h);
 
         // Panel-like slab with a generous radius, plus a small square to show the radius is
         // a parameter and not a baked mesh.
         uiDrawList.addRoundedRect(40.0f, 80.0f, 320.0f, 180.0f, 18.0f, 0.12f, 0.14f, 0.18f, 0.92f);
+
+        // Everything between push and pop is cut to this rectangle, which stops halfway
+        // down the two shapes below. Their bottom halves are submitted and discarded by the
+        // hardware — the same mechanism a scrolling list relies on.
+        uiDrawList.pushClipRect(40.0f, 80.0f, 320.0f, 90.0f);
         uiDrawList.addRoundedRect(72.0f, 112.0f, 96.0f, 96.0f,  48.0f, 0.36f, 0.62f, 0.94f, 1.0f);
         uiDrawList.addRoundedRect(200.0f, 112.0f, 120.0f, 40.0f, 8.0f, 0.94f, 0.55f, 0.28f, 1.0f);
+        uiDrawList.popClipRect();
 
+        // Outside the clip again: a marker that must stay whole.
+        uiDrawList.addRoundedRect(40.0f, 280.0f, 60.0f, 24.0f, 12.0f, 0.45f, 0.85f, 0.50f, 1.0f);
+
+        uiDrawList.end();
         uiRenderer.render(uiDrawList, w, h);
     }
 

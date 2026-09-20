@@ -30,8 +30,17 @@ public interface DynamicMeshAPI {
      */
     void upload(float[] vertices, int vertexFloatCount, int[] indices, int indexCount);
 
-    /** Draws {@code indexCount} indices as triangles from the last {@link #upload}. */
-    void draw(int indexCount);
+    /**
+     * Draws a range of the uploaded indices as triangles.
+     *
+     * <p>Ranges rather than the whole buffer, because one frame of interface geometry is
+     * split into commands: each carries its own clip rectangle and texture, so it must be
+     * issued as a separate draw over its own slice of the index stream.</p>
+     *
+     * @param indexOffset first index to draw, counted in indices, not bytes
+     * @param indexCount  how many indices to draw
+     */
+    void draw(int indexOffset, int indexCount);
 
     /** Releases the underlying GPU and off-heap allocations. */
     void cleanup();

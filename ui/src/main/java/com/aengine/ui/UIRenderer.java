@@ -65,7 +65,19 @@ public final class UIRenderer {
         shader.setVec2("u_ViewportSize", viewportSize);
 
         mesh.upload(drawList.vertices(), drawList.vertexFloats(), drawList.indices(), indexCount);
-        mesh.draw(indexCount);
+
+        // One draw per command. The clip rectangle is pipeline state rather than vertex
+        // data, so a frame cannot be issued as a single call once anything is clipped.
+        int commands = drawList.commandCount();
+        for (int i = 0; i < commands; i++) {
+            renderer.setScissor(
+                (int) drawList.commandClipX(i),
+                (int) drawList.commandClipY(i),
+                (int) drawList.commandClipW(i),
+                (int) drawList.commandClipH(i));
+
+            mesh.draw(drawList.commandIndexOffset(i), drawList.commandIndexCount(i));
+        }
 
         shader.unbind();
         end();
@@ -73,6 +85,7 @@ public final class UIRenderer {
 
     /** Restores the pipeline state the engine's scene passes expect. */
     private void end() {
+        renderer.disableScissor();
         renderer.setBlend(false);
         renderer.setDepthTest(true);
     }

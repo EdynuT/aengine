@@ -415,8 +415,23 @@ This phase is the leverage point. It delivers most of the visual improvement for
 fraction of the total effort, and it builds and validates exactly the layers the framework
 needs — while the editor stays fully functional throughout.
 
-**Phase 2 — `UIDrawList`.** Extract the draw list from the ImGui backend into a standalone
-L1, driven by AEngine calls rather than `ImDrawData`.
+**Phase 2 — Complete L1.** *Revised.* The original plan routed through a custom Dear ImGui
+backend in Phase 1 and extracted the draw list from it here. That detour was skipped:
+Phase 1 built `UIDrawList` and `UIRenderer` directly, so there is no ImGui backend to
+extract from and L1 already stands alone.
+
+What remains is to finish it. Phase 1 draws one shape type in a single draw call, which is
+enough to prove the pipeline and not enough to build an editor on:
+
+1. **A command list.** `UIRenderer` issues one draw for the whole frame. A real draw list
+   emits a sequence of `(clip rect, texture, index offset, index count)`, which is what lets
+   clipping and texture changes happen partway through a frame.
+2. **A clip stack.** Push and pop rectangles. This is how a scrolling list submits ten
+   thousand rows and lets the hardware discard the ones outside the panel.
+3. **Textured quads.** Required before L2, since text is exactly that: quads sampling a
+   glyph atlas.
+
+These three also give `setScissor`, `disableScissor` and `bindTexture` their first callers.
 
 **Phase 3 — L2/L3/L4.** Text, layout, widget tree, in that order.
 

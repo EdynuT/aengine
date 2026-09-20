@@ -85,11 +85,12 @@ public final class OpenGLDynamicMesh implements DynamicMeshAPI {
     }
 
     @Override
-    public void draw(int indexCount) {
+    public void draw(int indexOffset, int indexCount) {
         if (indexCount == 0) return;
 
         vao.bind();
-        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT,
+                       (long) indexOffset * Integer.BYTES);
         vao.unbind();
     }
 
