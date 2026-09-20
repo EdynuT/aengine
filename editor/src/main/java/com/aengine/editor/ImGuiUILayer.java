@@ -13,10 +13,24 @@ import com.aengine.debug.DebugOverlay;
  */
 public final class ImGuiUILayer implements UILayer {
 
+    /**
+     * Scaffolding: runs after ImGui has drawn, so the in-house UI framework composites on
+     * top of the transitional interface instead of underneath it. Removed once the
+     * framework draws the editor itself rather than alongside it.
+     */
+    private Runnable afterImGui = null;
+
+    public void setAfterImGui(Runnable hook) { this.afterImGui = hook; }
+
     @Override public void init(long windowHandle) { DebugOverlay.init(windowHandle); }
     @Override public void beginFrame()            { DebugOverlay.beginFrame(); }
-    @Override public void endFrame()              { DebugOverlay.endFrame(); }
     @Override public void cleanup()               { DebugOverlay.cleanup(); }
+
+    @Override
+    public void endFrame() {
+        DebugOverlay.endFrame();
+        if (afterImGui != null) afterImGui.run();
+    }
 
     @Override public float viewportWidth()  { return DebugOverlay.getViewportImageW(); }
     @Override public float viewportHeight() { return DebugOverlay.getViewportImageH(); }

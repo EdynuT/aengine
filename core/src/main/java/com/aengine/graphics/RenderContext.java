@@ -31,6 +31,21 @@ public class RenderContext {
         }
     }
 
+    /**
+     * Factory for a frame-updated geometry buffer — see {@link DynamicMeshAPI}.
+     *
+     * @param attributeSizes component count of each vertex attribute, in layout order
+     */
+    public static DynamicMeshAPI createDynamicMesh(int maxVertexFloats, int maxIndices, int[] attributeSizes) {
+        switch (activeAPI) {
+            case OPENGL: return new com.aengine.graphics.opengl.OpenGLDynamicMesh(
+                                        maxVertexFloats, maxIndices, attributeSizes);
+            case VULKAN:
+                throw new UnsupportedOperationException("Vulkan DynamicMesh implementation missing.");
+            default: throw new IllegalStateException("Unknown Graphics API target.");
+        }
+    }
+
     public static ShaderAPI createShader(String vertexPath, String fragmentPath) {
         switch (activeAPI) {
             case OPENGL: return new OpenGLShader(vertexPath, fragmentPath);

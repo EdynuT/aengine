@@ -3,6 +3,8 @@ package com.aengine.graphics.opengl;
 import com.aengine.graphics.RendererAPI;
 import org.joml.Vector4f;
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
+import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL15.*;
 
 public class OpenGLRenderer implements RendererAPI {
@@ -10,6 +12,9 @@ public class OpenGLRenderer implements RendererAPI {
     private OpenGLVAO quadVAO;
     private OpenGLVBO quadVBO;
     private OpenGLEBO quadEBO;
+
+    /** Height of the current render target, needed to flip scissor into GL's coordinates. */
+    private int targetHeight = 0;
 
     @Override
     public void init() {
@@ -74,6 +79,51 @@ public class OpenGLRenderer implements RendererAPI {
         quadVAO.bind();
         glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
         quadVAO.unbind();
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Render state
+    // -------------------------------------------------------------------------------------
+
+    @Override
+    public void setDepthTest(boolean enabled) {
+        if (enabled) glEnable(GL_DEPTH_TEST);
+        else         glDisable(GL_DEPTH_TEST);
+    }
+
+    @Override
+    public void setBlend(boolean enabled) {
+        if (enabled) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        } else {
+            glDisable(GL_BLEND);
+        }
+    }
+
+    @Override
+    public void setRenderTargetSize(int width, int height) {
+        this.targetHeight = height;
+    }
+
+    @Override
+    public void setScissor(int x, int y, int width, int height) {
+        // GL measures from the bottom-left; the interface hands us top-left coordinates.
+        int glY = targetHeight - (y + height);
+
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(x, glY, Math.max(0, width), Math.max(0, height));
+    }
+
+    @Override
+    public void disableScissor() {
+        glDisable(GL_SCISSOR_TEST);
+    }
+
+    @Override
+    public void bindTexture(int slot, int textureHandle) {
+        glActiveTexture(GL_TEXTURE0 + slot);
+        glBindTexture(GL_TEXTURE_2D, textureHandle);
     }
 
     @Override

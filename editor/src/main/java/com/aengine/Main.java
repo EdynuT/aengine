@@ -56,6 +56,17 @@ public class Main extends Engine {
     private CameraSystem cameraSystem;
     private int cameraEntity;
     
+    private final com.aengine.editor.ImGuiUILayer imguiLayer;
+
+    // -------------------------------------------------------------------------------------
+    // SCAFFOLDING — first light for the in-house UI framework.
+    //
+    // Draws one rounded rectangle through :ui to prove the SDF pipeline end to end. Deleted
+    // once real panels exist; see docs/UI_FRAMEWORK_ARCHITECTURE.md.
+    // -------------------------------------------------------------------------------------
+    private com.aengine.ui.UIRenderer uiRenderer;
+    private com.aengine.ui.UIDrawList uiDrawList;
+
     // Dedicated physics thread — 120 Hz fixed-timestep loop, fully decoupled from the render rate.
     // All ECS Transform writes from the physics side are guarded by physicsThread.getSyncLock().
     private PhysicsThread physicsThread;
@@ -92,7 +103,8 @@ public class Main extends Engine {
 
     public Main() {
         super("AEngine - ECS Fly-Camera Runtime");
-        setUILayer(new com.aengine.editor.ImGuiUILayer());
+        this.imguiLayer = new com.aengine.editor.ImGuiUILayer();
+        setUILayer(this.imguiLayer);
     }
 
     @Override
@@ -126,6 +138,11 @@ public class Main extends Engine {
         AudioDevice.init();
         Renderer2D.init();
         Renderer3D.init();
+
+        // SCAFFOLDING — see the field declarations.
+        uiRenderer = new com.aengine.ui.UIRenderer(256);
+        uiDrawList = new com.aengine.ui.UIDrawList(256);
+        imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
         // Gray background for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
@@ -210,10 +227,6 @@ public class Main extends Engine {
                 } else {
                     registry.addComponent(cameraEntity, new CameraComponent(0.0f, currentW, currentH, -1.0f, 100.0f, false));
                 }
-            }
-            
-            if (boundsChanged) {
-                Logger.info(Logger.System.CORE, "Viewport Bounds Altered (%dx%d). Recalculating projection matrices.", currentW, currentH);
             }
         }
 
@@ -314,6 +327,30 @@ public class Main extends Engine {
         Renderer3D.cleanup();
         Renderer2D.cleanup();
         AudioDevice.cleanup();
+
+        if (uiRenderer != null) uiRenderer.cleanup();
+    }
+
+    /**
+     * SCAFFOLDING — first light for the in-house UI framework.
+     *
+     * <p>Submits one rounded rectangle through {@code :ui} and draws it over the ImGui
+     * surface. Its only job is to prove the SDF pipeline works end to end: draw list to
+     * dynamic mesh to shader to screen. Deleted once the framework draws real panels.</p>
+     */
+    private void drawUiFirstLight() {
+        int w = getWindow().getWidth();
+        int h = getWindow().getHeight();
+
+        uiDrawList.begin();
+
+        // Panel-like slab with a generous radius, plus a small square to show the radius is
+        // a parameter and not a baked mesh.
+        uiDrawList.addRoundedRect(40.0f, 80.0f, 320.0f, 180.0f, 18.0f, 0.12f, 0.14f, 0.18f, 0.92f);
+        uiDrawList.addRoundedRect(72.0f, 112.0f, 96.0f, 96.0f,  48.0f, 0.36f, 0.62f, 0.94f, 1.0f);
+        uiDrawList.addRoundedRect(200.0f, 112.0f, 120.0f, 40.0f, 8.0f, 0.94f, 0.55f, 0.28f, 1.0f);
+
+        uiRenderer.render(uiDrawList, w, h);
     }
 
     @Override
