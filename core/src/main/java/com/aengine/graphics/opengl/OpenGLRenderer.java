@@ -1,7 +1,12 @@
 package com.aengine.graphics.opengl;
 
 import com.aengine.graphics.RendererAPI;
+import com.aengine.utils.Logger;
 import org.joml.Vector4f;
+import org.lwjgl.system.MemoryUtil;
+
+import java.nio.FloatBuffer;
+
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
@@ -12,6 +17,16 @@ public class OpenGLRenderer implements RendererAPI {
     private OpenGLVAO quadVAO;
     private OpenGLVBO quadVBO;
     private OpenGLEBO quadEBO;
+
+    /**
+     * Persistent off-heap staging buffer for vertex uploads.
+     *
+     * <p>Allocated once in {@link #initBatchBuffers} and rewritten in place every draw.
+     * Building a fresh {@code float[]} per draw call would allocate on the hottest path in
+     * the engine — at a full batch that is 40,000 floats, 160 KB, every flush of every
+     * frame.</p>
+     */
+    private FloatBuffer vertexStaging;
 
     /** Height of the current render target, needed to flip scissor into GL's coordinates. */
     private int targetHeight = 0;
@@ -53,6 +68,14 @@ public class OpenGLRenderer implements RendererAPI {
         quadVAO.setVertexAttrib(3, 1, vertexSizeFloats, 9); // a_TexIndex
         
         quadVAO.unbind();
+
+        // Reallocating on a second call would leak the previous block.
+        if (vertexStaging != null) MemoryUtil.memFree(vertexStaging);
+        vertexStaging = MemoryUtil.memAllocFloat(maxVertices * vertexSizeFloats);
+
+        Logger.debug(Logger.System.RENDERER,
+            "Vertex staging buffer reserved off-heap: %d floats (%.1f KB).",
+            vertexStaging.capacity(), (vertexStaging.capacity() * Float.BYTES) / 1024.0f);
     }
 
     @Override
@@ -71,10 +94,13 @@ public class OpenGLRenderer implements RendererAPI {
         if (indexCount == 0) return;
 
         quadVBO.bind();
-        
-        // Push ONLY the active initialized float slice into the VBO storage memory.
-        // This isolates the data boundary and prevents driver-level memory drops.
-        glBufferSubData(GL_ARRAY_BUFFER, 0, java.util.Arrays.copyOfRange(vertices, 0, vertexCount));
+
+        // Copy the active slice straight into the off-heap buffer and hand the driver that
+        // buffer. No intermediate array, so no allocation on the draw path.
+        vertexStaging.clear();
+        vertexStaging.put(vertices, 0, vertexCount);
+        vertexStaging.flip();
+        glBufferSubData(GL_ARRAY_BUFFER, 0, vertexStaging);
 
         quadVAO.bind();
         glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
@@ -131,5 +157,10 @@ public class OpenGLRenderer implements RendererAPI {
         if (quadVAO != null) quadVAO.cleanup();
         if (quadVBO != null) quadVBO.cleanup();
         if (quadEBO != null) quadEBO.cleanup();
+
+        if (vertexStaging != null) {
+            MemoryUtil.memFree(vertexStaging);
+            vertexStaging = null;
+        }
     }
 }
