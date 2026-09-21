@@ -18,6 +18,8 @@ in float v_Radius;
 in vec4  v_Color;
 in vec2  v_TexCoord;
 in float v_Mode;
+in vec4  v_BorderColor;
+in float v_BorderWidth;
 
 uniform sampler2D u_Texture;
 
@@ -50,5 +52,19 @@ void main() {
 
     if (alpha <= 0.0) discard;
 
-    FragColor = vec4(v_Color.rgb, v_Color.a * alpha);
+    if (v_BorderWidth <= 0.0) {
+        FragColor = vec4(v_Color.rgb, v_Color.a * alpha);
+        return;
+    }
+
+    // The border costs no geometry: it is the same field read a second time, offset inward
+    // by the border width. Between the two contours lies the border, inside the inner one
+    // lies the fill. Because both follow the distance function, the border tracks the
+    // corner curve exactly instead of being a second shape drawn behind the first.
+    float innerDist  = dist + v_BorderWidth;
+    float fillAlpha  = 1.0 - smoothstep(-edge, edge, innerDist);
+
+    vec4 blended = mix(v_BorderColor, v_Color, fillAlpha);
+
+    FragColor = vec4(blended.rgb, blended.a * alpha);
 }

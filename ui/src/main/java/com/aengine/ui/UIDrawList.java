@@ -14,10 +14,13 @@ package com.aengine.ui;
  */
 public final class UIDrawList {
 
-    /** position(2) + localPos(2) + halfSize(2) + radius(1) + colour(4) + uv(2) + mode(1). */
-    public static final int[] VERTEX_LAYOUT = { 2, 2, 2, 1, 4, 2, 1 };
+    /**
+     * position(2) + localPos(2) + halfSize(2) + radius(1) + colour(4) + uv(2) + mode(1)
+     * + borderColour(4) + borderWidth(1).
+     */
+    public static final int[] VERTEX_LAYOUT = { 2, 2, 2, 1, 4, 2, 1, 4, 1 };
 
-    public static final int FLOATS_PER_VERTEX = 16;
+    public static final int FLOATS_PER_VERTEX = 21;
 
     // -----------------------------------------------------------------------------------
     // Shading modes
@@ -202,15 +205,32 @@ public final class UIDrawList {
     /**
      * Submits a rounded rectangle.
      *
-     * @param x      left edge in pixels, origin top-left
-     * @param y      top edge in pixels
-     * @param width  width in pixels
-     * @param height height in pixels
-     * @param radius corner radius in pixels; clamped to half the shorter side
+     * @param x       left edge in pixels, origin top-left
+     * @param y       top edge in pixels
+     * @param width   width in pixels
+     * @param height  height in pixels
+     * @param radius  corner radius in pixels; clamped to half the shorter side
      * @param r,g,b,a colour, straight alpha, components in 0..1
      */
     public void addRoundedRect(float x, float y, float width, float height, float radius,
                                float r, float g, float b, float a) {
+        addRoundedRect(x, y, width, height, radius, r, g, b, a, 0, 0, 0, 0, 0.0f);
+    }
+
+    /**
+     * Submits a rounded rectangle with a border drawn inside its own outline.
+     *
+     * <p>The border costs no extra geometry. It is the same distance field read twice: once
+     * for the outer silhouette and once offset inward by the border width, with the fill
+     * blended over the border between them. That is why a 1-pixel border stays exactly one
+     * pixel and stays sharp at any corner radius — it follows the curve analytically rather
+     * than being a second, slightly smaller shape drawn behind the first.</p>
+     *
+     * @param borderWidth thickness in pixels, measured inward from the edge; 0 disables
+     */
+    public void addRoundedRect(float x, float y, float width, float height, float radius,
+                               float r, float g, float b, float a,
+                               float br, float bg, float bb, float ba, float borderWidth) {
 
         if (vertexCount / VERTICES_PER_QUAD >= maxQuads) return;
 
@@ -234,10 +254,10 @@ public final class UIDrawList {
         int base = vertexCount;
 
         // Counter-clockwise from the top-left, matching the index pattern below.
-        pushVertex(centreX - outerW, centreY - outerH, -outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
-        pushVertex(centreX + outerW, centreY - outerH,  outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
-        pushVertex(centreX + outerW, centreY + outerH,  outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
-        pushVertex(centreX - outerW, centreY + outerH, -outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE);
+        pushVertex(centreX - outerW, centreY - outerH, -outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
+        pushVertex(centreX + outerW, centreY - outerH,  outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
+        pushVertex(centreX + outerW, centreY + outerH,  outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
+        pushVertex(centreX - outerW, centreY + outerH, -outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
 
         indices[indexCount++] = base + 0;
         indices[indexCount++] = base + 1;
@@ -250,7 +270,8 @@ public final class UIDrawList {
     private void pushVertex(float px, float py, float lx, float ly,
                             float halfW, float halfH, float radius,
                             float r, float g, float b, float a,
-                            float u, float v, float mode) {
+                            float u, float v, float mode,
+                            float br, float bg, float bb, float ba, float borderWidth) {
         int i = vertexFloatCount;
 
         vertices[i++] = px;
@@ -267,6 +288,11 @@ public final class UIDrawList {
         vertices[i++] = u;
         vertices[i++] = v;
         vertices[i++] = mode;
+        vertices[i++] = br;
+        vertices[i++] = bg;
+        vertices[i++] = bb;
+        vertices[i++] = ba;
+        vertices[i++] = borderWidth;
 
         vertexFloatCount = i;
         vertexCount++;
@@ -301,10 +327,10 @@ public final class UIDrawList {
         int base = vertexCount;
 
         // Distance-field parameters are unused in this mode; zero keeps them harmless.
-        pushVertex(x,         y,          0, 0, 0, 0, 0, r, g, b, a, u0, v0, MODE_TEXTURE);
-        pushVertex(x + width, y,          0, 0, 0, 0, 0, r, g, b, a, u1, v0, MODE_TEXTURE);
-        pushVertex(x + width, y + height, 0, 0, 0, 0, 0, r, g, b, a, u1, v1, MODE_TEXTURE);
-        pushVertex(x,         y + height, 0, 0, 0, 0, 0, r, g, b, a, u0, v1, MODE_TEXTURE);
+        pushVertex(x,         y,          0, 0, 0, 0, 0, r, g, b, a, u0, v0, MODE_TEXTURE, 0, 0, 0, 0, 0);
+        pushVertex(x + width, y,          0, 0, 0, 0, 0, r, g, b, a, u1, v0, MODE_TEXTURE, 0, 0, 0, 0, 0);
+        pushVertex(x + width, y + height, 0, 0, 0, 0, 0, r, g, b, a, u1, v1, MODE_TEXTURE, 0, 0, 0, 0, 0);
+        pushVertex(x,         y + height, 0, 0, 0, 0, 0, r, g, b, a, u0, v1, MODE_TEXTURE, 0, 0, 0, 0, 0);
 
         indices[indexCount++] = base + 0;
         indices[indexCount++] = base + 1;

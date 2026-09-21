@@ -355,7 +355,9 @@ public class Main extends Engine {
 
         // Panel-like slab with a generous radius, plus a small square to show the radius is
         // a parameter and not a baked mesh.
-        uiDrawList.addRoundedRect(40.0f, 80.0f, 320.0f, 180.0f, 18.0f, 0.12f, 0.14f, 0.18f, 0.92f);
+        uiDrawList.addRoundedRect(40.0f, 80.0f, 320.0f, 180.0f, 18.0f,
+            0.12f, 0.14f, 0.18f, 0.92f,          // fill
+            0.38f, 0.42f, 0.52f, 1.0f, 1.0f);    // 1px border, the panel-edge case
 
         // Everything between push and pop is cut to this rectangle, which stops halfway
         // down the two shapes below. Their bottom halves are submitted and discarded by the
@@ -367,6 +369,17 @@ public class Main extends Engine {
 
         // Outside the clip again: a marker that must stay whole.
         uiDrawList.addRoundedRect(40.0f, 280.0f, 60.0f, 24.0f, 12.0f, 0.45f, 0.85f, 0.50f, 1.0f);
+
+        // Thick border on a fully rounded shape — the focus-ring case. The border follows
+        // the curve because it is the distance field, not a smaller shape behind it.
+        uiDrawList.addRoundedRect(120.0f, 274.0f, 80.0f, 36.0f, 18.0f,
+            0.10f, 0.12f, 0.16f, 1.0f,
+            0.95f, 0.75f, 0.20f, 1.0f, 4.0f);
+
+        // Border with no fill: alpha 0 on the fill leaves the outline alone.
+        uiDrawList.addRoundedRect(220.0f, 274.0f, 80.0f, 36.0f, 8.0f,
+            0.0f, 0.0f, 0.0f, 0.0f,
+            0.90f, 0.35f, 0.45f, 1.0f, 2.0f);
 
         // Textured quad: the scene's own framebuffer, presented as a thumbnail through our
         // pipeline. v is flipped because a GL colour attachment has its origin bottom-left.
