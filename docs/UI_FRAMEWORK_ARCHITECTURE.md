@@ -317,7 +317,83 @@ The widget set an engine editor actually needs, which is finite:
 
 ---
 
-## 7. Zero-allocation rules
+## 7. Styling and theming
+
+**Decision: appearance lives in data files, not in Java.** This reverses what an earlier
+draft of this document said in the out-of-scope section, and the reason is a workflow one
+rather than a technical one: it lets someone design the editor without writing engine code,
+and see the result without recompiling.
+
+### Two layers, not one
+
+Styling is commonly treated as a single problem and it is really two, with very different
+costs.
+
+**Tokens** are named values — `accent`, `panelBg`, `radius.md`. A flat table, no selectors,
+no cascade. This covers most of what an editor needs, and parsing it is trivial.
+
+**Rules** map selectors to declarations — *buttons inside a toolbar, when hovered, look like
+this*. This needs specificity, cascade and state tracking, and it is where a styling system
+turns into a large project.
+
+Only tokens are in scope now. Rules are deferred until L4 exists, because a selector needs a
+tree of identified nodes to match against, so the question cannot even be answered before
+then. Deferring costs nothing: the two layers compose rather than compete, and if the rule
+layer is later written in a CSS dialect, CSS's own `var()` maps onto tokens exactly.
+
+### Format
+
+**JSON, parsed with Gson**, which the project already depends on and already uses for
+`.scene` and `.entity`. No grammar to write, no parser to maintain, and one less format for
+a contributor to learn. Gson's lenient mode accepts `//` comments, which a hand-maintained
+theme file needs and strict JSON does not have.
+
+```json
+{
+  "accent":      "#3B82F6",
+  "panelBg":     "#1F2328",
+  "panelBorder": "@accent",
+  "radius":      6,
+  "borderWidth": 1
+}
+```
+
+A value may reference another with `@name`, resolved once at load. Cycles are an error
+reported at parse time, not a hang.
+
+### Resolution pipeline
+
+Three stages, and which stage runs how often is the whole point:
+
+| Stage | Runs | Produces |
+|---|---|---|
+| **Parse** | on load and on file change | token table, names to values |
+| **Resolve** | when the tree or the tokens change | a baked `Style` struct per node |
+| **Draw** | every frame | reads the baked struct |
+
+**A name is never looked up in the frame loop.** A widget holds an integer handle into the
+resolved style table; drawing indexes an array. String hashing per widget per frame would
+violate §8 on its own, and it is the mistake that makes most data-driven styling systems
+slow.
+
+### Scope discipline
+
+The supported property list is fixed and documented, the way Unity bounds USS. A token set
+is bounded by what `UIDrawList` can actually draw: today fill colour, border colour, border
+width and corner radius, with typography added when L2 lands. Shadows and gradients are not
+tokens until the shader can render them — a theme file that accepts properties the renderer
+silently ignores is worse than one that rejects them.
+
+### Hot reload
+
+`AssetWatcher` already runs an inotify daemon over the project's asset directory for texture
+reloading. Pointing it at the theme file is nearly free, and it is what makes this feature
+worth building: the change becomes visible in the running editor without a recompile or a
+restart, so designing is a feedback loop rather than a build cycle.
+
+---
+
+## 8. Zero-allocation rules
 
 These are binding constraints on `aengine-ui`, not aspirations.
 
@@ -347,7 +423,7 @@ These are binding constraints on `aengine-ui`, not aspirations.
 
 ---
 
-## 8. Required changes in `aengine-core`
+## 9. Required changes in `aengine-core`
 
 Known cross-boundary work, to be done before or alongside L1.
 
@@ -370,7 +446,7 @@ access. All three are GLFW calls already available through the existing handle.
 
 ---
 
-## 9. Migration path
+## 10. Migration path
 
 Sequenced so that **the editor never stops working**. The failure mode to avoid is stopping
 the engine for six months to write a framework on a branch.
@@ -433,7 +509,23 @@ enough to prove the pipeline and not enough to build an editor on:
 
 These three also give `setScissor`, `disableScissor` and `bindTexture` their first callers.
 
-**Phase 3 — L2/L3/L4.** Text, layout, widget tree, in that order.
+**Phase 3 — L2/L3/L4.** Text, layout, widget tree, in that order. This phase is around
+**70% of the whole project** — the numbering in this list is not a measure of size, and
+every other phase together is smaller than this one. It is broken into steps that each end
+with something visible, because a milestone that takes months without one is a milestone
+nobody can review.
+
+| Step | Ends when | Layer |
+|---|---|---|
+| **3a** | A string of ASCII renders from a glyph atlas | L2 |
+| **3b** | Metrics, kerning and wrapping work; layout results are cached by content hash | L2 |
+| **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
+| **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
+| **3e** | Button, checkbox, slider and text field behave correctly | L4 |
+| **3f** | A JSON theme file drives the colours, and editing it reloads live | §7 |
+
+Step 3a is the real start of the mountain. Everything before it in this document is the 10%
+the effort table in §2 assigns to the draw list and GPU backend.
 
 **Phase 4 — Panel-by-panel migration.** ImGui and the new framework coexist, both rendering
 through the same backend. Panels move one at a time. Order: stats and physics debug panels
@@ -451,14 +543,15 @@ individually shippable.
 
 ---
 
-## 10. Out of scope
+## 11. Out of scope
 
 Stated so they are not rediscovered as surprises:
 
 - **Accessibility APIs** (screen readers, AT-SPI / UIA). Not planned. Reconsider only if the
   editor ever needs to meet an accessibility requirement.
-- **Full CSS or a styling language.** Styles are typed structs in code, not a parsed
-  stylesheet.
+- **A full CSS implementation.** Superseded by §7: appearance comes from a JSON token file.
+  A selector-and-cascade rule layer is deferred until L4, and even then it would be a
+  bounded dialect with a documented property list, never the CSS specification.
 - **Runtime game UI.** This framework targets the *editor*. Whether it later becomes the
   in-game UI system is a separate decision, deliberately deferred.
 - **Multi-window / OS-level multi-viewport.** Docking within one window first; detachable
