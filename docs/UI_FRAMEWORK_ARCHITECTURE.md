@@ -317,49 +317,131 @@ The widget set an engine editor actually needs, which is finite:
 
 ---
 
-## 7. Styling and theming
+## 7. The shell package
 
-**Decision: appearance lives in data files, not in Java.** This reverses what an earlier
-draft of this document said in the out-of-scope section, and the reason is a workflow one
-rather than a technical one: it lets someone design the editor without writing engine code,
-and see the result without recompiling.
+**Decision: the editor's appearance and its panel arrangement both live in data files, not
+in Java.** This reverses what an earlier draft of this document said in the out-of-scope
+section. The reason is a workflow one rather than a technical one: it lets someone design
+the editor without writing engine code, and see the result without recompiling.
 
-### Two layers, not one
+### The split
 
-Styling is commonly treated as a single problem and it is really two, with very different
-costs.
+The governing rule is that **the editor declares what a thing is, never what it looks like
+or where it goes.**
 
-**Tokens** are named values — `accent`, `panelBg`, `radius.md`. A flat table, no selectors,
-no cascade. This covers most of what an editor needs, and parsing it is trivial.
+| Owned by the editor (code) | Owned by the shell package (data) |
+|---|---|
+| A panel named `hierarchy` exists and draws a tree | What a panel looks like |
+| A button is a button and reacts to clicks | Which panels are shown, and where |
+| Behaviour, state, interaction | Colours, radii, spacing, typography |
 
-**Rules** map selectors to declarations — *buttons inside a toolbar, when hovered, look like
-this*. This needs specificity, cascade and state tracking, and it is where a styling system
-turns into a large project.
+No line of editor code names a colour or a pixel position. A panel registers under a stable
+id and declares a semantic role; the package maps roles to appearance and ids to positions.
+This is the same cut as `<button class="primary">` against `.primary { … }`, and it is what
+makes the package genuinely detachable rather than just externalised constants.
 
-Only tokens are in scope now. Rules are deferred until L4 exists, because a selector needs a
-tree of identified nodes to match against, so the question cannot even be answered before
-then. Deferring costs nothing: the two layers compose rather than compete, and if the rule
-layer is later written in a CSS dialect, CSS's own `var()` maps onto tokens exactly.
+### Two files, read once
+
+The shell is two files, because they have different authors and change for different
+reasons:
+
+| File | Holds | Written by the program |
+|---|---|---|
+| `theme.json` | Appearance: colours, radii, spacing, typography | Never |
+| `layout.json` | Arrangement: which panels exist, where, at what size | On clean exit, if panels were moved |
+
+Split, they swap independently — one person's theme with another person's arrangement,
+without either file knowing about the other.
+
+**The program reads both once at startup and never writes at startup.** Everything after
+that works from what was parsed. When the user drags a divider or moves a panel, the change
+lives in memory and is written back to `layout.json` when the editor closes cleanly.
+
+A sudden shutdown loses the arrangement changes made in that session. That is accepted: the
+alternative is writing during the session, and occasionally redoing a panel arrangement costs
+less than a program that keeps rewriting its own configuration.
+
+No temporary copy is needed. With writes happening only on clean exit, the in-memory state
+already is the working copy, and a crash discards it either way.
+
+**Both are ordinary editable files, not resources inside a jar.** Editing the interface is
+meant to be open to anyone — that is the point of shipping it as data. The default shell is
+simply the pair of files that ships with the engine, and changing them is customisation, not
+tampering. They also cannot be jar resources for a practical reason: `layout.json` is written
+back, and a classpath resource is read-only.
 
 ### Format
 
 **JSON, parsed with Gson**, which the project already depends on and already uses for
 `.scene` and `.entity`. No grammar to write, no parser to maintain, and one less format for
 a contributor to learn. Gson's lenient mode accepts `//` comments, which a hand-maintained
-theme file needs and strict JSON does not have.
+file needs and strict JSON does not have.
+
+**`theme.json`**
 
 ```json
 {
-  "accent":      "#3B82F6",
-  "panelBg":     "#1F2328",
-  "panelBorder": "@accent",
-  "radius":      6,
-  "borderWidth": 1
+  "accent":       "#3B82F6",
+  "panel.bg":     "#1F2328",
+  "panel.border": "@accent",
+  "panel.radius": 6,
+  "text.body":    "#C9D1D9",
+  "spacing.md":   8
+}
+```
+
+**`layout.json`**
+
+```json
+{
+  "type": "row",
+  "children": [
+    { "panel": "hierarchy", "width": 240 },
+    { "panel": "viewport",  "grow": 1    },
+    { "panel": "inspector", "width": 300 }
+  ]
 }
 ```
 
 A value may reference another with `@name`, resolved once at load. Cycles are an error
 reported at parse time, not a hang.
+
+**Docking is not a separate system.** A dock arrangement is a layout tree whose dividers can
+be dragged, so the shell's `layout` feeds the same L3 solver as everything else rather than
+getting a parallel implementation.
+
+### Validation
+
+One rule decides every case: **a structural error refuses to start; a value error falls back
+to the default.** A structural error means nothing usable can be built from the file. A value
+error means the structure is fine and one property is wrong.
+
+| Situation | Kind | Outcome |
+|---|---|---|
+| File missing | structure | Refuse to start |
+| JSON does not parse | structure | Refuse to start |
+| `layout.json` does not form a tree — `"type": "diagonal"`, `children` not a list | structure | Refuse to start |
+| Invalid value — `"bleu"` for a colour | value | Default, with a warning |
+| Unknown property name — `panel.bgg` | value | Ignored, with a warning; the intended property falls to its default |
+| `@reference` to a name that does not exist | value | Default, with a warning |
+| `@reference` cycle | value | Default for every property in the cycle, with a warning |
+| Invalid size in the layout — `"width": -40` | value | Automatic sizing, with a warning |
+| `panel` id not registered in code | value | Slot skipped, with a warning; the rest still lays out |
+| Registered panel absent from `layout.json` | — | Not shown — how a minimal layout is authored |
+| Property omitted | — | Default, no warning — this is what allows a partial theme |
+
+An unregistered `panel` falls back rather than refusing so that renaming a panel in code does
+not stop the editor from starting for everyone with an older `layout.json`.
+
+Default values come from the property catalogue described under *Scope discipline* below:
+each supported property is declared with a name, a type and a default. That catalogue is not
+a second theme — it is the definition of what is themeable, and falling back reads from it.
+
+Fallbacks reintroduce the risk of a mistake nobody notices, so **the warning carries the
+weight**. It names the file, the line and what was expected —
+`theme.json:14: panel.bg — expected a colour like "#1F2328", got "bleu"; using default` —
+and validation collects every problem in one pass, so a file with three mistakes reports
+three at once. Warnings go to the log, and to the editor's own console once it exists.
 
 ### Resolution pipeline
 
@@ -367,8 +449,8 @@ Three stages, and which stage runs how often is the whole point:
 
 | Stage | Runs | Produces |
 |---|---|---|
-| **Parse** | on load and on file change | token table, names to values |
-| **Resolve** | when the tree or the tokens change | a baked `Style` struct per node |
+| **Parse** | on load and on file change | token table and layout description |
+| **Resolve** | when the tree or the tokens change | a baked `Style` struct per node, a built layout tree |
 | **Draw** | every frame | reads the baked struct |
 
 **A name is never looked up in the frame loop.** A widget holds an integer handle into the
@@ -378,18 +460,58 @@ slow.
 
 ### Scope discipline
 
-The supported property list is fixed and documented, the way Unity bounds USS. A token set
-is bounded by what `UIDrawList` can actually draw: today fill colour, border colour, border
+The supported property list is fixed and documented, the way Unity bounds USS. Each entry is
+a name, a type and a default value; the validator checks against it and fallbacks read from
+it. The token set is bounded by what `UIDrawList` can actually draw: today fill colour, border colour, border
 width and corner radius, with typography added when L2 lands. Shadows and gradients are not
-tokens until the shader can render them — a theme file that accepts properties the renderer
+tokens until the shader can render them — a file that accepts properties the renderer
 silently ignores is worse than one that rejects them.
 
 ### Hot reload
 
-`AssetWatcher` already runs an inotify daemon over the project's asset directory for texture
-reloading. Pointing it at the theme file is nearly free, and it is what makes this feature
-worth building: the change becomes visible in the running editor without a recompile or a
+Saving either shell file applies the change to the running editor without a recompile or a
 restart, so designing is a feedback loop rather than a build cycle.
+
+**This uses its own small watcher, not `AssetWatcher`.** `AssetWatcher` exists for the
+projects built with the engine — baking and reloading their assets — and the editor's
+interface is not one of those projects. Reusing it would tie two unrelated concerns to one
+daemon. The shell watcher lives in `:editor`, which is where the file locations are known,
+and runs on its own thread.
+
+It is deliberately small:
+
+- **Directory, not file.** Java's `WatchService` watches directories, so it watches the one
+  holding the shell and filters for `theme.json` and `layout.json`.
+- **Debounced.** Text editors often save by writing a temporary file and renaming it, which
+  produces several events for one save. Events within a short window collapse into one
+  reload.
+- **It never touches interface state.** The watcher thread only raises a flag. The main loop
+  checks it at the start of a frame and does the reload there, on the thread that owns the
+  interface — the same discipline `PhysicsThread` follows with its sync lock.
+
+Two rules keep it from fighting the program's own writes:
+
+- An external edit to `layout.json` **replaces** the in-memory arrangement: the file on disk
+  is the truth, and panel moves not yet written at exit are discarded.
+- The watcher **stops before** the exit write-back, so the program never reloads the file it
+  is in the middle of writing.
+
+Reloading follows the same rule as startup with one difference: a structural error cannot
+refuse to start an editor that is already open, so it keeps the last valid shell on screen
+and reports the error. Value errors fall back to defaults exactly as at startup.
+
+### Open: where the files live
+
+They must be ordinary files on disk. Whether that means beside the engine install (one shell
+for every project), inside each project (a per-project editor look) or in the user's config
+directory (one per person) is not decided yet.
+
+### Where the cost lands
+
+Addressing panels by id from data requires every panel to be a registration rather than a
+hardcoded call. That is not extra work bolted on: it is how panels have to be written anyway
+as they move to the framework in Phase 4. The arrangement half of this feature is largely
+absorbed by migration work already planned.
 
 ---
 
@@ -522,7 +644,11 @@ nobody can review.
 | **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
-| **3f** | A JSON theme file drives the colours, and editing it reloads live | §7 |
+| **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and saving it reloads live | §7 |
+
+The arrangement half of the shell package — panels placed from data rather than from code —
+lands in Phase 4 instead, because it needs panels that register by id, which is what
+migrating them produces.
 
 Step 3a is the real start of the mountain. Everything before it in this document is the 10%
 the effort table in §2 assigns to the draw list and GPU backend.
@@ -530,6 +656,12 @@ the effort table in §2 assigns to the draw list and GPU backend.
 **Phase 4 — Panel-by-panel migration.** ImGui and the new framework coexist, both rendering
 through the same backend. Panels move one at a time. Order: stats and physics debug panels
 (read-only, trivial) → menu bar → inspector → hierarchy → asset browser → viewport docking.
+
+Each panel arrives as a **registration under a stable id** rather than a hardcoded call, so
+the shell package's `layout` can place it. That is the arrangement half of §7, and it costs
+almost nothing extra here because a panel being migrated has to be rewritten anyway. The
+phase ends when the shipped `layout.json` places every panel, with no arrangement left in
+code.
 
 **Phase 5 — Remove Dear ImGui.** Drop the three `io.github.spair` dependencies and the JNI
 boundary with them.
