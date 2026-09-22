@@ -1,9 +1,65 @@
 # AEngine UI Framework — Architecture & Migration Plan
 
-**Status:** Design agreed. Phase 0 complete — the Tauri/WebKit frontend and its IPC bridge
-have been removed; the engine now runs as a single process with Dear ImGui as the
-transitional editor layer.
+**Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
+atlas) is done. Dear ImGui remains the transitional editor layer, with the in-house
+framework drawing test scaffolding on top of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
+
+### Where we stopped
+
+| Done | What exists now |
+|---|---|
+| Phase 0 | Tauri frontend and IPC bridge removed; the editor is a single process |
+| Phase 1 | First light: draw list → dynamic mesh → SDF shader → screen |
+| Phase 2 | Command list, clip stack, textured quads, borders — L1 is complete |
+| Vertex packing | Colours packed as RGBA8; the vertex went from 21 floats to 13 words |
+| Step 3a | Printable ASCII drawn from a baked stb_truetype atlas; DejaVu Sans as placeholder |
+
+### The plan ahead
+
+Each step is done one at a time, and each ends with something visible on screen, so it can
+be checked before the next begins.
+
+**Step 3b — text that reads like text** (L2). Five parts, in order:
+
+| # | Part | What it delivers | Visible check |
+|---|---|---|---|
+| 1 | Latin-1 coverage | Bake characters 32–255 instead of 32–126, so `á ç ã é õ` have glyphs | The test line shows `Olá, ação!` instead of `Ol?, a??o!` |
+| 2 | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
+| 3 | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
+| 4 | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
+| 5 | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — checked by allocation profiling instead |
+
+**Step 3c — layout** (L3). Rows and columns that size their children with grow, gap and
+padding. *Visible:* a row of boxes that redistributes itself when the window is resized.
+
+**Step 3d — retained tree** (L4). Nodes that persist across frames, hit-testing, focus
+order. *Visible:* a box highlighting under the mouse.
+
+**Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
+*Visible:* each one reacting to input.
+
+**Step 3f — theme file.** `theme.json` drives the colours over the property catalogue,
+with validation and live reload (§7). *Visible:* editing a colour in the file changes the
+running editor.
+
+**Step 3g — localisation.** Editor text comes from locale files instead of code (§8).
+*Visible:* switching the language changes every label.
+
+**Then Phase 4** migrates the real editor panels one at a time, and **Phase 5** deletes Dear
+ImGui. Both are described in §11.
+
+### Open decisions
+
+None of these blocks step 3b.
+
+- **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
+- **Where the shell and locale files live** — beside the install, per project, or per user.
+- **Instancing** — deferred until step 3b-4 puts real paragraphs on screen, so the vertex
+  upload can be measured instead of estimated.
+- **Localisation** — the questions listed at the end of §8.
+- **Project licence** — GPL v3 is the likely choice, not yet confirmed. The bundled fonts'
+  licences (OFL, Bitstream Vera) are compatible with it.
 
 ---
 
@@ -153,7 +209,7 @@ Merging two repositories back together is not.
 **Decision: Java, in-process with the engine.** Not C++ behind a native boundary.
 
 The reasoning is not that Java is adequate — it is that C++ reintroduces the exact defect
-this project it is trying to remove.
+this project exists to remove.
 
 ### The defect is the boundary, not the technology
 
@@ -193,7 +249,7 @@ gained by writing the layers above it in the same language as the layers below.
 
 ### The GC argument is weaker than it appears
 
-C++ offers true zero-GC. But the requirement in §7 is not zero GC, it is **zero allocation
+C++ offers true zero-GC. But the requirement in §9 is not zero GC, it is **zero allocation
 in the frame loop** — and the discipline that achieves it is identical in both languages.
 Nobody calls `malloc` per frame in C++ either.
 
@@ -278,9 +334,9 @@ ImGui, and it is also the cheapest layer to build.
 
 Staged deliberately, because this is where projects of this kind stall.
 
-- **Stage 1 — `stb_truetype`.** Already on the classpath via `lwjgl-stb`, already used by
-  `AssetBaker`. Bitmap atlas, ASCII plus Latin-1, no shaping. Good enough to build every
-  other layer against.
+- **Stage 1 — `stb_truetype`.** Bitmap atlas at one baked size, no kerning, no shaping.
+  Good enough to build every other layer against. *Implemented in step 3a* as `UIFont`,
+  covering printable ASCII; Latin-1 is the first item of step 3b.
 - **Stage 2 — MSDF atlas.** Multi-channel signed distance fields for crisp glyphs at any
   scale, which matters for editor zoom and high-DPI displays.
 - **Stage 3 — FreeType + HarfBuzz via the FFM API.** Proper shaping, kerning, and complex
@@ -455,7 +511,7 @@ Three stages, and which stage runs how often is the whole point:
 
 **A name is never looked up in the frame loop.** A widget holds an integer handle into the
 resolved style table; drawing indexes an array. String hashing per widget per frame would
-violate §8 on its own, and it is the mistake that makes most data-driven styling systems
+violate §9 on its own, and it is the mistake that makes most data-driven styling systems
 slow.
 
 ### Scope discipline
@@ -515,7 +571,114 @@ absorbed by migration work already planned.
 
 ---
 
-## 8. Zero-allocation rules
+## 8. Localisation
+
+**Decision: every piece of editor text comes from a locale file, never from code.** It is
+the rule of §7 applied to words: the editor declares what a label *means*, and a file
+supplies the words for it. The engine is not only for its author, so the editor must be
+usable in other languages.
+
+### What the files are
+
+A locale is identified by a language and a region — `en_US`, `pt_BR`, `pt_PT`, `de_DE`,
+`ja_JP` — the language as an ISO 639 code and the region as an ISO 3166 code. The region
+matters because one language varies between countries.
+
+Each locale is one JSON file mapping keys to text:
+
+**`en_US.json`**
+
+```json
+{
+  "menu.file":          "File",
+  "menu.file.save":     "Save scene",
+  "inspector.entities": "{count} entities"
+}
+```
+
+**`pt_BR.json`**
+
+```json
+{
+  "menu.file":          "Arquivo",
+  "menu.file.save":     "Salvar cena",
+  "inspector.entities": "{count} entidades"
+}
+```
+
+Editor code refers to `menu.file`, never to `"File"`. `{count}` is a placeholder filled in at
+display time.
+
+**`en_US` is the reference locale.** It must contain every key, and it is the catalogue of
+what can be translated — the same role the property catalogue plays in §7.
+
+### Choosing the language
+
+1. The language chosen in the editor's settings, if there is one.
+2. Otherwise the operating system's language, which Java reports through
+   `Locale.getDefault()`.
+3. For each key, a fallback chain: the exact locale (`pt_BR`), then the language alone
+   (`pt`), then `en_US`. A missing Portuguese translation shows English, not a blank.
+4. A key missing even from `en_US` shows the key itself — `menu.file.save` — so the gap is
+   visible instead of silent, consistent with §7.
+
+### Validation
+
+The same structure-or-value rule as §7:
+
+| Situation | Outcome |
+|---|---|
+| `en_US.json` missing or does not parse | Refuse to start — it is the reference |
+| A translation file missing or does not parse | That locale is unavailable, with a warning; English is used |
+| A key missing from a translation | Falls through the chain, with a warning |
+| A placeholder missing from a translation — `{count}` dropped | The translation is used as is, with a warning |
+
+### Allocation
+
+Text is looked up when the interface is resolved, not every frame. A label holds a handle to
+its resolved string, the way a widget holds a style handle; switching language resolves
+everything once. Placeholders are filled into a reused `StringBuilder`, which is why
+`addText` takes a `CharSequence`.
+
+The mechanism — loading, fallback, placeholders — lives in `:ui`, since it is not specific to
+this editor. The locale files themselves are editor data.
+
+### What translation demands from the text stack
+
+This is where localisation stops being a data problem, because every language needs its
+glyphs in the atlas:
+
+| Languages | Script | Cost |
+|---|---|---|
+| English | ASCII | Done in step 3a |
+| Portuguese, Spanish, French, German, Italian | Latin-1 | Cheap — step 3b-1 |
+| Polish, Czech, Turkish, Vietnamese | Latin Extended | Cheap, a larger atlas |
+| Russian, Ukrainian, Greek | Cyrillic, Greek | Cheap, a larger atlas |
+| Chinese, Japanese, Korean | Thousands of glyphs | The atlas can no longer be baked up front: glyphs must be rasterised on demand into an atlas that grows |
+| Arabic, Hebrew | Right-to-left, with shaping | Needs HarfBuzz — stage 3 of the text stack in §6 |
+
+So **the set of supported languages decides how far the text stack has to go.** Latin,
+Greek and Cyrillic scripts are close to free once step 3b is done. East Asian scripts change
+how the atlas works. Right-to-left scripts need shaping.
+
+Fonts follow the same line. DejaVu Sans covers Latin, Greek and Cyrillic but not Chinese,
+Japanese or Korean, which would need a fallback font behind the main one.
+
+### Open questions
+
+- **Which languages ship first.** Suggested: `en_US` and `pt_BR`.
+- **Which scripts to plan for.** Latin only for now, or East Asian and right-to-left as
+  well — this decides the atlas design, so it is worth settling before step 3b-2.
+- **Where the locale files live** — the same open question as the shell files in §7.
+- **Plurals.** "1 entity" and "2 entities" differ, and languages disagree on how many forms
+  exist — Russian has three, Japanese has none. Simple placeholders now; proper plural rules
+  later, if needed.
+- **What gets translated.** Suggested: the editor interface only. Log messages stay in
+  English, so they can be searched and pasted into bug reports by anyone.
+
+---
+
+## 9. Zero-allocation rules
 
 These are binding constraints on `aengine-ui`, not aspirations.
 
@@ -545,18 +708,23 @@ These are binding constraints on `aengine-ui`, not aspirations.
 
 ---
 
-## 9. Required changes in `aengine-core`
+## 10. Required changes in `aengine-core`
 
-Known cross-boundary work, to be done before or alongside L1.
+Known cross-boundary work. All of it is additive: nothing existing callers use was changed.
 
-**`RendererAPI`** — the current surface is insufficient for a UI draw list:
+**Done:**
 
-```java
-void drawBatch(float[] vertices, int vertexCount, int indexCount);   // today
-```
+- **`RendererAPI`** gained render state — `setDepthTest`, `setBlend`, `setScissor`,
+  `disableScissor`, `setRenderTargetSize`, `bindTexture`. Scissor takes top-left
+  coordinates and each backend converts, so a Vulkan backend needs no change in `:ui`.
+- **`DynamicMeshAPI`**, a vertex and index buffer rewritten every frame from off-heap
+  staging, described by a `VertexAttribute` layout (`FLOAT1`–`FLOAT4`, `RGBA8`).
+- **`RenderContext.createTexture` from memory**, with `TextureFormat` (`R8`, `RGBA8`), for
+  textures the engine generates itself such as the glyph atlas. A separate class from the
+  asset-streaming `OpenGLTexture`, which is untouched.
+- **`drawBatch`** no longer allocates a fresh array per call.
 
-It needs scissor rectangles, explicit blend state, and per-command texture binding. The
-cleanest shape is a command-list submission rather than more parameters on `drawBatch`.
+**Still to do:**
 
 **`Input`** — poll-based today (`isKeyPressed`, `getMouseX`, `getMouseDeltaX`). UI requires
 an **edge-triggered event queue**: character input (not key codes), scroll deltas, button
@@ -568,7 +736,7 @@ access. All three are GLFW calls already available through the existing handle.
 
 ---
 
-## 10. Migration path
+## 11. Migration path
 
 Sequenced so that **the editor never stops working**. The failure mode to avoid is stopping
 the engine for six months to write a framework on a branch.
@@ -605,21 +773,13 @@ The honest summary: Phase 0 was a simplification, not a speedup.
 Also removed: a `String.format` on **every** `Logger` call, which built a de-ANSI'd payload
 for the telemetry queue regardless of whether a client was connected.
 
-**Phase 1 — Custom render backend for Dear ImGui.** Replace `ImGuiImplGl3` with an
-AEngine-owned backend consuming `ImDrawData` through the existing `RendererAPI`, with the
-SDF shader and MSDF atlas from L1 and L2.
+**Phase 1 — First light. ✅ Done.** The original plan was a custom render backend for Dear
+ImGui, reusing its draw lists as a test bench for the new renderer. That detour was skipped:
+`UIDrawList` and `UIRenderer` were built directly, and the phase ended with one rounded
+rectangle drawn through draw list, dynamic mesh and SDF shader, composited over ImGui.
 
-This phase is the leverage point. It delivers most of the visual improvement for a small
-fraction of the total effort, and it builds and validates exactly the layers the framework
-needs — while the editor stays fully functional throughout.
-
-**Phase 2 — Complete L1.** *Revised.* The original plan routed through a custom Dear ImGui
-backend in Phase 1 and extracted the draw list from it here. That detour was skipped:
-Phase 1 built `UIDrawList` and `UIRenderer` directly, so there is no ImGui backend to
-extract from and L1 already stands alone.
-
-What remains is to finish it. Phase 1 draws one shape type in a single draw call, which is
-enough to prove the pipeline and not enough to build an editor on:
+**Phase 2 — Complete L1. ✅ Done.** Phase 1 drew one shape type in a single draw call —
+enough to prove the pipeline, not enough to build an editor on. Phase 2 added:
 
 1. **A command list.** `UIRenderer` issues one draw for the whole frame. A real draw list
    emits a sequence of `(clip rect, texture, index offset, index count)`, which is what lets
@@ -628,8 +788,12 @@ enough to prove the pipeline and not enough to build an editor on:
    thousand rows and lets the hardware discard the ones outside the panel.
 3. **Textured quads.** Required before L2, since text is exactly that: quads sampling a
    glyph atlas.
+4. **Borders**, drawn by reading the same distance field twice rather than with extra
+   geometry, so a 1px border stays exact at any corner radius.
 
-These three also give `setScissor`, `disableScissor` and `bindTexture` their first callers.
+Together these gave `setScissor`, `disableScissor` and `bindTexture` their first callers.
+The vertex was then cut from 21 floats to 13 words by packing both colours as RGBA8,
+before text multiplied the vertex count.
 
 **Phase 3 — L2/L3/L4.** Text, layout, widget tree, in that order. This phase is around
 **70% of the whole project** — the numbering in this list is not a measure of size, and
@@ -639,12 +803,15 @@ nobody can review.
 
 | Step | Ends when | Layer |
 |---|---|---|
-| **3a** | A string of ASCII renders from a glyph atlas | L2 |
-| **3b** | Metrics, kerning and wrapping work; layout results are cached by content hash | L2 |
+| **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
+| **3b** | Latin-1, metrics, kerning and wrapping work; laid-out text is cached | L2 |
 | **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
 | **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and saving it reloads live | §7 |
+| **3g** | Editor text comes from locale files, following the system language by default | §8 |
+
+The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
 
 The arrangement half of the shell package — panels placed from data rather than from code —
 lands in Phase 4 instead, because it needs panels that register by id, which is what
@@ -675,7 +842,7 @@ individually shippable.
 
 ---
 
-## 11. Out of scope
+## 12. Out of scope
 
 Stated so they are not rediscovered as surprises:
 
