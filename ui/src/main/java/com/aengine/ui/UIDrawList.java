@@ -54,6 +54,13 @@ public final class UIDrawList {
     /** Samples the bound texture as RGBA, multiplied by the vertex colour. */
     public static final float MODE_TEXTURE = 1.0f;
 
+    /**
+     * Samples the red channel of a one-channel glyph atlas as coverage, tinted by the vertex
+     * colour. Separate from {@link #MODE_TEXTURE} because the atlas holds coverage, not
+     * colour: sampled as RGBA it would come out red on black.
+     */
+    public static final float MODE_TEXT = 2.0f;
+
     private static final int VERTICES_PER_QUAD = 4;
     private static final int INDICES_PER_QUAD  = 6;
 
@@ -103,6 +110,9 @@ public final class UIDrawList {
 
     private final float[] clipStack;      // x, y, w, h per level
     private int clipDepth = 0;
+
+    /** One glyph's quad, written by {@link UIFont#placeGlyph} and reused for every glyph. */
+    private final float[] glyphQuad = new float[8];
 
     public UIDrawList(int maxQuads) {
         this.maxQuads = maxQuads;
@@ -346,20 +356,71 @@ public final class UIDrawList {
 
         if (vertexCount / VERTICES_PER_QUAD >= maxQuads) return;
 
+        useTexture(textureHandle);
+        pushSampledQuad(x, y, x + width, y + height, u0, v0, u1, v1,
+                        packColor(r, g, b, a), MODE_TEXTURE);
+    }
+
+    /**
+     * Submits a line of text with its baseline at {@code baseline}.
+     *
+     * <p>The baseline rather than the top, because a font's glyphs hang from it: capitals
+     * sit on it, descenders like {@code g} and {@code p} drop below. Positioning by the top
+     * needs the font's ascent, which arrives with the metrics in step 3b.</p>
+     *
+     * <p>Takes a {@link CharSequence} so callers can pass a reused {@code StringBuilder}
+     * instead of building a {@code String} per frame. One quad per character, all in the
+     * font's atlas, so a line of text is one command unless a clip or texture change
+     * interrupts it.</p>
+     *
+     * <p>Stage 1 limits: printable ASCII only, no kerning, no wrapping, the font's single
+     * baked size. A character without a glyph is drawn as {@code ?}.</p>
+     *
+     * @return the pen position after the last character — the right edge of the line
+     */
+    public float addText(UIFont font, float x, float baseline, CharSequence text,
+                         float r, float g, float b, float a) {
+
+        useTexture(font.atlasHandle());
+        int tint = packColor(r, g, b, a);
+
+        float pen = x;
+        for (int i = 0; i < text.length(); i++) {
+            if (vertexCount / VERTICES_PER_QUAD >= maxQuads) break;
+
+            char c = text.charAt(i);
+            float next = font.placeGlyph(c, pen, baseline, glyphQuad);
+
+            // A space advances the pen but has no visible pixels, so it gets no quad.
+            if (c != ' ') {
+                pushSampledQuad(glyphQuad[0], glyphQuad[1], glyphQuad[2], glyphQuad[3],
+                                glyphQuad[4], glyphQuad[5], glyphQuad[6], glyphQuad[7],
+                                tint, MODE_TEXT);
+            }
+            pen = next;
+        }
+        return pen;
+    }
+
+    /** Switches the texture the next shapes sample from, closing the command if it changes. */
+    private void useTexture(int textureHandle) {
         if (textureHandle != currentTexture) {
             flushCommand();
             currentTexture = textureHandle;
         }
+    }
 
-        int tint = packColor(r, g, b, a);
-
+    /** One axis-aligned quad sampling the current texture. No distance field. */
+    private void pushSampledQuad(float x0, float y0, float x1, float y1,
+                                 float u0, float v0, float u1, float v1,
+                                 int tint, float mode) {
         int base = vertexCount;
 
-        // Distance-field parameters are unused in this mode; zero keeps them harmless.
-        pushVertex(x,         y,          0, 0, 0, 0, 0, tint, u0, v0, MODE_TEXTURE, 0, 0);
-        pushVertex(x + width, y,          0, 0, 0, 0, 0, tint, u1, v0, MODE_TEXTURE, 0, 0);
-        pushVertex(x + width, y + height, 0, 0, 0, 0, 0, tint, u1, v1, MODE_TEXTURE, 0, 0);
-        pushVertex(x,         y + height, 0, 0, 0, 0, 0, tint, u0, v1, MODE_TEXTURE, 0, 0);
+        // Distance-field parameters are unused in these modes; zero keeps them harmless.
+        pushVertex(x0, y0, 0, 0, 0, 0, 0, tint, u0, v0, mode, 0, 0);
+        pushVertex(x1, y0, 0, 0, 0, 0, 0, tint, u1, v0, mode, 0, 0);
+        pushVertex(x1, y1, 0, 0, 0, 0, 0, tint, u1, v1, mode, 0, 0);
+        pushVertex(x0, y1, 0, 0, 0, 0, 0, tint, u0, v1, mode, 0, 0);
 
         indices[indexCount++] = base + 0;
         indices[indexCount++] = base + 1;

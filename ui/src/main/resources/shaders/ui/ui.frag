@@ -35,6 +35,17 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 }
 
 void main() {
+    if (v_Mode > 1.5) {
+        // Text: the atlas holds coverage in its single channel, not colour. The vertex
+        // colour supplies the colour and the sample scales its alpha — so one atlas draws
+        // text in any colour.
+        float coverage = texture(u_Texture, v_TexCoord).r;
+        float alpha    = v_Color.a * coverage;
+        if (alpha <= 0.0) discard;
+        FragColor = vec4(v_Color.rgb, alpha);
+        return;
+    }
+
     if (v_Mode > 0.5) {
         // Textured: the quad is the shape, the sample is tinted by the vertex colour.
         vec4 sampled = texture(u_Texture, v_TexCoord);

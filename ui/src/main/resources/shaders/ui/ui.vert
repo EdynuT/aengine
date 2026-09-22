@@ -9,7 +9,7 @@ layout (location = 2) in vec2  a_HalfSize;   // shape half-extents, pixels
 layout (location = 3) in float a_Radius;     // corner radius, pixels
 layout (location = 4) in vec4  a_Color;
 layout (location = 5) in vec2  a_TexCoord;
-layout (location = 6) in float a_Mode;       // 0 = distance field, 1 = texture
+layout (location = 6) in float a_Mode;       // 0 = distance field, 1 = texture, 2 = text
 layout (location = 7) in vec4  a_BorderColor;
 layout (location = 8) in float a_BorderWidth; // pixels, measured inward; 0 = no border
 

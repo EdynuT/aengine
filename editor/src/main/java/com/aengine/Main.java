@@ -66,6 +66,7 @@ public class Main extends Engine {
     // -------------------------------------------------------------------------------------
     private com.aengine.ui.UIRenderer uiRenderer;
     private com.aengine.ui.UIDrawList uiDrawList;
+    private com.aengine.ui.UIFont     uiFont;
 
     /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
     private int sceneTextureID = 0;
@@ -145,6 +146,8 @@ public class Main extends Engine {
         // SCAFFOLDING — see the field declarations.
         uiRenderer = new com.aengine.ui.UIRenderer(256);
         uiDrawList = new com.aengine.ui.UIDrawList(256);
+        // 18px printable ASCII fills 35 rows, so 64 is enough; 512 left 93% of the texture empty.
+        uiFont     = new com.aengine.ui.UIFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 64);
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
@@ -337,6 +340,7 @@ public class Main extends Engine {
         Renderer2D.cleanup();
         AudioDevice.cleanup();
 
+        if (uiFont     != null) uiFont.cleanup();
         if (uiRenderer != null) uiRenderer.cleanup();
     }
 
@@ -400,6 +404,26 @@ public class Main extends Engine {
                 0.45f, 0.75f, 1.0f, 1.0f);
             uiDrawList.popClipRect();
         }
+
+        // Text. Arguments give the baseline, which the glyphs hang from.
+        uiDrawList.addText(uiFont, 380.0f, 110.0f,
+            "AEngine - first text through the in-house UI",
+            1.0f, 1.0f, 1.0f, 1.0f);
+
+        // Same atlas, another colour: the atlas holds coverage, the vertex holds colour.
+        uiDrawList.addText(uiFont, 380.0f, 140.0f,
+            "The quick brown fox jumps over the lazy dog 0123456789",
+            0.45f, 0.70f, 1.0f, 1.0f);
+
+        // Text composed over a shape, the way every widget will draw.
+        uiDrawList.addRoundedRect(380.0f, 160.0f, 220.0f, 36.0f, 8.0f,
+            0.16f, 0.18f, 0.23f, 1.0f,
+            0.38f, 0.42f, 0.52f, 1.0f, 1.0f);
+        uiDrawList.addText(uiFont, 394.0f, 184.0f, "Button label", 0.90f, 0.92f, 0.95f, 1.0f);
+
+        // Stage 1 limit, on purpose: no glyphs outside ASCII, so accents draw as '?'.
+        uiDrawList.addText(uiFont, 380.0f, 230.0f, "Ola, acao! -> Olá, ação!",
+            0.95f, 0.60f, 0.30f, 1.0f);
 
         uiDrawList.end();
         uiRenderer.render(uiDrawList, w, h);

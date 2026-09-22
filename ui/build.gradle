@@ -12,9 +12,9 @@
 // `import com.aengine.ecs.Registry` would compile fine. The checkBoundary task below is
 // what actually enforces it, and it runs as part of compileJava.
 //
-// Currently empty — Phase 2 (UIDrawList) is the first code to land here. The native text
-// stack (lwjgl-freetype / harfbuzz / msdfgen, all published for 3.3.4) is added in Phase 3
-// when L2 starts, not before.
+// Text starts on stb_truetype, the first stage of the text stack in §6 of the design
+// document. FreeType, HarfBuzz and msdfgen (all published for LWJGL 3.3.4) come later, when
+// shaping and scale-independent glyphs are needed, not before.
 
 plugins {
     id 'maven-publish'
@@ -25,6 +25,10 @@ dependencies {
 
     implementation "org.lwjgl:lwjgl:${lwjglVersion}"
     implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+
+    // Glyph atlas baking. The natives arrive at runtime through :core, which already
+    // depends on them for image decoding.
+    implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 }
 
 // ---------------------------------------------------------------------------------------
