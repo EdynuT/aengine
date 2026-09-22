@@ -32,6 +32,13 @@ subprojects {
         archivesName = "aengine-${project.name}"
     }
 
+    // Sources hold accented characters now that text covers Latin-1. Without this, javac
+    // uses the platform charset, so the same file compiles differently on a machine whose
+    // default is not UTF-8 — a build that mangles 'ç' rather than failing.
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+
     ext {
         lwjglVersion = '3.3.4'
         jomlVersion  = '1.10.5'
@@ -41,9 +48,6 @@ subprojects {
         if (osName.contains('win')) {
             lwjglNatives = 'natives-windows'
             imguiNatives = 'windows'
-        } else if (osName.contains('mac')) {
-            lwjglNatives = 'natives-macos'
-            imguiNatives = 'macos'
         } else {
             lwjglNatives = 'natives-linux'
             imguiNatives = 'linux'

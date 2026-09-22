@@ -144,10 +144,13 @@ public class Main extends Engine {
         Renderer3D.init();
 
         // SCAFFOLDING — see the field declarations.
-        uiRenderer = new com.aengine.ui.UIRenderer(256);
-        uiDrawList = new com.aengine.ui.UIDrawList(256);
-        // 18px printable ASCII fills 35 rows, so 64 is enough; 512 left 93% of the texture empty.
-        uiFont     = new com.aengine.ui.UIFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 64);
+        // One quad per visible character, so the scaffolding's six lines of text dominate
+        // the budget; 256 truncated them silently.
+        uiRenderer = new com.aengine.ui.UIRenderer(512);
+        uiDrawList = new com.aengine.ui.UIDrawList(512);
+        // 18px Latin-1 is 224 glyphs against ASCII's 95: it needs 86 rows, so the previous
+        // 64 no longer fits and baking would refuse. 128 leaves room for a larger size later.
+        uiFont     = new com.aengine.ui.UIFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
@@ -421,9 +424,15 @@ public class Main extends Engine {
             0.38f, 0.42f, 0.52f, 1.0f, 1.0f);
         uiDrawList.addText(uiFont, 394.0f, 184.0f, "Button label", 0.90f, 0.92f, 0.95f, 1.0f);
 
-        // Stage 1 limit, on purpose: no glyphs outside ASCII, so accents draw as '?'.
-        uiDrawList.addText(uiFont, 380.0f, 230.0f, "Ola, acao! -> Olá, ação!",
+        // Step 3b-1: the Latin-1 supplement is baked, so these read as written instead of
+        // as '?'. The last line is outside Latin-1 and still falls back, which is the
+        // boundary being checked rather than a defect.
+        uiDrawList.addText(uiFont, 380.0f, 230.0f, "Olá, ação! Português, español, français",
             0.95f, 0.60f, 0.30f, 1.0f);
+        uiDrawList.addText(uiFont, 380.0f, 256.0f, "Grüße, Ångström, ¿cómo?, ½ £ © ÷ ×",
+            0.95f, 0.60f, 0.30f, 1.0f);
+        uiDrawList.addText(uiFont, 380.0f, 282.0f, "Beyond Latin-1: Привет 日本語 -> ?",
+            0.60f, 0.62f, 0.68f, 1.0f);
 
         uiDrawList.end();
         uiRenderer.render(uiDrawList, w, h);

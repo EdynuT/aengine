@@ -16,7 +16,7 @@ import static org.lwjgl.stb.STBTruetype.stbtt_BakeFontBitmap;
 /**
  * A TrueType font baked into a glyph atlas at one fixed size.
  *
- * <p>This is stage 1 of the text stack in §6 of the design document: stb_truetype, ASCII
+ * <p>This is stage 1 of the text stack in §6 of the design document: stb_truetype, Latin-1
  * only, no kerning, one pixel size per font. It exists so every other layer has real text to
  * be built against. Kerning, wrapping and scale-independent glyphs come in later stages and
  * replace what is here rather than extending it.</p>
@@ -31,8 +31,20 @@ public final class UIFont {
     /** First character baked: the space. */
     public static final int FIRST_CHAR = 32;
 
-    /** Characters 32 to 126 — printable ASCII. */
-    public static final int CHAR_COUNT = 95;
+    /** Last character baked: {@code ÿ}, the end of Latin-1. */
+    public static final int LAST_CHAR = 255;
+
+    /**
+     * Characters 32 to 255 — printable ASCII plus the Latin-1 supplement, which covers
+     * Portuguese, Spanish, French, German and Italian. Baked as one contiguous range
+     * because stb bakes ranges, and the 33 unassigned control codes inside it cost a few
+     * empty atlas cells rather than a second range to manage.
+     */
+    public static final int CHAR_COUNT = LAST_CHAR - FIRST_CHAR + 1;
+
+    /** First and last of the C1 control codes, which sit inside the range but have no glyph. */
+    private static final int CONTROLS_FIRST = 0x7F; // DEL
+    private static final int CONTROLS_LAST  = 0x9F;
 
     /**
      * Drawn in place of any character without a glyph. A visible substitute rather than
@@ -126,8 +138,11 @@ public final class UIFont {
      * @return the pen position after this character
      */
     float placeGlyph(char c, float penX, float baseline, float[] out) {
-        int index = c - FIRST_CHAR;
-        if (index < 0 || index >= CHAR_COUNT) index = REPLACEMENT - FIRST_CHAR;
+        // Outside Latin-1, or one of the control codes inside it: both baked to nothing, and
+        // a character the font cannot show should read as missing rather than as a blank.
+        int index = (c < FIRST_CHAR || c > LAST_CHAR || (c >= CONTROLS_FIRST && c <= CONTROLS_LAST))
+                  ? REPLACEMENT - FIRST_CHAR
+                  : c - FIRST_CHAR;
 
         int m = index * STRIDE;
         float gx0 = metrics[m],     gy0 = metrics[m + 1];

@@ -373,8 +373,8 @@ public final class UIDrawList {
      * font's atlas, so a line of text is one command unless a clip or texture change
      * interrupts it.</p>
      *
-     * <p>Stage 1 limits: printable ASCII only, no kerning, no wrapping, the font's single
-     * baked size. A character without a glyph is drawn as {@code ?}.</p>
+     * <p>Stage 1 limits: Latin-1 only, no kerning, no wrapping, the font's single baked
+     * size. A character without a glyph is drawn as {@code ?}.</p>
      *
      * @return the pen position after the last character — the right edge of the line
      */

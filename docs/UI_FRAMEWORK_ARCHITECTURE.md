@@ -1,8 +1,9 @@
 # AEngine UI Framework — Architecture & Migration Plan
 
 **Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
-atlas) is done. Dear ImGui remains the transitional editor layer, with the in-house
-framework drawing test scaffolding on top of it.
+atlas) is done, and step 3b is under way — part 1 (Latin-1) has landed. Dear ImGui remains
+the transitional editor layer, with the in-house framework drawing test scaffolding on top
+of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
 
 ### Where we stopped
@@ -14,6 +15,7 @@ framework drawing test scaffolding on top of it.
 | Phase 2 | Command list, clip stack, textured quads, borders — L1 is complete |
 | Vertex packing | Colours packed as RGBA8; the vertex went from 21 floats to 13 words |
 | Step 3a | Printable ASCII drawn from a baked stb_truetype atlas; DejaVu Sans as placeholder |
+| Step 3b-1 | The atlas covers Latin-1, so Portuguese, Spanish, French, German and Italian read correctly |
 
 ### The plan ahead
 
@@ -24,7 +26,7 @@ be checked before the next begins.
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
-| 1 | Latin-1 coverage | Bake characters 32–255 instead of 32–126, so `á ç ã é õ` have glyphs | The test line shows `Olá, ação!` instead of `Ol?, a??o!` |
+| 1 ✅ | Latin-1 coverage | Bake characters 32–255 instead of 32–126, so `á ç ã é õ` have glyphs | The test line shows `Olá, ação!` instead of `Ol?, a??o!` |
 | 2 | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
 | 3 | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
 | 4 | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
@@ -336,7 +338,10 @@ Staged deliberately, because this is where projects of this kind stall.
 
 - **Stage 1 — `stb_truetype`.** Bitmap atlas at one baked size, no kerning, no shaping.
   Good enough to build every other layer against. *Implemented in step 3a* as `UIFont`,
-  covering printable ASCII; Latin-1 is the first item of step 3b.
+  extended to Latin-1 in step 3b-1. The range is baked contiguously, control codes and
+  all, because stb bakes ranges: skipping the 33 unassigned codes inside it would cost a
+  second range to manage in exchange for a few empty atlas cells. `placeGlyph` maps them
+  to the replacement character so they read as missing rather than as a blank.
 - **Stage 2 — MSDF atlas.** Multi-channel signed distance fields for crisp glyphs at any
   scale, which matters for editor zoom and high-DPI displays.
 - **Stage 3 — FreeType + HarfBuzz via the FFM API.** Proper shaping, kerning, and complex
@@ -651,7 +656,7 @@ glyphs in the atlas:
 | Languages | Script | Cost |
 |---|---|---|
 | English | ASCII | Done in step 3a |
-| Portuguese, Spanish, French, German, Italian | Latin-1 | Cheap — step 3b-1 |
+| Portuguese, Spanish, French, German, Italian | Latin-1 | Done in step 3b-1 |
 | Polish, Czech, Turkish, Vietnamese | Latin Extended | Cheap, a larger atlas |
 | Russian, Ukrainian, Greek | Cyrillic, Greek | Cheap, a larger atlas |
 | Chinese, Japanese, Korean | Thousands of glyphs | The atlas can no longer be baked up front: glyphs must be rasterised on demand into an atlas that grows |
@@ -804,7 +809,7 @@ nobody can review.
 | Step | Ends when | Layer |
 |---|---|---|
 | **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
-| **3b** | Latin-1, metrics, kerning and wrapping work; laid-out text is cached | L2 |
+| **3b** | Latin-1 ✅, then metrics, kerning and wrapping; laid-out text is cached | L2 |
 | **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
