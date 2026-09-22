@@ -19,16 +19,22 @@ public interface DynamicMeshAPI {
     /**
      * Replaces the buffer contents.
      *
+     * <p>Vertices are 4-byte words laid out as described by the {@link VertexAttribute}
+     * layout the mesh was created with. They are {@code int} rather than {@code float} so a
+     * packed colour can travel unchanged: {@link Float#intBitsToFloat} does not guarantee to
+     * preserve a NaN's bit pattern, and an opaque colour's bytes can form one. Floats go in
+     * through {@link Float#floatToRawIntBits}, which always preserves bits.</p>
+     *
      * <p>Implementations must write into storage reserved at creation rather than
      * reallocating — this runs every frame, and the UI framework's budget forbids
      * allocating on that path.</p>
      *
-     * @param vertices         source vertex data
-     * @param vertexFloatCount how many floats of {@code vertices} are live
-     * @param indices          source index data
-     * @param indexCount       how many entries of {@code indices} are live
+     * @param vertexWords     source vertex data
+     * @param vertexWordCount how many words of {@code vertexWords} are live
+     * @param indices         source index data
+     * @param indexCount      how many entries of {@code indices} are live
      */
-    void upload(float[] vertices, int vertexFloatCount, int[] indices, int indexCount);
+    void upload(int[] vertexWords, int vertexWordCount, int[] indices, int indexCount);
 
     /**
      * Draws a range of the uploaded indices as triangles.

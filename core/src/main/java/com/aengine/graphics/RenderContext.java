@@ -27,6 +27,9 @@ public class RenderContext {
             case VULKAN:
                 Logger.error(Logger.System.RENDERER, "Vulkan driver hardware rendering context layer is missing.");
                 throw new UnsupportedOperationException("Vulkan Renderer implementation missing.");
+            case DIRECTX12:
+                Logger.error(Logger.System.RENDERER, "DirectX 12 driver hardware rendering context layer is missing.");
+                throw new UnsupportedOperationException("DirectX 12 Renderer implementation missing.");
             default: throw new IllegalStateException("Unknown Graphics API target.");
         }
     }
@@ -34,12 +37,13 @@ public class RenderContext {
     /**
      * Factory for a frame-updated geometry buffer — see {@link DynamicMeshAPI}.
      *
-     * @param attributeSizes component count of each vertex attribute, in layout order
+     * @param maxVertexWords capacity of the vertex buffer, in 4-byte words
+     * @param layout         the attributes of one vertex, in location order
      */
-    public static DynamicMeshAPI createDynamicMesh(int maxVertexFloats, int maxIndices, int[] attributeSizes) {
+    public static DynamicMeshAPI createDynamicMesh(int maxVertexWords, int maxIndices, VertexAttribute[] layout) {
         switch (activeAPI) {
             case OPENGL: return new com.aengine.graphics.opengl.OpenGLDynamicMesh(
-                                        maxVertexFloats, maxIndices, attributeSizes);
+                                        maxVertexWords, maxIndices, layout);
             case VULKAN:
                 throw new UnsupportedOperationException("Vulkan DynamicMesh implementation missing.");
             default: throw new IllegalStateException("Unknown Graphics API target.");

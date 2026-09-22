@@ -1,5 +1,7 @@
 package com.aengine.ui;
 
+import com.aengine.graphics.VertexAttribute;
+
 /**
  * The frame's interface geometry, accumulated as vertices and indices.
  *
@@ -9,18 +11,29 @@ package com.aengine.ui;
  * reads it. Nothing here touches a graphics API.</p>
  *
  * <p><strong>Allocation:</strong> both arrays are reserved once at construction and
- * rewritten in place. {@link #begin()} rewinds the write cursors rather than clearing
- * storage, so a frame of interface geometry allocates nothing.</p>
+ * rewritten in place. {@link #begin(float, float)} rewinds the write cursors rather than
+ * clearing storage, so a frame of interface geometry allocates nothing.</p>
  */
 public final class UIDrawList {
 
     /**
-     * position(2) + localPos(2) + halfSize(2) + radius(1) + colour(4) + uv(2) + mode(1)
-     * + borderColour(4) + borderWidth(1).
+     * position + localPos + halfSize + radius + colour + uv + mode + borderColour +
+     * borderWidth. Both colours are packed RGBA8, one word each instead of four floats.
      */
-    public static final int[] VERTEX_LAYOUT = { 2, 2, 2, 1, 4, 2, 1, 4, 1 };
+    public static final VertexAttribute[] VERTEX_LAYOUT = {
+        VertexAttribute.FLOAT2,   // position
+        VertexAttribute.FLOAT2,   // localPos
+        VertexAttribute.FLOAT2,   // halfSize
+        VertexAttribute.FLOAT1,   // radius
+        VertexAttribute.RGBA8,    // colour
+        VertexAttribute.FLOAT2,   // uv
+        VertexAttribute.FLOAT1,   // mode
+        VertexAttribute.RGBA8,    // borderColour
+        VertexAttribute.FLOAT1,   // borderWidth
+    };
 
-    public static final int FLOATS_PER_VERTEX = 21;
+    /** 4-byte words per vertex. Was 21 floats before the colours were packed. */
+    public static final int WORDS_PER_VERTEX = 13;
 
     // -----------------------------------------------------------------------------------
     // Shading modes
@@ -54,12 +67,16 @@ public final class UIDrawList {
     /** Maximum depth of nested clip rectangles. Panels inside panels inside a dock. */
     private static final int MAX_CLIP_DEPTH = 32;
 
-    private final float[] vertices;
-    private final int[]   indices;
+    /**
+     * Vertex words. {@code int} rather than {@code float} so packed colours travel
+     * bit-exact; floats are stored through {@link Float#floatToRawIntBits}.
+     */
+    private final int[] vertices;
+    private final int[] indices;
 
-    private int vertexFloatCount = 0;
-    private int vertexCount      = 0;
-    private int indexCount       = 0;
+    private int vertexWordCount = 0;
+    private int vertexCount     = 0;
+    private int indexCount      = 0;
 
     private final int maxQuads;
 
@@ -89,7 +106,7 @@ public final class UIDrawList {
 
     public UIDrawList(int maxQuads) {
         this.maxQuads = maxQuads;
-        this.vertices = new float[maxQuads * VERTICES_PER_QUAD * FLOATS_PER_VERTEX];
+        this.vertices = new int[maxQuads * VERTICES_PER_QUAD * WORDS_PER_VERTEX];
         this.indices  = new int[maxQuads * INDICES_PER_QUAD];
 
         // Worst case is one command per shape — every shape under a different clip.
@@ -108,7 +125,7 @@ public final class UIDrawList {
      * @param viewportHeight target height in pixels
      */
     public void begin(float viewportWidth, float viewportHeight) {
-        vertexFloatCount = 0;
+        vertexWordCount  = 0;
         vertexCount      = 0;
         indexCount       = 0;
         cmdCount         = 0;
@@ -251,13 +268,16 @@ public final class UIDrawList {
         float outerW = halfW + AA_PADDING;
         float outerH = halfH + AA_PADDING;
 
+        int fill   = packColor(r, g, b, a);
+        int border = packColor(br, bg, bb, ba);
+
         int base = vertexCount;
 
         // Counter-clockwise from the top-left, matching the index pattern below.
-        pushVertex(centreX - outerW, centreY - outerH, -outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
-        pushVertex(centreX + outerW, centreY - outerH,  outerW, -outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
-        pushVertex(centreX + outerW, centreY + outerH,  outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
-        pushVertex(centreX - outerW, centreY + outerH, -outerW,  outerH, halfW, halfH, clampedRadius, r, g, b, a, 0, 0, MODE_SHAPE, br, bg, bb, ba, borderWidth);
+        pushVertex(centreX - outerW, centreY - outerH, -outerW, -outerH, halfW, halfH, clampedRadius, fill, 0, 0, MODE_SHAPE, border, borderWidth);
+        pushVertex(centreX + outerW, centreY - outerH,  outerW, -outerH, halfW, halfH, clampedRadius, fill, 0, 0, MODE_SHAPE, border, borderWidth);
+        pushVertex(centreX + outerW, centreY + outerH,  outerW,  outerH, halfW, halfH, clampedRadius, fill, 0, 0, MODE_SHAPE, border, borderWidth);
+        pushVertex(centreX - outerW, centreY + outerH, -outerW,  outerH, halfW, halfH, clampedRadius, fill, 0, 0, MODE_SHAPE, border, borderWidth);
 
         indices[indexCount++] = base + 0;
         indices[indexCount++] = base + 1;
@@ -269,33 +289,40 @@ public final class UIDrawList {
 
     private void pushVertex(float px, float py, float lx, float ly,
                             float halfW, float halfH, float radius,
-                            float r, float g, float b, float a,
-                            float u, float v, float mode,
-                            float br, float bg, float bb, float ba, float borderWidth) {
-        int i = vertexFloatCount;
+                            int color, float u, float v, float mode,
+                            int borderColor, float borderWidth) {
+        int i = vertexWordCount;
 
-        vertices[i++] = px;
-        vertices[i++] = py;
-        vertices[i++] = lx;
-        vertices[i++] = ly;
-        vertices[i++] = halfW;
-        vertices[i++] = halfH;
-        vertices[i++] = radius;
-        vertices[i++] = r;
-        vertices[i++] = g;
-        vertices[i++] = b;
-        vertices[i++] = a;
-        vertices[i++] = u;
-        vertices[i++] = v;
-        vertices[i++] = mode;
-        vertices[i++] = br;
-        vertices[i++] = bg;
-        vertices[i++] = bb;
-        vertices[i++] = ba;
-        vertices[i++] = borderWidth;
+        vertices[i++] = Float.floatToRawIntBits(px);
+        vertices[i++] = Float.floatToRawIntBits(py);
+        vertices[i++] = Float.floatToRawIntBits(lx);
+        vertices[i++] = Float.floatToRawIntBits(ly);
+        vertices[i++] = Float.floatToRawIntBits(halfW);
+        vertices[i++] = Float.floatToRawIntBits(halfH);
+        vertices[i++] = Float.floatToRawIntBits(radius);
+        vertices[i++] = color;
+        vertices[i++] = Float.floatToRawIntBits(u);
+        vertices[i++] = Float.floatToRawIntBits(v);
+        vertices[i++] = Float.floatToRawIntBits(mode);
+        vertices[i++] = borderColor;
+        vertices[i++] = Float.floatToRawIntBits(borderWidth);
 
-        vertexFloatCount = i;
+        vertexWordCount = i;
         vertexCount++;
+    }
+
+    /**
+     * Packs a straight-alpha colour into one RGBA8 word, red in the lowest byte — see
+     * {@link VertexAttribute#RGBA8}. Components outside 0..1 are clamped.
+     */
+    private static int packColor(float r, float g, float b, float a) {
+        return (channel(a) << 24) | (channel(b) << 16) | (channel(g) << 8) | channel(r);
+    }
+
+    private static int channel(float c) {
+        if (c <= 0.0f) return 0;
+        if (c >= 1.0f) return 255;
+        return (int) (c * 255.0f + 0.5f);
     }
 
     /**
@@ -324,13 +351,15 @@ public final class UIDrawList {
             currentTexture = textureHandle;
         }
 
+        int tint = packColor(r, g, b, a);
+
         int base = vertexCount;
 
         // Distance-field parameters are unused in this mode; zero keeps them harmless.
-        pushVertex(x,         y,          0, 0, 0, 0, 0, r, g, b, a, u0, v0, MODE_TEXTURE, 0, 0, 0, 0, 0);
-        pushVertex(x + width, y,          0, 0, 0, 0, 0, r, g, b, a, u1, v0, MODE_TEXTURE, 0, 0, 0, 0, 0);
-        pushVertex(x + width, y + height, 0, 0, 0, 0, 0, r, g, b, a, u1, v1, MODE_TEXTURE, 0, 0, 0, 0, 0);
-        pushVertex(x,         y + height, 0, 0, 0, 0, 0, r, g, b, a, u0, v1, MODE_TEXTURE, 0, 0, 0, 0, 0);
+        pushVertex(x,         y,          0, 0, 0, 0, 0, tint, u0, v0, MODE_TEXTURE, 0, 0);
+        pushVertex(x + width, y,          0, 0, 0, 0, 0, tint, u1, v0, MODE_TEXTURE, 0, 0);
+        pushVertex(x + width, y + height, 0, 0, 0, 0, 0, tint, u1, v1, MODE_TEXTURE, 0, 0);
+        pushVertex(x,         y + height, 0, 0, 0, 0, 0, tint, u0, v1, MODE_TEXTURE, 0, 0);
 
         indices[indexCount++] = base + 0;
         indices[indexCount++] = base + 1;
@@ -340,9 +369,9 @@ public final class UIDrawList {
         indices[indexCount++] = base + 0;
     }
 
-    float[] vertices()      { return vertices; }
-    int[]   indices()       { return indices; }
-    int     vertexFloats()  { return vertexFloatCount; }
+    int[] vertices()        { return vertices; }
+    int[] indices()         { return indices; }
+    int   vertexWords()     { return vertexWordCount; }
     public int indexCount() { return indexCount; }
 
     // Command accessors, read by UIRenderer while issuing the frame.

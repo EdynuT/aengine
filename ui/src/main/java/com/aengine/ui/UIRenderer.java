@@ -37,7 +37,7 @@ public final class UIRenderer {
         this.shader = RenderContext.createShader(vertexSource, fragmentSource, true);
 
         this.mesh = RenderContext.createDynamicMesh(
-            maxQuads * 4 * UIDrawList.FLOATS_PER_VERTEX,
+            maxQuads * 4 * UIDrawList.WORDS_PER_VERTEX,
             maxQuads * 6,
             UIDrawList.VERTEX_LAYOUT);
 
@@ -65,7 +65,7 @@ public final class UIRenderer {
         shader.setVec2("u_ViewportSize", viewportSize);
         shader.setInt("u_Texture", 0);
 
-        mesh.upload(drawList.vertices(), drawList.vertexFloats(), drawList.indices(), indexCount);
+        mesh.upload(drawList.vertices(), drawList.vertexWords(), drawList.indices(), indexCount);
 
         // One draw per command. The clip rectangle is pipeline state rather than vertex
         // data, so a frame cannot be issued as a single call once anything is clipped.
