@@ -1,9 +1,9 @@
 # Aegis — AEngine's UI Framework: Architecture & Migration Plan
 
 **Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
-atlas) is done, and step 3b is under way — parts 1 (Latin-1), 2 (font metrics) and 3
-(kerning) have landed. The framework is named **Aegis**. Dear ImGui remains the transitional
-editor layer, with Aegis drawing test scaffolding on top of it.
+atlas) is done and **step 3b is complete**: Latin-1, font metrics, kerning, measuring and
+wrapping, and a layout cache. The framework is named **Aegis**. Dear ImGui remains the
+transitional editor layer, with Aegis drawing test scaffolding on top of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
 
 ### Where we stopped
@@ -20,6 +20,7 @@ editor layer, with Aegis drawing test scaffolding on top of it.
 | Aegis | The framework has a name, and a single entry-point object in front of the layers |
 | Step 3b-3 | Per-pair kerning from the font's `kern` table, baked into a lookup at load |
 | Step 3b-4 | Strings measure to the width they draw at; paragraphs wrap to fit a panel |
+| Step 3b-5 | Wrapped layouts are remembered, so unchanged text is not laid out again |
 
 ### The plan ahead
 
@@ -34,7 +35,7 @@ be checked before the next begins.
 | 2 ✅ | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
 | 3 ✅ | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
 | 4 ✅ | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
-| 5 | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — checked by allocation profiling instead |
+| 5 ✅ | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — a recompute counter that stops climbing |
 
 **Step 3f is brought forward, to sit here — between 3b and 3c.** The colours are to leave
 Java for `theme.json` before any more of them are written, because every step from here adds
@@ -71,7 +72,7 @@ ImGui. Both are described in §11.
 
 ### Open decisions
 
-None of these blocks step 3b.
+Step 3b is closed; none of these blocks the theme step that now follows it.
 
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
 - **Where the shell and locale files live** — beside the install, per project, or per user.
@@ -459,6 +460,34 @@ Staged deliberately, because this is where projects of this kind stall.
   character falls back to the replacement glyph identically in both. If they disagreed, a
   measured width and a drawn width would differ exactly on the strings where it is hardest to
   notice.
+
+  Step 3b-5 closed the stage with a layout cache, and its shape is worth recording because
+  the obvious implementation is the wrong one.
+
+  It is **direct-mapped, not a hash map**: the slot is `hash & (CAPACITY-1)` and a colliding
+  entry simply replaces the one there, the way a CPU cache works. No probing, no eviction
+  policy, no growth — nothing to allocate, nothing to leak, no per-frame bookkeeping. Two
+  paragraphs colliding on one slot evict each other every frame, which is a
+  worse-than-nothing case rather than a common one at 128 slots.
+
+  **The key is verified, never trusted.** A hash alone would eventually serve one paragraph's
+  line breaks for another — rare, silent and baffling — so each entry stores a copy of its own
+  text and a hit is confirmed character by character. The hash is what makes the comparison
+  rare; the comparison is what makes the answer right.
+
+  **`maxWidth` and the kerning setting are part of the key.** The width obviously changes
+  where lines break. Kerning does too, and the first attempt emptied the cache whenever it was
+  toggled — which the scaffolding's kerned-versus-unkerned comparison does twice a frame,
+  so the cache never once hit. Keyed instead, the two variants simply coexist.
+
+  **Everything is bounded.** Text beyond 512 characters, or wrapping past 64 lines, is not
+  cached at all and is laid out directly each time. Refusing to hold it beats growing a
+  buffer inside the frame loop, which §9 forbids, and beats truncating the text silently.
+
+  The cache has no visual effect, which is the difficulty in checking it. It therefore counts
+  recomputes, and the scaffolding draws that count: it climbs while text or widths are new and
+  **stops climbing** once they are not, ticking up once more on a resize. A steady-state frame
+  that still increments it is a cache that is not working.
 - **Stage 2 — MSDF atlas.** Multi-channel signed distance fields for crisp glyphs at any
   scale, which matters for editor zoom and high-DPI displays.
 - **Stage 3 — FreeType + HarfBuzz via the FFM API.** Proper shaping, kerning, and complex

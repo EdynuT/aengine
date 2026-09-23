@@ -464,8 +464,10 @@ public final class AegisDrawList {
      * and no per-line objects. The wrap ranges live in a buffer owned by this draw list, so
      * a paragraph costs nothing beyond the geometry it produces.</p>
      *
-     * <p>Wrapping is recomputed every call, which is correct but wasteful for a paragraph
-     * that has not changed; step 3b-5 caches it.</p>
+     * <p>The wrap comes from the font's layout cache, so a paragraph whose text and width
+     * have not changed is not walked again. Text the cache declines to hold — too long, or
+     * too many lines — is wrapped straight into this list's own buffers instead, which is why
+     * they still exist.</p>
      *
      * @return the y below the last line — where the next thing can start
      */
@@ -473,13 +475,24 @@ public final class AegisDrawList {
                                 CharSequence text,
                                 float r, float g, float b, float a) {
 
-        int lines = font.wrap(text, maxWidth, lineStarts, lineEnds);
         int lineHeight = font.lineHeight();
+        int slot = font.cachedLayout(text, maxWidth);
 
+        if (slot == AegisTextCache.UNCACHEABLE) {
+            int lines = font.wrap(text, maxWidth, lineStarts, lineEnds);
+            for (int i = 0; i < lines; i++) {
+                float lineTop = top + i * lineHeight;
+                addText(font, x, font.baselineForTop(lineTop), text,
+                        lineStarts[i], lineEnds[i], r, g, b, a);
+            }
+            return top + lines * lineHeight;
+        }
+
+        int lines = font.cachedLineCount(slot);
         for (int i = 0; i < lines; i++) {
             float lineTop = top + i * lineHeight;
             addText(font, x, font.baselineForTop(lineTop), text,
-                    lineStarts[i], lineEnds[i], r, g, b, a);
+                    font.cachedLineStart(slot, i), font.cachedLineEnd(slot, i), r, g, b, a);
         }
         return top + lines * lineHeight;
     }

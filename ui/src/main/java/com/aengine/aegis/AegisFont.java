@@ -136,6 +136,15 @@ public final class AegisFont {
     private boolean kerningEnabled = true;
 
     /**
+     * Where laid-out paragraphs are remembered.
+     *
+     * <p>Owned by the font rather than sitting beside it, because a layout is only valid for
+     * the font that produced it. Tying the two together means a different font simply has a
+     * different cache, and there is no way to ask one font's cache about another's text.</p>
+     */
+    private final AegisTextCache layoutCache = new AegisTextCache();
+
+    /**
      * @param resourcePath classpath path of the .ttf, e.g. {@code /fonts/DejaVuSans/DejaVuSans.ttf}
      * @param pixelHeight  size the glyphs are rasterised at, in pixels
      * @param atlasWidth   atlas width in pixels
@@ -379,7 +388,23 @@ public final class AegisFont {
      * @return the number of lines written
      */
     public int wrap(CharSequence text, float maxWidth, int[] lineStarts, int[] lineEnds) {
-        int capacity = Math.min(lineStarts.length, lineEnds.length);
+        return wrapUncached(text, maxWidth, lineStarts, lineEnds,
+                            0, Math.min(lineStarts.length, lineEnds.length));
+    }
+
+    /**
+     * {@link #wrap} writing into a slice of the arrays rather than the whole of them.
+     *
+     * <p>The layout cache gives each of its entries a fixed slice of one flat array, so it
+     * needs to say where this paragraph's lines go. Named <em>uncached</em> because it always
+     * does the work: it is what the cache calls on a miss, and calling it directly is how a
+     * caller opts out of caching.</p>
+     *
+     * @param base     index in both arrays where this paragraph's first line is written
+     * @param capacity how many lines may be written from {@code base}
+     */
+    int wrapUncached(CharSequence text, float maxWidth, int[] lineStarts, int[] lineEnds,
+                     int base, int capacity) {
         int lines = 0;
         int lineStart = 0;
 
@@ -393,8 +418,8 @@ public final class AegisFont {
             char c = text.charAt(i);
 
             if (c == '\n') {
-                lineStarts[lines] = lineStart;
-                lineEnds[lines++] = i;
+                lineStarts[base + lines] = lineStart;
+                lineEnds[base + lines++] = i;
                 lineStart = i + 1;
                 lastSpace = -1;
                 width     = 0.0f;
@@ -409,8 +434,8 @@ public final class AegisFont {
                 boolean atSpace = lastSpace >= lineStart;
                 int breakAt = atSpace ? lastSpace : i;
 
-                lineStarts[lines] = lineStart;
-                lineEnds[lines++] = breakAt;
+                lineStarts[base + lines] = lineStart;
+                lineEnds[base + lines++] = breakAt;
 
                 // A line broken at a space resumes after it, so the space is dropped rather
                 // than indenting the next line. One broken mid-word resumes at the character
@@ -431,11 +456,59 @@ public final class AegisFont {
 
         // Whatever is left over is the last line, unless the text ended exactly on a break.
         if (lines < capacity && lineStart < text.length()) {
-            lineStarts[lines] = lineStart;
-            lineEnds[lines++] = text.length();
+            lineStarts[base + lines] = lineStart;
+            lineEnds[base + lines++] = text.length();
         }
         return lines;
     }
+
+    /**
+     * The cached layout of a paragraph, wrapping it only if it is not already known.
+     *
+     * <p>This is what interface code should reach for: an unchanged paragraph at an unchanged
+     * width costs a hash and a comparison instead of a walk over every character. A paragraph
+     * the cache declines to hold still lays out correctly, just without being remembered.</p>
+     *
+     * @return the cache slot, or {@link AegisTextCache#UNCACHEABLE}
+     */
+    int cachedLayout(CharSequence text, float maxWidth) {
+        return layoutCache.slotFor(this, text, maxWidth);
+    }
+
+    /**
+     * How many lines this paragraph wraps to at this width, through the cache.
+     *
+     * <p>Public because sizing comes before drawing: a panel has to know how tall its text
+     * will be in order to be drawn around it, and asking must not cost a second walk over the
+     * paragraph. Layout in step 3c needs exactly this question answered cheaply.</p>
+     */
+    public int wrappedLineCount(CharSequence text, float maxWidth) {
+        int slot = cachedLayout(text, maxWidth);
+        if (slot != AegisTextCache.UNCACHEABLE) return layoutCache.lineCount(slot);
+
+        // Not held by the cache, so it has to be counted the long way. Nothing is kept.
+        return wrapUncached(text, maxWidth, scratchStarts, scratchEnds, 0, scratchStarts.length);
+    }
+
+    /** Somewhere for {@link #wrappedLineCount} to put line ranges it is going to discard. */
+    private final int[] scratchStarts = new int[256];
+    private final int[] scratchEnds   = new int[256];
+
+    int cachedLineCount(int slot)        { return layoutCache.lineCount(slot); }
+    int cachedLineStart(int slot, int i) { return layoutCache.lineStart(slot, i); }
+    int cachedLineEnd(int slot, int i)   { return layoutCache.lineEnd(slot, i); }
+
+    /**
+     * How many paragraph layouts have been computed rather than remembered.
+     *
+     * <p>The cache's only observable effect, since a working cache changes nothing on screen.
+     * It climbs while text or widths are new and stops climbing once they are not; a
+     * steady-state frame that still increments it is a cache that is not working.</p>
+     */
+    public int layoutRecomputes() { return layoutCache.recomputes(); }
+
+    /** How many paragraph layouts have been served from memory. */
+    public int layoutHits() { return layoutCache.hits(); }
 
     /**
      * The spacing correction between two characters, in pixels; negative pulls them together.

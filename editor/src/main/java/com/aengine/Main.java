@@ -72,11 +72,20 @@ public class Main extends Engine {
     private static final float[] KERN_LOOSE = { 0.70f, 0.72f, 0.78f, 1.0f };
     private static final float[] KERN_TIGHT = { 0.95f, 0.85f, 0.45f, 1.0f };
 
-    // SCAFFOLDING — line ranges from wrapping, so the test can size a panel to the wrapped
-    // text before drawing it. Pre-allocated for the same reason the framework's own buffers
-    // are: this runs every frame.
-    private static final int[] WRAP_STARTS = new int[64];
-    private static final int[] WRAP_ENDS   = new int[64];
+    // SCAFFOLDING — somewhere to build a line of text with a number in it, reused every
+    // frame. §9 forbids String.format and concatenation in the frame loop, and addText takes
+    // a CharSequence precisely so a StringBuilder can be handed straight to it.
+    private static final StringBuilder UI_TEXT = new StringBuilder(96);
+
+    /**
+     * SCAFFOLDING — the last recompute count that was reported.
+     *
+     * <p>The layout cache has no visual effect, so the only way to see it work is to watch a
+     * number stop moving. This logs when that number changes and stays silent when it does
+     * not: a quiet log after the first frames is the cache holding, and a log line per frame
+     * is the cache failing. It allocates only on a change, never in the steady state.</p>
+     */
+    private int lastLayoutRecomputes = -1;
 
     /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
     private int sceneTextureID = 0;
@@ -540,16 +549,35 @@ public class Main extends Engine {
             + "nowhere to break and is cut mid-word, because overflowing the panel and "
             + "looping forever are the only alternatives.";
 
-        // The panel is sized from the wrap, not guessed: wrap once to count the lines, then
-        // draw the box around exactly that many.
-        int paraLines = aegis.font().wrap(paragraph, paraWidth, WRAP_STARTS, WRAP_ENDS);
-        float paraHeight = paraLines * line + paraPadding * 2.0f;
+        // The panel is sized from the wrap, not guessed. Asking the height goes through the
+        // layout cache, so sizing the box and then drawing the text into it costs one wrap
+        // between them rather than two — which is the whole point of step 3b-5.
+        float paraHeight = aegis.wrappedHeight(paragraph, paraWidth) + paraPadding * 2.0f;
 
         aegis.addRoundedRect(textX, textY, paraWidth + paraPadding * 2.0f, paraHeight, 8.0f,
             0.12f, 0.14f, 0.18f, 0.94f,
             0.38f, 0.42f, 0.52f, 1.0f, 1.0f);
         aegis.addTextWrapped(textX + paraPadding, textY + paraPadding, paraWidth, paragraph,
             0.85f, 0.88f, 0.92f, 1.0f);
+        textY += paraHeight + 8.0f;
+
+        // Step 3b-5, the only visible evidence there is: a working layout cache changes
+        // nothing on screen, so the thing to watch is a number that STOPS moving. Recomputes
+        // climb for the first frame and then hold still while the text and width do; resize
+        // the window and they tick up once more, because the width is part of the key.
+        int recomputes = aegis.layoutRecomputes();
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("layout cache - recomputed: ").append(recomputes)
+               .append("   from cache: ").append(aegis.layoutHits());
+        aegis.addTextTop(textX, textY, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // The same evidence for anyone reading the log instead of the screen.
+        if (recomputes != lastLayoutRecomputes) {
+            lastLayoutRecomputes = recomputes;
+            Logger.debug(Logger.System.RENDERER,
+                "Text layout recomputed (total %d, served from cache %d).",
+                recomputes, aegis.layoutHits());
+        }
 
         aegis.end();   // closes the draw list and presents it
     }

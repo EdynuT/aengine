@@ -168,6 +168,23 @@ public final class Aegis {
         return drawList.addTextWrapped(requireFont(), x, top, maxWidth, text, r, g, b, a);
     }
 
+    /**
+     * How tall a paragraph will be when wrapped to {@code maxWidth}, in pixels.
+     *
+     * <p>Answered from the layout cache, so asking in order to size a panel and then drawing
+     * the paragraph into it costs one wrap between them, not two.</p>
+     */
+    public float wrappedHeight(CharSequence text, float maxWidth) {
+        AegisFont f = requireFont();
+        return f.wrappedLineCount(text, maxWidth) * f.lineHeight();
+    }
+
+    /** How many paragraph layouts have been computed rather than remembered. */
+    public int layoutRecomputes() { return requireFont().layoutRecomputes(); }
+
+    /** How many paragraph layouts have been served from memory. */
+    public int layoutHits() { return requireFont().layoutHits(); }
+
     /** The width the current font would draw this string at, in pixels. */
     public float measure(CharSequence text) { return requireFont().measure(text); }
 
