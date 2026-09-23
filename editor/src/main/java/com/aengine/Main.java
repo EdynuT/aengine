@@ -66,6 +66,12 @@ public class Main extends Engine {
     // -------------------------------------------------------------------------------------
     private com.aengine.aegis.Aegis aegis;
 
+    // Colours as one named value each, rather than four floats spelled out at the call site.
+    // A grouped colour is what the theme file will replace; a loose quartet is what has to be
+    // hunted down first. New scaffolding colours go here from now on.
+    private static final float[] KERN_LOOSE = { 0.70f, 0.72f, 0.78f, 1.0f };
+    private static final float[] KERN_TIGHT = { 0.95f, 0.85f, 0.45f, 1.0f };
+
     /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
     private int sceneTextureID = 0;
 
@@ -456,6 +462,29 @@ public class Main extends Engine {
 
         textY = secondLineTop + line + 12.0f;
 
+        // Step 3b-3, the visible check: the same string twice, kerning off then on. The pairs
+        // AV, To, Ta, Wa, Yo, LT, P. and r. are the ones DejaVu ships corrections for, so
+        // they close up on the second line while the rest stays put.
+        //
+        // addTextTop returns the pen position after the last character, so a thin rule drawn
+        // at each line's end turns the total tightening into a measurable gap instead of
+        // something to squint at.
+        final String kernSample = "AV To Ta Wa Yo LT P. r. AW VA";
+
+        aegis.font().setKerningEnabled(false);
+        float looseEnd = aegis.addTextTop(textX, textY, kernSample + "   kerning OFF",
+            KERN_LOOSE[0], KERN_LOOSE[1], KERN_LOOSE[2], KERN_LOOSE[3]);
+        drawKernMark(textX,    textY, line, KERN_LOOSE);
+        drawKernMark(looseEnd, textY, line, KERN_LOOSE);
+        textY += line;
+
+        aegis.font().setKerningEnabled(true);
+        float kernedEnd = aegis.addTextTop(textX, textY, kernSample + "   kerning ON",
+            KERN_TIGHT[0], KERN_TIGHT[1], KERN_TIGHT[2], KERN_TIGHT[3]);
+        drawKernMark(textX,     textY, line, KERN_TIGHT);
+        drawKernMark(kernedEnd, textY, line, KERN_TIGHT);
+        textY += line + 12.0f;
+
         // Text composed over a shape, the way every widget will draw. The label is centred in
         // the button by its line box rather than by an eyeballed baseline offset.
         final float buttonHeight = 36.0f;
@@ -479,6 +508,15 @@ public class Main extends Engine {
             0.60f, 0.62f, 0.68f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
+    }
+
+    /**
+     * SCAFFOLDING — a thin vertical rule marking where a line of text starts and ends, so the
+     * kerning comparison shows a measurable gap rather than something to squint at. Local to
+     * that test; nothing in the framework needs it.
+     */
+    private void drawKernMark(float x, float top, int height, float[] rgba) {
+        aegis.addRoundedRect(x, top, 2.0f, height, 0.0f, rgba[0], rgba[1], rgba[2], rgba[3]);
     }
 
     @Override

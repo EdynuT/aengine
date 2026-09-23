@@ -389,8 +389,8 @@ public final class AegisDrawList {
      * font's atlas, so a line of text is one command unless a clip or texture change
      * interrupts it.</p>
      *
-     * <p>Stage 1 limits: Latin-1 only, no kerning, no wrapping, the font's single baked
-     * size. A character without a glyph is drawn as {@code ?}.</p>
+     * <p>Stage 1 limits: Latin-1 only, no wrapping, the font's single baked size. A character
+     * without a glyph is drawn as {@code ?}.</p>
      *
      * @return the pen position after the last character — the right edge of the line
      */
@@ -401,19 +401,27 @@ public final class AegisDrawList {
         int tint = packColor(r, g, b, a);
 
         float pen = x;
+
+        // The character before the one being placed, which is what a kerning pair is keyed
+        // on. Zero means "nothing before it", so the first character of the line is never
+        // kerned against whatever happened to be drawn before it.
+        char prev = 0;
+
         for (int i = 0; i < text.length(); i++) {
             if (vertexCount / VERTICES_PER_QUAD >= maxQuads) break;
 
             char c = text.charAt(i);
-            float next = font.placeGlyph(c, pen, baseline, glyphQuad);
+            float next = font.placeGlyph(prev, c, pen, baseline, glyphQuad);
 
-            // A space advances the pen but has no visible pixels, so it gets no quad.
+            // A space advances the pen but has no visible pixels, so it gets no quad. It is
+            // still a kerning neighbour, so prev advances past it like any other character.
             if (c != ' ') {
                 pushSampledQuad(glyphQuad[0], glyphQuad[1], glyphQuad[2], glyphQuad[3],
                                 glyphQuad[4], glyphQuad[5], glyphQuad[6], glyphQuad[7],
                                 tint, MODE_TEXT);
             }
-            pen = next;
+            pen  = next;
+            prev = c;
         }
         return pen;
     }

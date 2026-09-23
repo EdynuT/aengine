@@ -1,9 +1,9 @@
 # Aegis — AEngine's UI Framework: Architecture & Migration Plan
 
 **Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
-atlas) is done, and step 3b is under way — parts 1 (Latin-1) and 2 (font metrics) have
-landed. Dear ImGui remains the transitional editor layer, with Aegis drawing test
-scaffolding on top of it.
+atlas) is done, and step 3b is under way — parts 1 (Latin-1), 2 (font metrics) and 3
+(kerning) have landed. The framework is named **Aegis**. Dear ImGui remains the transitional
+editor layer, with Aegis drawing test scaffolding on top of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
 
 ### Where we stopped
@@ -17,6 +17,8 @@ scaffolding on top of it.
 | Step 3a | Printable ASCII drawn from a baked stb_truetype atlas; DejaVu Sans as placeholder |
 | Step 3b-1 | The atlas covers Latin-1, so Portuguese, Spanish, French, German and Italian read correctly |
 | Step 3b-2 | Ascent, descent and line height read from the font; text is placed by the top of its line |
+| Aegis | The framework has a name, and a single entry-point object in front of the layers |
+| Step 3b-3 | Per-pair kerning from the font's `kern` table, baked into a lookup at load |
 
 ### The plan ahead
 
@@ -29,9 +31,23 @@ be checked before the next begins.
 |---|---|---|---|
 | 1 ✅ | Latin-1 coverage | Bake characters 32–255 instead of 32–126, so `á ç ã é õ` have glyphs | The test line shows `Olá, ação!` instead of `Ol?, a??o!` |
 | 2 ✅ | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
-| 3 | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
+| 3 ✅ | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
 | 4 | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
 | 5 | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — checked by allocation profiling instead |
+
+**Step 3f is brought forward, to sit here — between 3b and 3c.** The colours are to leave
+Java for `theme.json` before any more of them are written, because every step from here adds
+more: layout adds a few, widgets add dozens. Waiting until after them means migrating
+literals that need never have existed, and it keeps whoever designs the editor's appearance
+blocked behind a recompile.
+
+What makes this safe to move is that the tokens split by stability. The **palette and
+primitives** — `accent`, `panel.bg`, `text.body`, `panel.radius`, `spacing.md` — depend only
+on what `AegisDrawList` can draw, which has been settled since Phase 2, and typography joins
+them once 3b closes. The **widget roles** — `button.hover`, `slider.track`,
+`input.border.focus` — depend on widgets that do not exist yet. So the stable half moves now
+and the catalogue grows with 3e, rather than inventing role names against test scaffolding
+and renaming them later, which would break a theme file someone had already written.
 
 **Step 3c — layout** (L3). Rows and columns that size their children with grow, gap and
 padding. *Visible:* a row of boxes that redistributes itself when the window is resized.
@@ -408,6 +424,17 @@ Staged deliberately, because this is where projects of this kind stall.
   one — the line height comes out equal to the baked size and looks like it added nothing.
   It has: the **ascent** is the number the pixel height cannot supply, and the line height
   does diverge as soon as a font asks for leading.
+
+  Step 3b-3 added kerning. Two things about it are worth recording. It reads the **legacy
+  `kern` table, which is all stb_truetype parses** — a font that keeps its kerning in `GPOS`
+  yields nothing and needs HarfBuzz, so `AegisFont` warns rather than letting text stay
+  quietly loose. DejaVu Sans was checked before the code was written and has 2,727 entries,
+  of which 1,087 pairs fall inside the baked Latin-1 range. And the table is **baked dense at
+  load**, 224×224 floats, which keeps the frame loop to an array index instead of a hash or a
+  native call per character. Only about 2% of the pairs carry a correction, so the table is
+  mostly zeros — 200 KB, which is nothing. **That choice is bounded by the alphabet:** it
+  holds for Latin, Greek and Cyrillic, and the moment the atlas covers CJK the square grows
+  past any sane allocation and this must become sparse.
 - **Stage 2 — MSDF atlas.** Multi-channel signed distance fields for crisp glyphs at any
   scale, which matters for editor zoom and high-DPI displays.
 - **Stage 3 — FreeType + HarfBuzz via the FFM API.** Proper shaping, kerning, and complex
@@ -875,7 +902,8 @@ nobody can review.
 | Step | Ends when | Layer |
 |---|---|---|
 | **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
-| **3b** | Latin-1 ✅, then metrics, kerning and wrapping; laid-out text is cached | L2 |
+| **3b** | Latin-1 ✅, metrics ✅ and kerning ✅; then wrapping, and laid-out text is cached | L2 |
+| **3f'** | Colours leave Java for `theme.json` — brought forward, see *The plan ahead* | §7 |
 | **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |

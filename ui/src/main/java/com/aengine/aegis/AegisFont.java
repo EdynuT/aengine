@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import static org.lwjgl.stb.STBTruetype.stbtt_BakeFontBitmap;
+import static org.lwjgl.stb.STBTruetype.stbtt_GetCodepointKernAdvance;
 import static org.lwjgl.stb.STBTruetype.stbtt_GetFontVMetrics;
 import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
 import static org.lwjgl.stb.STBTruetype.stbtt_ScaleForPixelHeight;
@@ -104,6 +105,37 @@ public final class AegisFont {
     private final float[] metrics = new float[CHAR_COUNT * STRIDE];
 
     /**
+     * Per-pair spacing corrections in pixels, indexed {@code previous * CHAR_COUNT + current}.
+     *
+     * <p>Kerning is what stops {@code AV} and {@code To} from leaving a hole: the advance
+     * stored per glyph is correct in isolation and wrong beside certain neighbours, so the
+     * font ships a correction for the pairs that need one. Almost all are negative, pulling
+     * the second glyph left.</p>
+     *
+     * <p>Computed once at bake and stored dense. Only about 2% of the pairs in Latin-1 carry
+     * a correction, so the table is mostly zeros — but dense costs 200 KB and makes the
+     * lookup an array index, where sparse would cost a hash per character. <strong>This
+     * choice is bounded by the alphabet.</strong> It holds for Latin, Greek and Cyrillic; the
+     * moment the atlas covers CJK the square grows past any sane allocation and this has to
+     * become a sparse structure.</p>
+     *
+     * <p>Read from the legacy {@code kern} table, which is all stb_truetype parses. Fonts
+     * that keep their kerning only in {@code GPOS} yield nothing here and need HarfBuzz —
+     * stage 3 of the text stack. DejaVu Sans was checked before this was written: it has a
+     * {@code kern} table of 2,727 entries.</p>
+     */
+    private final float[] kerning = new float[CHAR_COUNT * CHAR_COUNT];
+
+    /**
+     * Whether {@link #placeGlyph} applies the corrections above.
+     *
+     * <p>On by default. The switch exists to put kerned and unkerned text side by side, which
+     * is the only way to see what kerning did — it is a comparison and debugging affordance,
+     * not a styling knob, and nothing in a theme should reach it.</p>
+     */
+    private boolean kerningEnabled = true;
+
+    /**
      * @param resourcePath classpath path of the .ttf, e.g. {@code /fonts/DejaVuSans/DejaVuSans.ttf}
      * @param pixelHeight  size the glyphs are rasterised at, in pixels
      * @param atlasWidth   atlas width in pixels
@@ -158,18 +190,41 @@ public final class AegisFont {
                 metrics[m + 6] = glyph.xadvance();
             }
 
+            // Every pair in the baked range, asked once here rather than per character per
+            // frame. 50k native calls at startup buys an array index at draw time, which is
+            // what §9 of the design document demands of anything inside the frame loop.
+            int kernPairs = 0;
+            for (int prev = 0; prev < CHAR_COUNT; prev++) {
+                int prevCode = FIRST_CHAR + prev;
+                for (int cur = 0; cur < CHAR_COUNT; cur++) {
+                    int raw = stbtt_GetCodepointKernAdvance(info, prevCode, FIRST_CHAR + cur);
+                    if (raw == 0) continue;
+                    kerning[prev * CHAR_COUNT + cur] = raw * scale;
+                    kernPairs++;
+                }
+            }
+
             this.atlas = RenderContext.createTexture(atlasWidth, atlasHeight, TextureFormat.R8, bitmap);
 
             Logger.info(Logger.System.RENDERER,
                 "Font baked: %s at %.0fpx, %d glyphs, atlas %dx%d (%d of %d rows used); "
-                + "ascent %.1f, descent %.1f, gap %.1f, line height %d.",
+                + "ascent %.1f, descent %.1f, gap %.1f, line height %d; %d kerning pairs.",
                 resourcePath, pixelHeight, CHAR_COUNT, atlasWidth, atlasHeight, result, atlasHeight,
-                this.ascent, this.descent, this.lineGap, this.lineHeight);
+                this.ascent, this.descent, this.lineGap, this.lineHeight, kernPairs);
+
+            // A font with no readable kern table is not an error — it is a font whose kerning
+            // lives in GPOS, which stb_truetype does not parse. Saying so is better than text
+            // quietly staying loose and nobody knowing why.
+            if (kernPairs == 0) {
+                Logger.warn(Logger.System.RENDERER,
+                    "No kerning available in %s: stb_truetype reads only the legacy 'kern' "
+                    + "table, and this font has none. Text will render unkerned.", resourcePath);
+            }
         } finally {
-            // The texture holds its own copy of the pixels, and both the glyph placements and
-            // the vertical metrics are copied out, so none of the native memory is needed past
-            // this point. Kerning in step 3b-3 asks the font for pair corrections at layout
-            // time, which will mean keeping the buffer and the font info alive; not yet.
+            // The texture holds its own copy of the pixels, and the glyph placements, the
+            // vertical metrics and the kerning table are all copied out, so none of the native
+            // memory is needed past this point. Baking the kerning table here rather than
+            // querying per pair at layout time is what keeps it that way.
             info.free();
             baked.free();
             MemoryUtil.memFree(bitmap);
@@ -181,21 +236,28 @@ public final class AegisFont {
      * Places one character at the pen and writes its quad into {@code out}:
      * {@code x0, y0, x1, y1} in screen pixels, then {@code u0, v0, u1, v1} in the atlas.
      *
-     * <p>Positions are rounded to whole pixels. The atlas is rasterised at 1:1, so a glyph
-     * landing between pixels would be resampled and blurred.</p>
+     * <p>Positions are rounded to whole pixels for drawing, but the pen is not: the returned
+     * position keeps its fraction. Rounding the pen would swallow kerning, whose corrections
+     * are often well under a pixel, and would accumulate drift across a line.</p>
      *
+     * <p>The kerning correction for {@code prev → c} is applied to the pen before the glyph
+     * is placed, so a caller cannot forget it.</p>
+     *
+     * @param prev     the character before this one, or {@code 0} at the start of a run
      * @param c        the character; one without a glyph is drawn as the replacement
      * @param penX     pen position, pixels
      * @param baseline baseline position, pixels, origin top-left
      * @param out      at least 8 floats, reused by the caller
      * @return the pen position after this character
      */
-    float placeGlyph(char c, float penX, float baseline, float[] out) {
+    float placeGlyph(char prev, char c, float penX, float baseline, float[] out) {
         // Outside Latin-1, or one of the control codes inside it: both baked to nothing, and
         // a character the font cannot show should read as missing rather than as a blank.
         int index = (c < FIRST_CHAR || c > LAST_CHAR || (c >= CONTROLS_FIRST && c <= CONTROLS_LAST))
                   ? REPLACEMENT - FIRST_CHAR
                   : c - FIRST_CHAR;
+
+        penX += kerning(prev, c);
 
         int m = index * STRIDE;
         float gx0 = metrics[m],     gy0 = metrics[m + 1];
@@ -236,6 +298,29 @@ public final class AegisFont {
             throw new IllegalStateException("Could not read font resource: " + path, e);
         }
     }
+
+    /**
+     * The spacing correction between two characters, in pixels; negative pulls them together.
+     *
+     * <p>Zero when either character is outside the baked range, when the pair carries no
+     * correction, or when kerning is switched off. Public because measuring a string in step
+     * 3b-4 has to add the same corrections the drawing does, or the measured width and the
+     * drawn width disagree.</p>
+     *
+     * @param prev the character before, or {@code 0} at the start of a run
+     */
+    public float kerning(char prev, char c) {
+        if (!kerningEnabled) return 0.0f;
+        if (prev < FIRST_CHAR || prev > LAST_CHAR) return 0.0f;
+        if (c    < FIRST_CHAR || c    > LAST_CHAR) return 0.0f;
+        return kerning[(prev - FIRST_CHAR) * CHAR_COUNT + (c - FIRST_CHAR)];
+    }
+
+    /** @see #kerningEnabled */
+    public void setKerningEnabled(boolean enabled) { kerningEnabled = enabled; }
+
+    /** @see #kerningEnabled */
+    public boolean isKerningEnabled() { return kerningEnabled; }
 
     /**
      * Baseline for a line of text whose top edge sits at {@code top}.
