@@ -1,4 +1,4 @@
-package com.aengine.ui;
+package com.aengine.aegis;
 
 import com.aengine.graphics.RenderContext;
 import com.aengine.graphics.TextureAPI;
@@ -30,7 +30,7 @@ import static org.lwjgl.stb.STBTruetype.stbtt_ScaleForPixelHeight;
  *
  * <p>Must be created on the GL thread, since baking ends with a texture upload.</p>
  */
-public final class UIFont {
+public final class AegisFont {
 
     /** First character baked: the space. */
     public static final int FIRST_CHAR = 32;
@@ -109,7 +109,7 @@ public final class UIFont {
      * @param atlasWidth   atlas width in pixels
      * @param atlasHeight  atlas height in pixels; baking fails loudly if the glyphs do not fit
      */
-    public UIFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight) {
+    public AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight) {
         this.pixelHeight = pixelHeight;
         this.atlasWidth  = atlasWidth;
         this.atlasHeight = atlasHeight;
@@ -224,7 +224,7 @@ public final class UIFont {
      * and a font bundled with the editor is not a project asset.</p>
      */
     private static ByteBuffer readResource(String path) {
-        try (InputStream in = UIFont.class.getResourceAsStream(path)) {
+        try (InputStream in = AegisFont.class.getResourceAsStream(path)) {
             if (in == null) {
                 throw new IllegalStateException("Font resource not found on the classpath: " + path);
             }

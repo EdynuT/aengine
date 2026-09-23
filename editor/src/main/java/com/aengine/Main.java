@@ -59,14 +59,12 @@ public class Main extends Engine {
     private final com.aengine.editor.ImGuiUILayer imguiLayer;
 
     // -------------------------------------------------------------------------------------
-    // SCAFFOLDING — first light for the in-house UI framework.
+    // SCAFFOLDING — first light for Aegis, the engine's own UI framework.
     //
-    // Draws one rounded rectangle through :ui to prove the SDF pipeline end to end. Deleted
-    // once real panels exist; see docs/UI_FRAMEWORK_ARCHITECTURE.md.
+    // Exercises shapes, clipping, textures and text through Aegis to prove the pipeline end
+    // to end. Deleted once real panels exist; see docs/UI_FRAMEWORK_ARCHITECTURE.md.
     // -------------------------------------------------------------------------------------
-    private com.aengine.ui.UIRenderer uiRenderer;
-    private com.aengine.ui.UIDrawList uiDrawList;
-    private com.aengine.ui.UIFont     uiFont;
+    private com.aengine.aegis.Aegis aegis;
 
     /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
     private int sceneTextureID = 0;
@@ -143,14 +141,13 @@ public class Main extends Engine {
         Renderer2D.init();
         Renderer3D.init();
 
-        // SCAFFOLDING — see the field declarations.
+        // SCAFFOLDING — see the field declaration.
         // One quad per visible character, so the scaffolding's six lines of text dominate
         // the budget; 256 truncated them silently.
-        uiRenderer = new com.aengine.ui.UIRenderer(512);
-        uiDrawList = new com.aengine.ui.UIDrawList(512);
+        aegis = new com.aengine.aegis.Aegis(512);
         // 18px Latin-1 is 224 glyphs against ASCII's 95: it needs 86 rows, so the previous
         // 64 no longer fits and baking would refuse. 128 leaves room for a larger size later.
-        uiFont     = new com.aengine.ui.UIFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
+        aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
@@ -343,8 +340,7 @@ public class Main extends Engine {
         Renderer2D.cleanup();
         AudioDevice.cleanup();
 
-        if (uiFont     != null) uiFont.cleanup();
-        if (uiRenderer != null) uiRenderer.cleanup();
+        if (aegis != null) aegis.cleanup();
     }
 
     /**
@@ -358,40 +354,40 @@ public class Main extends Engine {
         int w = getWindow().getWidth();
         int h = getWindow().getHeight();
 
-        uiDrawList.begin(w, h);
+        aegis.begin(w, h);
 
         // Panel-like slab with a generous radius, plus a small square to show the radius is
         // a parameter and not a baked mesh.
-        uiDrawList.addRoundedRect(40.0f, 80.0f, 320.0f, 180.0f, 18.0f,
+        aegis.addRoundedRect(40.0f, 80.0f, 320.0f, 180.0f, 18.0f,
             0.12f, 0.14f, 0.18f, 0.92f,          // fill
             0.38f, 0.42f, 0.52f, 1.0f, 1.0f);    // 1px border, the panel-edge case
 
         // Everything between push and pop is cut to this rectangle, which stops halfway
         // down the two shapes below. Their bottom halves are submitted and discarded by the
         // hardware — the same mechanism a scrolling list relies on.
-        uiDrawList.pushClipRect(40.0f, 80.0f, 320.0f, 90.0f);
-        uiDrawList.addRoundedRect(72.0f, 112.0f, 96.0f, 96.0f,  48.0f, 0.36f, 0.62f, 0.94f, 1.0f);
-        uiDrawList.addRoundedRect(200.0f, 112.0f, 120.0f, 40.0f, 8.0f, 0.94f, 0.55f, 0.28f, 1.0f);
-        uiDrawList.popClipRect();
+        aegis.pushClipRect(40.0f, 80.0f, 320.0f, 90.0f);
+        aegis.addRoundedRect(72.0f, 112.0f, 96.0f, 96.0f,  48.0f, 0.36f, 0.62f, 0.94f, 1.0f);
+        aegis.addRoundedRect(200.0f, 112.0f, 120.0f, 40.0f, 8.0f, 0.94f, 0.55f, 0.28f, 1.0f);
+        aegis.popClipRect();
 
         // Outside the clip again: a marker that must stay whole.
-        uiDrawList.addRoundedRect(40.0f, 280.0f, 60.0f, 24.0f, 12.0f, 0.45f, 0.85f, 0.50f, 1.0f);
+        aegis.addRoundedRect(40.0f, 280.0f, 60.0f, 24.0f, 12.0f, 0.45f, 0.85f, 0.50f, 1.0f);
 
         // Thick border on a fully rounded shape — the focus-ring case. The border follows
         // the curve because it is the distance field, not a smaller shape behind it.
-        uiDrawList.addRoundedRect(120.0f, 274.0f, 80.0f, 36.0f, 18.0f,
+        aegis.addRoundedRect(120.0f, 274.0f, 80.0f, 36.0f, 18.0f,
             0.10f, 0.12f, 0.16f, 1.0f,
             0.95f, 0.75f, 0.20f, 1.0f, 4.0f);
 
         // Border with no fill: alpha 0 on the fill leaves the outline alone.
-        uiDrawList.addRoundedRect(220.0f, 274.0f, 80.0f, 36.0f, 8.0f,
+        aegis.addRoundedRect(220.0f, 274.0f, 80.0f, 36.0f, 8.0f,
             0.0f, 0.0f, 0.0f, 0.0f,
             0.90f, 0.35f, 0.45f, 1.0f, 2.0f);
 
         // Textured quad: the scene's own framebuffer, presented as a thumbnail through our
         // pipeline. v is flipped because a GL colour attachment has its origin bottom-left.
         if (sceneTextureID != 0) {
-            uiDrawList.addTexturedQuad(
+            aegis.addTexturedQuad(
                 40.0f, 330.0f, 240.0f, 135.0f,
                 0.0f, 1.0f, 1.0f, 0.0f,
                 sceneTextureID,
@@ -399,13 +395,13 @@ public class Main extends Engine {
 
             // Same texture, tinted and clipped — proves the tint multiplies the sample and
             // that clipping applies to textured commands too.
-            uiDrawList.pushClipRect(300.0f, 330.0f, 120.0f, 135.0f);
-            uiDrawList.addTexturedQuad(
+            aegis.pushClipRect(300.0f, 330.0f, 120.0f, 135.0f);
+            aegis.addTexturedQuad(
                 300.0f, 330.0f, 240.0f, 135.0f,
                 0.0f, 1.0f, 1.0f, 0.0f,
                 sceneTextureID,
                 0.45f, 0.75f, 1.0f, 1.0f);
-            uiDrawList.popClipRect();
+            aegis.popClipRect();
         }
 
         // The text block is anchored to the window rather than placed at fixed coordinates,
@@ -418,15 +414,15 @@ public class Main extends Engine {
 
         // Text is positioned by the top of its line, not by the baseline: line height and
         // ascent come from the font file, so stacking is the same addition for every font.
-        final int line = uiFont.lineHeight();
+        final int line = aegis.lineHeight();
 
-        uiDrawList.addTextTop(uiFont, textX, textY,
-            "AEngine - first text through the in-house UI",
+        aegis.addTextTop(textX, textY,
+            "AEngine - first text through the Aegis UI",
             1.0f, 1.0f, 1.0f, 1.0f);
         textY += line;
 
         // Same atlas, another colour: the atlas holds coverage, the vertex holds colour.
-        uiDrawList.addTextTop(uiFont, textX, textY,
+        aegis.addTextTop(textX, textY,
             "The quick brown fox jumps over the lazy dog 0123456789",
             0.45f, 0.70f, 1.0f, 1.0f);
         textY += line;
@@ -444,17 +440,17 @@ public class Main extends Engine {
         final float slabWidth = 420.0f;
 
         final float firstLineTop = textY;
-        uiDrawList.addRoundedRect(slabX, firstLineTop, slabWidth, line, 0.0f,
+        aegis.addRoundedRect(slabX, firstLineTop, slabWidth, line, 0.0f,
             0.16f, 0.18f, 0.23f, 1.0f);
-        uiDrawList.addTextTop(uiFont, textX, firstLineTop,
+        aegis.addTextTop(textX, firstLineTop,
             "Ça va? Hanging gjpq, rising ÀÉÎÕÜ - line 1",
             0.90f, 0.92f, 0.95f, 1.0f);
 
         // One line height below the first, and nothing else: no padding, no fudge factor.
         final float secondLineTop = firstLineTop + line;
-        uiDrawList.addRoundedRect(slabX, secondLineTop, slabWidth, line, 0.0f,
+        aegis.addRoundedRect(slabX, secondLineTop, slabWidth, line, 0.0f,
             0.10f, 0.12f, 0.16f, 1.0f);
-        uiDrawList.addTextTop(uiFont, textX, secondLineTop,
+        aegis.addTextTop(textX, secondLineTop,
             "Ça va? Hanging gjpq, rising ÀÉÎÕÜ - line 2",
             0.90f, 0.92f, 0.95f, 1.0f);
 
@@ -463,27 +459,26 @@ public class Main extends Engine {
         // Text composed over a shape, the way every widget will draw. The label is centred in
         // the button by its line box rather than by an eyeballed baseline offset.
         final float buttonHeight = 36.0f;
-        uiDrawList.addRoundedRect(textX, textY, 220.0f, buttonHeight, 8.0f,
+        aegis.addRoundedRect(textX, textY, 220.0f, buttonHeight, 8.0f,
             0.16f, 0.18f, 0.23f, 1.0f,
             0.38f, 0.42f, 0.52f, 1.0f, 1.0f);
-        uiDrawList.addTextTop(uiFont, textX + 14.0f, textY + (buttonHeight - line) * 0.5f,
+        aegis.addTextTop(textX + 14.0f, textY + (buttonHeight - line) * 0.5f,
             "Button label", 0.90f, 0.92f, 0.95f, 1.0f);
         textY += buttonHeight + 12.0f;
 
         // Step 3b-1: the Latin-1 supplement is baked, so these read as written instead of
         // as '?'. The last line is outside Latin-1 and still falls back, which is the
         // boundary being checked rather than a defect.
-        uiDrawList.addTextTop(uiFont, textX, textY, "Olá, ação! Português, español, français",
+        aegis.addTextTop(textX, textY, "Olá, ação! Português, español, français",
             0.95f, 0.60f, 0.30f, 1.0f);
         textY += line;
-        uiDrawList.addTextTop(uiFont, textX, textY, "Grüße, Ångström, ¿cómo?, ½ £ © ÷ ×",
+        aegis.addTextTop(textX, textY, "Grüße, Ångström, ¿cómo?, ½ £ © ÷ ×",
             0.95f, 0.60f, 0.30f, 1.0f);
         textY += line;
-        uiDrawList.addTextTop(uiFont, textX, textY, "Beyond Latin-1: Привет 日本語 -> ?",
+        aegis.addTextTop(textX, textY, "Beyond Latin-1: Привет 日本語 -> ?",
             0.60f, 0.62f, 0.68f, 1.0f);
 
-        uiDrawList.end();
-        uiRenderer.render(uiDrawList, w, h);
+        aegis.end();   // closes the draw list and presents it
     }
 
     @Override

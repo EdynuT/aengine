@@ -1,4 +1,7 @@
-// AEngine's in-house UI framework.
+// Aegis — AEngine's in-house UI framework.
+//
+// The module stays ':ui' and the directory stays 'ui/': the module says what the code is for,
+// the package says what it is. Aegis lives in com.aengine.aegis.
 //
 // Design and phased plan: docs/UI_FRAMEWORK_ARCHITECTURE.md
 //
@@ -61,7 +64,7 @@ def checkBoundary = tasks.register('checkBoundary') {
                 def matcher = line =~ /^\s*import\s+(?:static\s+)?(com\.aengine\.[\w.]+)/
                 if (!matcher) return
                 def imported = matcher[0][1]
-                if (imported.startsWith('com.aengine.ui.')) return
+                if (imported.startsWith('com.aengine.aegis.')) return
 
                 def denied  = deniedPackages.any  { imported == it || imported.startsWith(it + '.') }
                 def allowed = allowedCorePackages.any { imported == it || imported.startsWith(it + '.') }
@@ -92,8 +95,8 @@ publishing {
             from components.java
             artifactId = 'aengine-ui'
             pom {
-                name = 'AEngine UI'
-                description = 'In-house immediate/retained hybrid UI framework for the AEngine editor'
+                name = 'Aegis'
+                description = 'Aegis — in-house immediate/retained hybrid UI framework for the AEngine editor'
             }
         }
     }

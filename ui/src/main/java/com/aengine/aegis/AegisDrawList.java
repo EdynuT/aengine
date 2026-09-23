@@ -1,4 +1,4 @@
-package com.aengine.ui;
+package com.aengine.aegis;
 
 import com.aengine.graphics.VertexAttribute;
 
@@ -7,14 +7,14 @@ import com.aengine.graphics.VertexAttribute;
  *
  * <p>This is layer L1 of the framework described in
  * {@code docs/UI_FRAMEWORK_ARCHITECTURE.md}: everything above it — text, layout, widgets —
- * ultimately describes what it should draw, and {@link UIRenderer} is the only thing that
+ * ultimately describes what it should draw, and {@link AegisRenderer} is the only thing that
  * reads it. Nothing here touches a graphics API.</p>
  *
  * <p><strong>Allocation:</strong> both arrays are reserved once at construction and
  * rewritten in place. {@link #begin(float, float)} rewinds the write cursors rather than
  * clearing storage, so a frame of interface geometry allocates nothing.</p>
  */
-public final class UIDrawList {
+public final class AegisDrawList {
 
     /**
      * position + localPos + halfSize + radius + colour + uv + mode + borderColour +
@@ -111,10 +111,10 @@ public final class UIDrawList {
     private final float[] clipStack;      // x, y, w, h per level
     private int clipDepth = 0;
 
-    /** One glyph's quad, written by {@link UIFont#placeGlyph} and reused for every glyph. */
+    /** One glyph's quad, written by {@link AegisFont#placeGlyph} and reused for every glyph. */
     private final float[] glyphQuad = new float[8];
 
-    public UIDrawList(int maxQuads) {
+    public AegisDrawList(int maxQuads) {
         this.maxQuads = maxQuads;
         this.vertices = new int[maxQuads * VERTICES_PER_QUAD * WORDS_PER_VERTEX];
         this.indices  = new int[maxQuads * INDICES_PER_QUAD];
@@ -363,7 +363,7 @@ public final class UIDrawList {
 
     /**
      * Submits a line of text with its top edge at {@code top}, the line occupying
-     * {@link UIFont#lineHeight()} pixels downwards from there.
+     * {@link AegisFont#lineHeight()} pixels downwards from there.
      *
      * <p>This is how interface code positions text: a label in a button, a row in a list and
      * a wrapped paragraph all know where the line box starts, not where the baseline falls.
@@ -371,7 +371,7 @@ public final class UIDrawList {
      *
      * @return the pen position after the last character — the right edge of the line
      */
-    public float addTextTop(UIFont font, float x, float top, CharSequence text,
+    public float addTextTop(AegisFont font, float x, float top, CharSequence text,
                             float r, float g, float b, float a) {
         return addText(font, x, font.baselineForTop(top), text, r, g, b, a);
     }
@@ -394,7 +394,7 @@ public final class UIDrawList {
      *
      * @return the pen position after the last character — the right edge of the line
      */
-    public float addText(UIFont font, float x, float baseline, CharSequence text,
+    public float addText(AegisFont font, float x, float baseline, CharSequence text,
                          float r, float g, float b, float a) {
 
         useTexture(font.atlasHandle());
@@ -451,7 +451,7 @@ public final class UIDrawList {
     int   vertexWords()     { return vertexWordCount; }
     public int indexCount() { return indexCount; }
 
-    // Command accessors, read by UIRenderer while issuing the frame.
+    // Command accessors, read by AegisRenderer while issuing the frame.
     int   commandCount()             { return cmdCount; }
     int   commandTexture(int i)      { return cmdTexture[i]; }
     int   commandIndexOffset(int i)  { return cmdIndexOffset[i]; }

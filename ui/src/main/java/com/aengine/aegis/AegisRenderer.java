@@ -1,4 +1,4 @@
-package com.aengine.ui;
+package com.aengine.aegis;
 
 import com.aengine.graphics.DynamicMeshAPI;
 import com.aengine.graphics.RenderContext;
@@ -9,7 +9,7 @@ import com.aengine.utils.Logger;
 import org.joml.Vector2f;
 
 /**
- * Presents a {@link UIDrawList} on screen.
+ * Presents a {@link AegisDrawList} on screen.
  *
  * <p>The only part of the framework that talks to the graphics layer, and it does so
  * exclusively through the API interfaces — never a backend class — so the whole of
@@ -20,7 +20,7 @@ import org.joml.Vector2f;
  * that; alpha blending on, because every antialiased edge is partial coverage. Both are
  * restored in {@link #end()} so the engine's own passes are unaffected.</p>
  */
-public final class UIRenderer {
+public final class AegisRenderer {
 
     private final RendererAPI    renderer;
     private final ShaderAPI      shader;
@@ -29,20 +29,20 @@ public final class UIRenderer {
     /** Reused across frames: submitting a uniform must not allocate. */
     private final Vector2f viewportSize = new Vector2f();
 
-    public UIRenderer(int maxQuads) {
+    public AegisRenderer(int maxQuads) {
         this.renderer = RenderContext.createRenderer();
 
-        String vertexSource   = FileUtils.readResource("/shaders/ui/ui.vert");
-        String fragmentSource = FileUtils.readResource("/shaders/ui/ui.frag");
+        String vertexSource   = FileUtils.readResource("/shaders/aegis/aegis.vert");
+        String fragmentSource = FileUtils.readResource("/shaders/aegis/aegis.frag");
         this.shader = RenderContext.createShader(vertexSource, fragmentSource, true);
 
         this.mesh = RenderContext.createDynamicMesh(
-            maxQuads * 4 * UIDrawList.WORDS_PER_VERTEX,
+            maxQuads * 4 * AegisDrawList.WORDS_PER_VERTEX,
             maxQuads * 6,
-            UIDrawList.VERTEX_LAYOUT);
+            AegisDrawList.VERTEX_LAYOUT);
 
         Logger.info(Logger.System.RENDERER,
-            "UI renderer online. SDF pipeline ready for %d shapes per frame.", maxQuads);
+            "Aegis online. SDF pipeline ready for %d shapes per frame.", maxQuads);
     }
 
     /**
@@ -52,7 +52,7 @@ public final class UIRenderer {
      * @param viewportWidth  target width in pixels
      * @param viewportHeight target height in pixels
      */
-    public void render(UIDrawList drawList, int viewportWidth, int viewportHeight) {
+    public void render(AegisDrawList drawList, int viewportWidth, int viewportHeight) {
         int indexCount = drawList.indexCount();
         if (indexCount == 0) return;
 
@@ -96,6 +96,6 @@ public final class UIRenderer {
     public void cleanup() {
         mesh.cleanup();
         shader.cleanup();
-        Logger.info(Logger.System.RENDERER, "UI renderer pipeline released.");
+        Logger.info(Logger.System.RENDERER, "Aegis pipeline released.");
     }
 }

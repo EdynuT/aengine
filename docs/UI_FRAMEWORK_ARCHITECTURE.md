@@ -1,9 +1,9 @@
-# AEngine UI Framework — Architecture & Migration Plan
+# Aegis — AEngine's UI Framework: Architecture & Migration Plan
 
 **Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
-atlas) is done, and step 3b is under way — part 1 (Latin-1) has landed. Dear ImGui remains
-the transitional editor layer, with the in-house framework drawing test scaffolding on top
-of it.
+atlas) is done, and step 3b is under way — parts 1 (Latin-1) and 2 (font metrics) have
+landed. Dear ImGui remains the transitional editor layer, with Aegis drawing test
+scaffolding on top of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
 
 ### Where we stopped
@@ -162,13 +162,36 @@ application host.
 the systems branching on it must not care which host started the engine. This is the kind
 of drift a module boundary catches on the next build instead of at the next rewrite.
 
+### The name
+
+The framework is called **Aegis**, and its types carry that name: `AegisDrawList`,
+`AegisRenderer`, `AegisFont`. It is the shield of Athena — a surface raised in front of
+something — which is what an interface layer composited over the viewport is.
+
+The point of naming it at all is the one Unreal makes with Slate: a framework with a name of
+its own is a thing that can be talked about, documented and eventually extracted, whereas
+"the UI code" is a folder. An acronym like `AEUI` would have been the folder with extra
+steps, so the "AE" of the engine had to land inside a real word rather than be prefixed onto
+one.
+
+**The Gradle module stays `:ui` and the directory stays `ui/`.** The module says what the
+code is *for*, the package says what it *is* — `com.aengine.aegis`. Renaming the module would
+also move the published coordinate `aengine-ui`, which is not worth doing mid-flight. If
+Aegis ever leaves for its own repository, as the section below describes, that is the moment
+to reconsider.
+
+`com.aengine.core.UILayer` and the editor's `ImGuiUILayer` keep their names deliberately:
+they are the engine's generic hook for *any* interface layer, which today is Dear ImGui and
+tomorrow is Aegis. Naming the hook after one of its implementations would be the mistake the
+hook exists to avoid.
+
 ### Target layout
 
 ```
 AEngine/
 ├── settings.gradle     include ':core', ':ui', ':editor'
 ├── core/               renderer, ECS, physics, audio, assets, scripting
-├── ui/                 the UI framework — depends on core, knows nothing above it
+├── ui/                 Aegis, the UI framework — depends on core, knows nothing above it
 └── editor/             editor panels built with :ui; depends on both
 ```
 
@@ -319,6 +342,36 @@ what makes incremental delivery possible.
                   RendererAPI  (aengine-core)
 ```
 
+### The entry point
+
+The four layers are the structure; `Aegis` is the door. It owns the renderer, the draw list
+and the current font, so a caller creates one object and talks to it:
+
+```java
+Aegis aegis = new Aegis(512);
+aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
+
+aegis.begin(width, height);
+aegis.addRoundedRect(x, y, 220f, 36f, 8f, 0.16f, 0.18f, 0.23f, 1f);
+aegis.addTextTop(x + 14f, y + 9f, "Save scene", 0.9f, 0.92f, 0.95f, 1f);
+aegis.end();
+```
+
+Three things leave the call site: the renderer and draw list variables, and the font argument
+that every text call previously carried. `end()` closes the list and presents it, because
+every caller did both in that order every time; splitting them bought no freedom and only
+offered the chance to forget the second.
+
+The layers stay public and reachable through `drawList()`. The front door is a convenience,
+not a wall — hiding L1 would contradict the claim above that each layer is independently
+useful.
+
+**The failure mode to watch.** Every drawing call is a forwarding method here, which is cheap
+at a dozen and absurd at two hundred. When L4 lands, the widget tree must be *reached
+through* `Aegis` — handed out as an object — rather than flattened into one method per
+widget. Dear ImGui can afford `ImGui::Button` as a free function because it has no retained
+tree to address; this framework does.
+
 ### L1 — Draw list
 
 The output contract. One frame produces:
@@ -338,7 +391,7 @@ ImGui, and it is also the cheapest layer to build.
 Staged deliberately, because this is where projects of this kind stall.
 
 - **Stage 1 — `stb_truetype`.** Bitmap atlas at one baked size, no kerning, no shaping.
-  Good enough to build every other layer against. *Implemented in step 3a* as `UIFont`,
+  Good enough to build every other layer against. *Implemented in step 3a* as `AegisFont`,
   extended to Latin-1 in step 3b-1. The range is baked contiguously, control codes and
   all, because stb bakes ranges: skipping the 33 unassigned codes inside it would cost a
   second range to manage in exchange for a few empty atlas cells. `placeGlyph` maps them
@@ -536,7 +589,7 @@ slow.
 
 The supported property list is fixed and documented, the way Unity bounds USS. Each entry is
 a name, a type and a default value; the validator checks against it and fallbacks read from
-it. The token set is bounded by what `UIDrawList` can actually draw: today fill colour, border colour, border
+it. The token set is bounded by what `AegisDrawList` can actually draw: today fill colour, border colour, border
 width and corner radius, with typography added when L2 lands. Shadows and gradients are not
 tokens until the shader can render them — a file that accepts properties the renderer
 silently ignores is worse than one that rejects them.
@@ -793,13 +846,13 @@ for the telemetry queue regardless of whether a client was connected.
 
 **Phase 1 — First light. ✅ Done.** The original plan was a custom render backend for Dear
 ImGui, reusing its draw lists as a test bench for the new renderer. That detour was skipped:
-`UIDrawList` and `UIRenderer` were built directly, and the phase ended with one rounded
+`AegisDrawList` and `AegisRenderer` were built directly, and the phase ended with one rounded
 rectangle drawn through draw list, dynamic mesh and SDF shader, composited over ImGui.
 
 **Phase 2 — Complete L1. ✅ Done.** Phase 1 drew one shape type in a single draw call —
 enough to prove the pipeline, not enough to build an editor on. Phase 2 added:
 
-1. **A command list.** `UIRenderer` issues one draw for the whole frame. A real draw list
+1. **A command list.** `AegisRenderer` issues one draw for the whole frame. A real draw list
    emits a sequence of `(clip rect, texture, index offset, index count)`, which is what lets
    clipping and texture changes happen partway through a frame.
 2. **A clip stack.** Push and pop rectangles. This is how a scrolling list submits ten

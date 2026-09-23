@@ -28,12 +28,12 @@ The build is split into three Gradle modules with a one-way dependency graph:
 | Module | Contents | Depends on |
 |---|---|---|
 | `:core` | Renderer, ECS, physics, audio, assets, scripting | — |
-| `:ui` | In-house UI framework (empty until Phase 2) | `:core` |
+| `:ui` | **Aegis**, the in-house UI framework (`com.aengine.aegis`) | `:core` |
 | `:editor` | Editor surface and application host; Dear ImGui confined here | `:core`, `:ui` |
 
 `:core` carries no UI toolkit. The engine loop drives the interface through the
 `com.aengine.core.UILayer` interface, which the editor implements today with Dear ImGui and
-the in-house framework will implement later without touching `Engine`.
+Aegis will implement later without touching `Engine`.
 
 `:ui` is additionally restricted to a subset of core packages, enforced by a
 `checkBoundary` task that fails the build on a disallowed import.
@@ -41,7 +41,7 @@ the in-house framework will implement later without touching `Engine`.
 ### Single-Process Architecture
 The engine, editor and interface run inside one JVM process, sharing one address space and one object graph. There is no interprocess bridge, no serialization hop and no external UI runtime: editor panels read engine state directly.
 
-The interface currently renders through Dear ImGui as a transitional layer, and is being replaced by an in-house UI framework. The design and migration plan are in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md).
+The interface currently renders through Dear ImGui as a transitional layer, and is being replaced by Aegis, the engine's own UI framework. The design and migration plan are in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md).
 
 ### Virtual File System (VFS) & Sandboxing
 All hardware asset paths are evaluated via `FileSystem.resolve()`. It enforces strict boundary sandboxing using system path normalization to prevent directory traversal vulnerabilities. Native asset allocations bypass the JVM heap, using `MemoryUtil.memAlloc` and direct `FileChannel` streams to achieve zero-copy transfers straight to the GPU driver pipelines.
