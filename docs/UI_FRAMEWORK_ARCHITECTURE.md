@@ -51,6 +51,24 @@ them once 3b closes. The **widget roles** — `button.hover`, `slider.track`,
 and the catalogue grows with 3e, rather than inventing role names against test scaffolding
 and renaming them later, which would break a theme file someone had already written.
 
+**Its scope is settled.** The file lives beside the installation, it dresses the editor's
+frame and never the content being edited, and it is **only ever read** — the arrangement half
+of §7, `layout.json`, stays in Phase 4 where it belongs, so nothing is written back in this
+step. Both decisions are recorded in §7.
+
+Four parts, in order:
+
+| # | Part | What it delivers | Visible check |
+|---|---|---|---|
+| 1 | Property catalogue | The closed list of what is themeable — name, type, default — which validation checks against and fallbacks read from | Nothing on screen; it is the definition the next three depend on |
+| 2 | Load and resolve | `theme.json` parsed, `@name` references resolved once, a baked style table indexed by handle | The scaffolding draws in the file's colours instead of Java's literals |
+| 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors refuse to start | A deliberately broken file produces three precise warnings and still starts |
+| 4 | Hot reload | Saving the file applies to the running editor | Editing a colour changes the editor without a restart |
+
+Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Parts 3
+and 4 are what turn externalised constants into something another person can edit without
+fear.
+
 **Step 3c — layout** (L3). Rows and columns that size their children with grow, gap and
 padding. *Visible:* a row of boxes that redistributes itself when the window is resized.
 
@@ -75,7 +93,9 @@ ImGui. Both are described in §11.
 Step 3b is closed; none of these blocks the theme step that now follows it.
 
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
-- **Where the shell and locale files live** — beside the install, per project, or per user.
+- ~~**Where the shell and locale files live**~~ — **decided:** beside the engine
+  installation, not per project. See §7. A writable location for files the program writes
+  back is a Phase 4 question, not a step 3f one.
 - **Instancing** — 3b-4 has put real paragraphs on screen, so the size of the question is now
   known even though it has not been profiled. The scaffolding draws roughly 700 quads, of
   which about 320 are one wrapped paragraph. At 13 words a vertex that is ~146 KB of vertex
@@ -707,11 +727,39 @@ Reloading follows the same rule as startup with one difference: a structural err
 refuse to start an editor that is already open, so it keeps the last valid shell on screen
 and reports the error. Value errors fall back to defaults exactly as at startup.
 
-### Open: where the files live
+### Where the files live — decided
 
-They must be ordinary files on disk. Whether that means beside the engine install (one shell
-for every project), inside each project (a per-project editor look) or in the user's config
-directory (one per person) is not decided yet.
+**Beside the engine installation**, at `<install>/shell/theme.json`. Ordinary files on disk,
+as above.
+
+The per-project option — each game project carrying its own editor appearance — is
+**rejected**, and the test that rejects it is worth keeping: *is the file needed for the game
+to exist, or only for the editor to look the way it looks?* A scene, its entities, its assets
+and its scripts belong to the project. How the editor is painted belongs to whoever operates
+the engine, and the editor should look the same whichever project is open. The same answer
+applies to the locale files in §8 for the same reason.
+
+The user's config directory was the alternative, and it is the one that matters later rather
+than now. A directory the engine is installed into is often not writable by an ordinary user
+— `/opt/aengine`, `C:\Program Files\AEngine` — which breaks two things: a file the program
+writes back, and the claim that anyone can edit the appearance without administrator rights.
+
+**Neither bites in step 3f**, because `theme.json` is only ever read. It bites in Phase 4,
+when `layout.json` starts being written back on exit. The resolution then is the ordinary
+one: defaults ship with the installation, and a user's overrides and anything written back go
+to their config directory, which takes precedence. Path resolution is therefore kept behind a
+single point so that change is small.
+
+### What the theme may and may not dress
+
+**The theme dresses the editor's frame, never the content being edited.** A colour in
+`theme.json` changes panels, tabs, buttons, text fields and labels. It must never reach the
+viewport's grid, the transform gizmos, the colour of a sprite or anything else the project
+owns — those belong to the engine and to the scene, and a theme that could repaint them would
+be restyling the user's work rather than the tool.
+
+This is checkable rather than aspirational: if editing a colour in the shell file changes
+anything inside the viewport, that is a defect.
 
 ### Where the cost lands
 
@@ -820,7 +868,9 @@ Japanese or Korean, which would need a fallback font behind the main one.
 - **Which languages ship first.** Suggested: `en_US` and `pt_BR`.
 - **Which scripts to plan for.** Latin only for now, or East Asian and right-to-left as
   well — this decides the atlas design, so it is worth settling before step 3b-2.
-- **Where the locale files live** — the same open question as the shell files in §7.
+- **Where the locale files live** — settled by the same rule as the shell files in §7: beside
+  the engine installation, not per project. The language the editor speaks belongs to whoever
+  operates the engine, not to the game being made.
 - **Plurals.** "1 entity" and "2 entities" differ, and languages disagree on how many forms
   exist — Russian has three, Japanese has none. Simple placeholders now; proper plural rules
   later, if needed.
@@ -955,7 +1005,7 @@ nobody can review.
 | Step | Ends when | Layer |
 |---|---|---|
 | **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
-| **3b** | Latin-1 ✅, metrics ✅ and kerning ✅; then wrapping, and laid-out text is cached | L2 |
+| **3b** ✅ | Latin-1, metrics, kerning, measuring, wrapping and a layout cache | L2 |
 | **3f'** | Colours leave Java for `theme.json` — brought forward, see *The plan ahead* | §7 |
 | **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
