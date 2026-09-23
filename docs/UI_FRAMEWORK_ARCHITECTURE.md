@@ -19,6 +19,7 @@ editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3b-2 | Ascent, descent and line height read from the font; text is placed by the top of its line |
 | Aegis | The framework has a name, and a single entry-point object in front of the layers |
 | Step 3b-3 | Per-pair kerning from the font's `kern` table, baked into a lookup at load |
+| Step 3b-4 | Strings measure to the width they draw at; paragraphs wrap to fit a panel |
 
 ### The plan ahead
 
@@ -32,7 +33,7 @@ be checked before the next begins.
 | 1 ✅ | Latin-1 coverage | Bake characters 32–255 instead of 32–126, so `á ç ã é õ` have glyphs | The test line shows `Olá, ação!` instead of `Ol?, a??o!` |
 | 2 ✅ | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
 | 3 ✅ | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
-| 4 | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
+| 4 ✅ | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
 | 5 | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — checked by allocation profiling instead |
 
 **Step 3f is brought forward, to sit here — between 3b and 3c.** The colours are to leave
@@ -74,8 +75,13 @@ None of these blocks step 3b.
 
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
 - **Where the shell and locale files live** — beside the install, per project, or per user.
-- **Instancing** — deferred until step 3b-4 puts real paragraphs on screen, so the vertex
-  upload can be measured instead of estimated.
+- **Instancing** — 3b-4 has put real paragraphs on screen, so the size of the question is now
+  known even though it has not been profiled. The scaffolding draws roughly 700 quads, of
+  which about 320 are one wrapped paragraph. At 13 words a vertex that is ~146 KB of vertex
+  data uploaded per frame, or ~31 MB/s at the ~210 fps the editor runs at. That is arithmetic
+  from the quad count, not a measurement, and it is small enough that instancing stays
+  deferred — but the number to beat is now written down rather than guessed at. Worth
+  revisiting when a panel shows thousands of rows, which is what the asset browser will do.
 - **Localisation** — the questions listed at the end of §8.
 - **Project licence** — GPL v3 is the likely choice, not yet confirmed. The bundled fonts'
   licences (OFL, Bitstream Vera) are compatible with it.
@@ -435,6 +441,24 @@ Staged deliberately, because this is where projects of this kind stall.
   mostly zeros — 200 KB, which is nothing. **That choice is bounded by the alphabet:** it
   holds for Latin, Greek and Cyrillic, and the moment the atlas covers CJK the square grows
   past any sane allocation and this must become sparse.
+
+  Step 3b-4 added measuring and wrapping, and both turn on the same rule: **a paragraph is
+  one string and a set of ranges into it, never a set of substrings.** `String.substring` per
+  line per frame is precisely the allocation §9 forbids, so `measure` and `addText` both take
+  a range, and `wrap` writes line boundaries into arrays the caller owns.
+
+  `wrap` reports each line's **start and end, not just its end**, because the two are not
+  adjacent: a line that breaks at a space ends before it and the next begins after it.
+  Inferring the start from the previous end would put that space at the head of the next
+  line, where it draws nothing but still advances the pen — an invisible indent with no
+  visible cause. A word wider than the limit is broken mid-word, which is the only option
+  that terminates; refusing to break loops forever and overflowing puts text outside the
+  panel it was asked to fit.
+
+  Measuring and drawing resolve a character through the same `glyphIndex`, so an unprintable
+  character falls back to the replacement glyph identically in both. If they disagreed, a
+  measured width and a drawn width would differ exactly on the strings where it is hardest to
+  notice.
 - **Stage 2 — MSDF atlas.** Multi-channel signed distance fields for crisp glyphs at any
   scale, which matters for editor zoom and high-DPI displays.
 - **Stage 3 — FreeType + HarfBuzz via the FFM API.** Proper shaping, kerning, and complex

@@ -114,6 +114,19 @@ public final class AegisDrawList {
     /** One glyph's quad, written by {@link AegisFont#placeGlyph} and reused for every glyph. */
     private final float[] glyphQuad = new float[8];
 
+    /**
+     * Line ranges from the last wrap, reused across frames and across paragraphs.
+     *
+     * <p>Sized once at construction rather than per call, because wrapping happens inside the
+     * frame loop and §9 allows no allocation there. A paragraph longer than this is
+     * truncated; 256 lines of editor text is already far past anything a panel shows without
+     * scrolling, and scrolling will submit ranges rather than one enormous paragraph.</p>
+     */
+    private final int[] lineStarts = new int[MAX_WRAPPED_LINES];
+    private final int[] lineEnds   = new int[MAX_WRAPPED_LINES];
+
+    private static final int MAX_WRAPPED_LINES = 256;
+
     public AegisDrawList(int maxQuads) {
         this.maxQuads = maxQuads;
         this.vertices = new int[maxQuads * VERTICES_PER_QUAD * WORDS_PER_VERTEX];
@@ -396,6 +409,22 @@ public final class AegisDrawList {
      */
     public float addText(AegisFont font, float x, float baseline, CharSequence text,
                          float r, float g, float b, float a) {
+        return addText(font, x, baseline, text, 0, text.length(), r, g, b, a);
+    }
+
+    /**
+     * Draws the characters of {@code text} from {@code from} inclusive to {@code to}
+     * exclusive, with the baseline at {@code baseline}.
+     *
+     * <p>The range form is what wrapping draws through: a wrapped paragraph is one string and
+     * a set of ranges into it, never a set of substrings, because {@code String.substring}
+     * per line per frame is the allocation §9 forbids. It pairs with
+     * {@link AegisFont#measure(CharSequence, int, int)}, which measures the same range the
+     * same way.</p>
+     */
+    public float addText(AegisFont font, float x, float baseline, CharSequence text,
+                         int from, int to,
+                         float r, float g, float b, float a) {
 
         useTexture(font.atlasHandle());
         int tint = packColor(r, g, b, a);
@@ -404,10 +433,11 @@ public final class AegisDrawList {
 
         // The character before the one being placed, which is what a kerning pair is keyed
         // on. Zero means "nothing before it", so the first character of the line is never
-        // kerned against whatever happened to be drawn before it.
+        // kerned against whatever happened to be drawn before it — including the last
+        // character of the line above, which is not its neighbour.
         char prev = 0;
 
-        for (int i = 0; i < text.length(); i++) {
+        for (int i = from; i < to; i++) {
             if (vertexCount / VERTICES_PER_QUAD >= maxQuads) break;
 
             char c = text.charAt(i);
@@ -424,6 +454,34 @@ public final class AegisDrawList {
             prev = c;
         }
         return pen;
+    }
+
+    /**
+     * Draws a paragraph broken to fit {@code maxWidth}, starting with the top of its first
+     * line at {@code top} and stacking downwards by the font's line height.
+     *
+     * <p>One string, a set of ranges into it, one draw call's worth of quads — no substrings
+     * and no per-line objects. The wrap ranges live in a buffer owned by this draw list, so
+     * a paragraph costs nothing beyond the geometry it produces.</p>
+     *
+     * <p>Wrapping is recomputed every call, which is correct but wasteful for a paragraph
+     * that has not changed; step 3b-5 caches it.</p>
+     *
+     * @return the y below the last line — where the next thing can start
+     */
+    public float addTextWrapped(AegisFont font, float x, float top, float maxWidth,
+                                CharSequence text,
+                                float r, float g, float b, float a) {
+
+        int lines = font.wrap(text, maxWidth, lineStarts, lineEnds);
+        int lineHeight = font.lineHeight();
+
+        for (int i = 0; i < lines; i++) {
+            float lineTop = top + i * lineHeight;
+            addText(font, x, font.baselineForTop(lineTop), text,
+                    lineStarts[i], lineEnds[i], r, g, b, a);
+        }
+        return top + lines * lineHeight;
     }
 
     /** Switches the texture the next shapes sample from, closing the command if it changes. */

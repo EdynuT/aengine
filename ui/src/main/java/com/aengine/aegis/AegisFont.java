@@ -253,9 +253,7 @@ public final class AegisFont {
     float placeGlyph(char prev, char c, float penX, float baseline, float[] out) {
         // Outside Latin-1, or one of the control codes inside it: both baked to nothing, and
         // a character the font cannot show should read as missing rather than as a blank.
-        int index = (c < FIRST_CHAR || c > LAST_CHAR || (c >= CONTROLS_FIRST && c <= CONTROLS_LAST))
-                  ? REPLACEMENT - FIRST_CHAR
-                  : c - FIRST_CHAR;
+        int index = glyphIndex(c);
 
         penX += kerning(prev, c);
 
@@ -297,6 +295,146 @@ public final class AegisFont {
         } catch (IOException e) {
             throw new IllegalStateException("Could not read font resource: " + path, e);
         }
+    }
+
+    /**
+     * The row in {@link #metrics} a character draws from.
+     *
+     * <p>One place, because measuring and drawing must agree about it. A character outside
+     * Latin-1, or one of the control codes inside it, resolves to the replacement glyph — so
+     * if the two resolved it differently, a measured width and a drawn width would disagree
+     * exactly on the strings hardest to notice it in.</p>
+     */
+    private int glyphIndex(char c) {
+        boolean drawable = c >= FIRST_CHAR && c <= LAST_CHAR
+                        && !(c >= CONTROLS_FIRST && c <= CONTROLS_LAST);
+        return (drawable ? c : REPLACEMENT) - FIRST_CHAR;
+    }
+
+    /** How far the pen moves past this character, before kerning, in pixels. */
+    private float advance(char c) {
+        return metrics[glyphIndex(c) * STRIDE + 6];
+    }
+
+    /**
+     * The width a string occupies when drawn, in pixels.
+     *
+     * <p>Sums the same advances and the same kerning corrections {@link #placeGlyph} applies,
+     * which is why both go through {@link #glyphIndex}: a layout that measures one width and
+     * draws another is the defect this exists to avoid.</p>
+     *
+     * <p>Takes a {@link CharSequence} so a reused {@code StringBuilder} can be measured
+     * without building a {@code String}, and allocates nothing.</p>
+     */
+    public float measure(CharSequence text) {
+        return measure(text, 0, text.length());
+    }
+
+    /**
+     * The width of {@code text} between {@code from} inclusive and {@code to} exclusive.
+     *
+     * <p>The range form exists because wrapping measures candidate lines out of a paragraph
+     * without cutting it into substrings first — {@code String.substring} per candidate line
+     * per frame is exactly the allocation §9 forbids.</p>
+     *
+     * <p>Kerning is measured <em>inside</em> the range only: the character before
+     * {@code from} is not a neighbour, because a wrapped line does not sit beside it.</p>
+     */
+    public float measure(CharSequence text, int from, int to) {
+        float width = 0.0f;
+        char prev = 0;
+        for (int i = from; i < to; i++) {
+            char c = text.charAt(i);
+            width += kerning(prev, c) + advance(c);
+            prev = c;
+        }
+        return width;
+    }
+
+    /**
+     * Breaks a paragraph into lines that fit {@code maxWidth}, writing where each one ends.
+     *
+     * <p>Nothing is cut up and nothing is allocated: the caller owns both arrays, and line
+     * {@code i} is the range {@code [lineStarts[i], lineEnds[i])} of {@code text} — which is
+     * why {@link #measure(CharSequence, int, int)} takes a range.</p>
+     *
+     * <p>Both ends are reported rather than just the ends, because they are not adjacent. A
+     * line that breaks at a space ends before it and the next begins after it; inferring the
+     * start from the previous end would put that space at the head of the next line, where it
+     * draws nothing but still advances the pen — an indent nobody asked for and nobody could
+     * see the cause of.</p>
+     *
+     * <p>Breaks happen at spaces, and at {@code \n}, which is honoured as a forced break so a
+     * paragraph can contain deliberate ones.</p>
+     *
+     * <p><strong>A word longer than {@code maxWidth} is broken mid-word.</strong> It is the
+     * only option that terminates: refusing to break would loop forever, and letting it
+     * overflow would put text outside the panel it was asked to fit. Proper hyphenation is
+     * not in this stage and may never be.</p>
+     *
+     * @param lineStarts filled with the first index of each line
+     * @param lineEnds   filled with one past the last index of each line; a paragraph needing
+     *                   more lines than the arrays hold is truncated rather than growing
+     *                   them, since growing would allocate
+     * @return the number of lines written
+     */
+    public int wrap(CharSequence text, float maxWidth, int[] lineStarts, int[] lineEnds) {
+        int capacity = Math.min(lineStarts.length, lineEnds.length);
+        int lines = 0;
+        int lineStart = 0;
+
+        // Where the current line could break, and how wide it would be if it did. Both -1
+        // and 0 mean "no break seen yet on this line".
+        int   lastSpace = -1;
+        float width     = 0.0f;
+        char  prev      = 0;
+
+        for (int i = 0; i < text.length() && lines < capacity; i++) {
+            char c = text.charAt(i);
+
+            if (c == '\n') {
+                lineStarts[lines] = lineStart;
+                lineEnds[lines++] = i;
+                lineStart = i + 1;
+                lastSpace = -1;
+                width     = 0.0f;
+                prev      = 0;
+                continue;
+            }
+
+            float next = width + kerning(prev, c) + advance(c);
+
+            if (next > maxWidth && i > lineStart) {
+                // Break at the last space if there was one, otherwise mid-word.
+                boolean atSpace = lastSpace >= lineStart;
+                int breakAt = atSpace ? lastSpace : i;
+
+                lineStarts[lines] = lineStart;
+                lineEnds[lines++] = breakAt;
+
+                // A line broken at a space resumes after it, so the space is dropped rather
+                // than indenting the next line. One broken mid-word resumes at the character
+                // that did not fit, so nothing is lost.
+                lineStart = atSpace ? breakAt + 1 : breakAt;
+                lastSpace = -1;
+                width     = 0.0f;
+                prev      = 0;
+
+                i = lineStart - 1;  // the loop's i++ puts us back on lineStart
+                continue;
+            }
+
+            if (c == ' ') lastSpace = i;
+            width = next;
+            prev  = c;
+        }
+
+        // Whatever is left over is the last line, unless the text ended exactly on a break.
+        if (lines < capacity && lineStart < text.length()) {
+            lineStarts[lines] = lineStart;
+            lineEnds[lines++] = text.length();
+        }
+        return lines;
     }
 
     /**

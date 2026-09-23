@@ -72,6 +72,12 @@ public class Main extends Engine {
     private static final float[] KERN_LOOSE = { 0.70f, 0.72f, 0.78f, 1.0f };
     private static final float[] KERN_TIGHT = { 0.95f, 0.85f, 0.45f, 1.0f };
 
+    // SCAFFOLDING — line ranges from wrapping, so the test can size a panel to the wrapped
+    // text before drawing it. Pre-allocated for the same reason the framework's own buffers
+    // are: this runs every frame.
+    private static final int[] WRAP_STARTS = new int[64];
+    private static final int[] WRAP_ENDS   = new int[64];
+
     /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
     private int sceneTextureID = 0;
 
@@ -148,9 +154,10 @@ public class Main extends Engine {
         Renderer3D.init();
 
         // SCAFFOLDING — see the field declaration.
-        // One quad per visible character, so the scaffolding's six lines of text dominate
-        // the budget; 256 truncated them silently.
-        aegis = new com.aengine.aegis.Aegis(512);
+        // One quad per visible character, so text dominates the budget and a paragraph
+        // dominates the text: the wrapped paragraph alone is ~320 quads against ~330 for
+        // every other line put together. Both 256 and 512 truncated it in silence.
+        aegis = new com.aengine.aegis.Aegis(2048);
         // 18px Latin-1 is 224 glyphs against ASCII's 95: it needs 86 rows, so the previous
         // 64 no longer fits and baking would refuse. 128 leaves room for a larger size later.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
@@ -506,6 +513,43 @@ public class Main extends Engine {
         textY += line;
         aegis.addTextTop(textX, textY, "Beyond Latin-1: Привет 日本語 -> ?",
             0.60f, 0.62f, 0.68f, 1.0f);
+        textY += line + 16.0f;
+
+        // Step 3b-3 again, from the other side: measure() has to agree with what addText
+        // draws, or a layout would centre things by a width that is not the width. Drawing a
+        // rule at the measured end of a line proves it lands on the last glyph.
+        final String measured = "measure() agrees with addText()";
+        float measuredWidth = aegis.measure(measured);
+        aegis.addTextTop(textX, textY, measured, KERN_TIGHT[0], KERN_TIGHT[1], KERN_TIGHT[2], KERN_TIGHT[3]);
+        drawKernMark(textX + measuredWidth, textY, line, KERN_TIGHT);
+        textY += line + 16.0f;
+
+        // Step 3b-4, the visible check: a paragraph wrapping inside a panel. The panel's
+        // width follows the window, so resizing re-wraps the text live — the point being that
+        // wrapping is computed from a width rather than baked into the string.
+        //
+        // The paragraph carries the two cases worth seeing fail: an explicit newline, which
+        // must break where it says, and a word far longer than the panel, which has nowhere
+        // to break and so breaks mid-word rather than overflowing the panel or hanging.
+        final float paraPadding = 10.0f;
+        final float paraWidth   = Math.max(220.0f, Math.min(440.0f, w * 0.18f));
+        final String paragraph =
+            "Wrapping breaks a paragraph at spaces to fit a width, and honours a newline\n"
+            + "where one is written. A word with no space in it and no room to fit, such as "
+            + "esternocleidomastoideopneumoultramicroscopicossilicovulcanoconiotico, has "
+            + "nowhere to break and is cut mid-word, because overflowing the panel and "
+            + "looping forever are the only alternatives.";
+
+        // The panel is sized from the wrap, not guessed: wrap once to count the lines, then
+        // draw the box around exactly that many.
+        int paraLines = aegis.font().wrap(paragraph, paraWidth, WRAP_STARTS, WRAP_ENDS);
+        float paraHeight = paraLines * line + paraPadding * 2.0f;
+
+        aegis.addRoundedRect(textX, textY, paraWidth + paraPadding * 2.0f, paraHeight, 8.0f,
+            0.12f, 0.14f, 0.18f, 0.94f,
+            0.38f, 0.42f, 0.52f, 1.0f, 1.0f);
+        aegis.addTextWrapped(textX + paraPadding, textY + paraPadding, paraWidth, paragraph,
+            0.85f, 0.88f, 0.92f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }

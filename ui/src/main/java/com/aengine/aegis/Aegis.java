@@ -157,6 +157,20 @@ public final class Aegis {
         return drawList.addText(requireFont(), x, baseline, text, r, g, b, a);
     }
 
+    /**
+     * Draws a paragraph broken to fit {@code maxWidth}, in the current font.
+     *
+     * @return the y below the last line — where the next thing can start
+     * @see AegisDrawList#addTextWrapped
+     */
+    public float addTextWrapped(float x, float top, float maxWidth, CharSequence text,
+                                float r, float g, float b, float a) {
+        return drawList.addTextWrapped(requireFont(), x, top, maxWidth, text, r, g, b, a);
+    }
+
+    /** The width the current font would draw this string at, in pixels. */
+    public float measure(CharSequence text) { return requireFont().measure(text); }
+
     /** Distance from one line's top to the next, in whole pixels, in the current font. */
     public int lineHeight() { return requireFont().lineHeight(); }
 
