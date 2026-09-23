@@ -408,30 +408,78 @@ public class Main extends Engine {
             uiDrawList.popClipRect();
         }
 
-        // Text. Arguments give the baseline, which the glyphs hang from.
-        uiDrawList.addText(uiFont, 380.0f, 110.0f,
+        // The text block is anchored to the window rather than placed at fixed coordinates,
+        // so it stays on screen at any window shape — 4:3, 1:1 and ultrawide alike. Pixels
+        // are pixels on both axes (the shader normalises each by its own viewport extent),
+        // so only the window's size matters here, never its proportions. Clamped so a narrow
+        // window pushes the block left instead of off the right edge.
+        final float textX = Math.max(380.0f, w - 580.0f);
+        float       textY = 92.0f;
+
+        // Text is positioned by the top of its line, not by the baseline: line height and
+        // ascent come from the font file, so stacking is the same addition for every font.
+        final int line = uiFont.lineHeight();
+
+        uiDrawList.addTextTop(uiFont, textX, textY,
             "AEngine - first text through the in-house UI",
             1.0f, 1.0f, 1.0f, 1.0f);
+        textY += line;
 
         // Same atlas, another colour: the atlas holds coverage, the vertex holds colour.
-        uiDrawList.addText(uiFont, 380.0f, 140.0f,
+        uiDrawList.addTextTop(uiFont, textX, textY,
             "The quick brown fox jumps over the lazy dog 0123456789",
             0.45f, 0.70f, 1.0f, 1.0f);
+        textY += line;
 
-        // Text composed over a shape, the way every widget will draw.
-        uiDrawList.addRoundedRect(380.0f, 160.0f, 220.0f, 36.0f, 8.0f,
+        // Step 3b-2, the visible check: two lines exactly one line height apart. Each line
+        // gets a slab the height of its own line box, in two shades so the seam between them
+        // is visible. The slabs touch without overlapping and the ink stays inside its own
+        // slab, which is what proves the spacing comes from the font rather than from a
+        // guess. 'Ç' reaches the top of the box and 'gjpq' the bottom, so ascent and descent
+        // are both exercised instead of only the x-height.
+        //
+        // Written out twice rather than looped: the pair of calls per line is the pattern
+        // every widget will use, and a loop hides it.
+        final float slabX     = textX - 6.0f;
+        final float slabWidth = 420.0f;
+
+        final float firstLineTop = textY;
+        uiDrawList.addRoundedRect(slabX, firstLineTop, slabWidth, line, 0.0f,
+            0.16f, 0.18f, 0.23f, 1.0f);
+        uiDrawList.addTextTop(uiFont, textX, firstLineTop,
+            "Ça va? Hanging gjpq, rising ÀÉÎÕÜ - line 1",
+            0.90f, 0.92f, 0.95f, 1.0f);
+
+        // One line height below the first, and nothing else: no padding, no fudge factor.
+        final float secondLineTop = firstLineTop + line;
+        uiDrawList.addRoundedRect(slabX, secondLineTop, slabWidth, line, 0.0f,
+            0.10f, 0.12f, 0.16f, 1.0f);
+        uiDrawList.addTextTop(uiFont, textX, secondLineTop,
+            "Ça va? Hanging gjpq, rising ÀÉÎÕÜ - line 2",
+            0.90f, 0.92f, 0.95f, 1.0f);
+
+        textY = secondLineTop + line + 12.0f;
+
+        // Text composed over a shape, the way every widget will draw. The label is centred in
+        // the button by its line box rather than by an eyeballed baseline offset.
+        final float buttonHeight = 36.0f;
+        uiDrawList.addRoundedRect(textX, textY, 220.0f, buttonHeight, 8.0f,
             0.16f, 0.18f, 0.23f, 1.0f,
             0.38f, 0.42f, 0.52f, 1.0f, 1.0f);
-        uiDrawList.addText(uiFont, 394.0f, 184.0f, "Button label", 0.90f, 0.92f, 0.95f, 1.0f);
+        uiDrawList.addTextTop(uiFont, textX + 14.0f, textY + (buttonHeight - line) * 0.5f,
+            "Button label", 0.90f, 0.92f, 0.95f, 1.0f);
+        textY += buttonHeight + 12.0f;
 
         // Step 3b-1: the Latin-1 supplement is baked, so these read as written instead of
         // as '?'. The last line is outside Latin-1 and still falls back, which is the
         // boundary being checked rather than a defect.
-        uiDrawList.addText(uiFont, 380.0f, 230.0f, "Olá, ação! Português, español, français",
+        uiDrawList.addTextTop(uiFont, textX, textY, "Olá, ação! Português, español, français",
             0.95f, 0.60f, 0.30f, 1.0f);
-        uiDrawList.addText(uiFont, 380.0f, 256.0f, "Grüße, Ångström, ¿cómo?, ½ £ © ÷ ×",
+        textY += line;
+        uiDrawList.addTextTop(uiFont, textX, textY, "Grüße, Ångström, ¿cómo?, ½ £ © ÷ ×",
             0.95f, 0.60f, 0.30f, 1.0f);
-        uiDrawList.addText(uiFont, 380.0f, 282.0f, "Beyond Latin-1: Привет 日本語 -> ?",
+        textY += line;
+        uiDrawList.addTextTop(uiFont, textX, textY, "Beyond Latin-1: Привет 日本語 -> ?",
             0.60f, 0.62f, 0.68f, 1.0f);
 
         uiDrawList.end();

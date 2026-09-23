@@ -5,6 +5,7 @@ import com.aengine.graphics.TextureAPI;
 import com.aengine.graphics.TextureFormat;
 import com.aengine.utils.Logger;
 import org.lwjgl.stb.STBTTBakedChar;
+import org.lwjgl.stb.STBTTFontinfo;
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
@@ -12,6 +13,9 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import static org.lwjgl.stb.STBTruetype.stbtt_BakeFontBitmap;
+import static org.lwjgl.stb.STBTruetype.stbtt_GetFontVMetrics;
+import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
+import static org.lwjgl.stb.STBTruetype.stbtt_ScaleForPixelHeight;
 
 /**
  * A TrueType font baked into a glyph atlas at one fixed size.
@@ -59,6 +63,34 @@ public final class UIFont {
     private final int   atlasWidth;
     private final int   atlasHeight;
 
+    /**
+     * Vertical metrics in pixels, read from the font and scaled to {@link #pixelHeight}.
+     *
+     * <p>All three are positive and measured the way the interface addresses the screen,
+     * y downwards: {@code ascent} is how far the tallest glyphs rise above the baseline,
+     * {@code descent} how far descenders drop below it, {@code lineGap} the extra leading
+     * the designer asked for between lines. stb reports the descent as negative, since it
+     * works in font units with y upwards; it is negated once here so nothing above this
+     * class has to remember which way each number points.</p>
+     *
+     * <p>They come from the font rather than from {@code pixelHeight}, which is only the
+     * size stb rasterises at and says nothing about where the ink actually lands. Deriving
+     * a baseline from it is what makes text drift when the font changes.</p>
+     */
+    private final float ascent;
+    private final float descent;
+    private final float lineGap;
+
+    /**
+     * {@code ascent + descent + lineGap}, rounded to a whole pixel.
+     *
+     * <p>Rounded because line spacing is repeatedly added. {@link #placeGlyph} snaps each
+     * glyph to a whole pixel to keep the atlas sampled 1:1, so a fractional line height
+     * would put successive baselines at 14.6, 29.2, 43.8 — and those snap to gaps of 15,
+     * 14, 15. Two lines hide it; a paragraph does not.</p>
+     */
+    private final int lineHeight;
+
     private final TextureAPI atlas;
 
     /**
@@ -85,8 +117,25 @@ public final class UIFont {
         ByteBuffer ttf    = readResource(resourcePath);
         ByteBuffer bitmap = MemoryUtil.memAlloc(atlasWidth * atlasHeight);
         STBTTBakedChar.Buffer baked = STBTTBakedChar.malloc(CHAR_COUNT);
+        STBTTFontinfo info = STBTTFontinfo.malloc();
 
         try {
+            if (!stbtt_InitFont(info, ttf)) {
+                throw new IllegalStateException("Not a font stb_truetype can read: " + resourcePath);
+            }
+
+            // The same scale stbtt_BakeFontBitmap derives internally, so the metrics and the
+            // baked glyphs describe one font at one size rather than two near-agreeing ones.
+            float scale = stbtt_ScaleForPixelHeight(info, pixelHeight);
+
+            int[] a = new int[1], d = new int[1], g = new int[1];
+            stbtt_GetFontVMetrics(info, a, d, g);
+
+            this.ascent  =  a[0] * scale;
+            this.descent = -d[0] * scale;  // stb reports it negative: font units point up
+            this.lineGap =  g[0] * scale;
+            this.lineHeight = Math.round(this.ascent + this.descent + this.lineGap);
+
             int result = stbtt_BakeFontBitmap(ttf, pixelHeight, bitmap,
                                               atlasWidth, atlasHeight, FIRST_CHAR, baked);
 
@@ -112,12 +161,16 @@ public final class UIFont {
             this.atlas = RenderContext.createTexture(atlasWidth, atlasHeight, TextureFormat.R8, bitmap);
 
             Logger.info(Logger.System.RENDERER,
-                "Font baked: %s at %.0fpx, %d glyphs, atlas %dx%d (%d of %d rows used).",
-                resourcePath, pixelHeight, CHAR_COUNT, atlasWidth, atlasHeight, result, atlasHeight);
+                "Font baked: %s at %.0fpx, %d glyphs, atlas %dx%d (%d of %d rows used); "
+                + "ascent %.1f, descent %.1f, gap %.1f, line height %d.",
+                resourcePath, pixelHeight, CHAR_COUNT, atlasWidth, atlasHeight, result, atlasHeight,
+                this.ascent, this.descent, this.lineGap, this.lineHeight);
         } finally {
-            // The texture holds its own copy of the pixels and the metrics are copied out, so
-            // none of the native memory is needed past this point. Kerning in step 3b will
-            // need the font data kept alive; not yet.
+            // The texture holds its own copy of the pixels, and both the glyph placements and
+            // the vertical metrics are copied out, so none of the native memory is needed past
+            // this point. Kerning in step 3b-3 asks the font for pair corrections at layout
+            // time, which will mean keeping the buffer and the font info alive; not yet.
+            info.free();
             baked.free();
             MemoryUtil.memFree(bitmap);
             MemoryUtil.memFree(ttf);
@@ -184,10 +237,41 @@ public final class UIFont {
         }
     }
 
+    /**
+     * Baseline for a line of text whose top edge sits at {@code top}.
+     *
+     * <p>Text is placed by its top almost everywhere — a label centred in a button, a row in
+     * a list — while glyphs hang from a baseline, and this is the one conversion between the
+     * two. Rounded, so that every line stacked from here starts on a whole pixel.</p>
+     */
+    public float baselineForTop(float top) {
+        return Math.round(top + ascent);
+    }
+
+    /** Height above the baseline, pixels. */
+    public float ascent()  { return ascent; }
+
+    /** Depth below the baseline, positive downwards, pixels. */
+    public float descent() { return descent; }
+
+    /** Extra leading the font asks for between lines, pixels; often zero. */
+    public float lineGap() { return lineGap; }
+
+    /**
+     * Distance from one line's top to the next, in whole pixels. Adding this repeatedly is
+     * how lines stack; see the field for why it is not fractional.
+     */
+    public int lineHeight() { return lineHeight; }
+
     /** Backend texture handle of the atlas. */
     public int   atlasHandle() { return atlas.getID(); }
     public int   atlasWidth()  { return atlasWidth; }
     public int   atlasHeight() { return atlasHeight; }
+
+    /**
+     * The size the glyphs were rasterised at. Not a line height and not an ascent — use
+     * {@link #lineHeight()} and {@link #baselineForTop(float)} to position text.
+     */
     public float pixelHeight() { return pixelHeight; }
 
     public void cleanup() {

@@ -362,11 +362,27 @@ public final class UIDrawList {
     }
 
     /**
+     * Submits a line of text with its top edge at {@code top}, the line occupying
+     * {@link UIFont#lineHeight()} pixels downwards from there.
+     *
+     * <p>This is how interface code positions text: a label in a button, a row in a list and
+     * a wrapped paragraph all know where the line box starts, not where the baseline falls.
+     * The conversion belongs to the font, which is the only thing that knows its ascent.</p>
+     *
+     * @return the pen position after the last character — the right edge of the line
+     */
+    public float addTextTop(UIFont font, float x, float top, CharSequence text,
+                            float r, float g, float b, float a) {
+        return addText(font, x, font.baselineForTop(top), text, r, g, b, a);
+    }
+
+    /**
      * Submits a line of text with its baseline at {@code baseline}.
      *
      * <p>The baseline rather than the top, because a font's glyphs hang from it: capitals
-     * sit on it, descenders like {@code g} and {@code p} drop below. Positioning by the top
-     * needs the font's ascent, which arrives with the metrics in step 3b.</p>
+     * sit on it, descenders like {@code g} and {@code p} drop below. Most callers want
+     * {@link #addTextTop} instead; this is the form to use when the baseline itself is what
+     * must line up, such as text of two sizes sharing one row.</p>
      *
      * <p>Takes a {@link CharSequence} so callers can pass a reused {@code StringBuilder}
      * instead of building a {@code String} per frame. One quad per character, all in the

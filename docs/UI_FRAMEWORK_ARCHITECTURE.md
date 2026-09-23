@@ -16,6 +16,7 @@ of it.
 | Vertex packing | Colours packed as RGBA8; the vertex went from 21 floats to 13 words |
 | Step 3a | Printable ASCII drawn from a baked stb_truetype atlas; DejaVu Sans as placeholder |
 | Step 3b-1 | The atlas covers Latin-1, so Portuguese, Spanish, French, German and Italian read correctly |
+| Step 3b-2 | Ascent, descent and line height read from the font; text is placed by the top of its line |
 
 ### The plan ahead
 
@@ -27,7 +28,7 @@ be checked before the next begins.
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
 | 1 ✅ | Latin-1 coverage | Bake characters 32–255 instead of 32–126, so `á ç ã é õ` have glyphs | The test line shows `Olá, ação!` instead of `Ol?, a??o!` |
-| 2 | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
+| 2 ✅ | Font metrics | Ascent, descent and line height from the font file, so text can be placed by its top and lines stack evenly | Two lines placed one line-height apart, touching neither |
 | 3 | Kerning | Per-pair spacing corrections from the font | Pairs like `AV` and `To` visibly tighten |
 | 4 | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
 | 5 | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — checked by allocation profiling instead |
@@ -341,7 +342,19 @@ Staged deliberately, because this is where projects of this kind stall.
   extended to Latin-1 in step 3b-1. The range is baked contiguously, control codes and
   all, because stb bakes ranges: skipping the 33 unassigned codes inside it would cost a
   second range to manage in exchange for a few empty atlas cells. `placeGlyph` maps them
-  to the replacement character so they read as missing rather than as a blank.
+  to the replacement character so they read as missing rather than as a blank. Step 3b-2
+  added the vertical metrics, so text is positioned by the top of its line box rather than
+  by a baseline the caller had to guess.
+
+  Two things about those metrics are worth recording, because both are easy to get wrong.
+  The line height is **rounded to a whole pixel**: glyphs are snapped to whole pixels to
+  keep the atlas sampled 1:1, so a fractional line height would put successive baselines at
+  14.6, 29.2, 43.8 and those snap to gaps of 15, 14, 15 — invisible in two lines, obvious in
+  a paragraph. And `stbtt_ScaleForPixelHeight` scales the font so that ascent plus descent
+  equals the requested pixel height, so for a font whose line gap is zero — DejaVu Sans is
+  one — the line height comes out equal to the baked size and looks like it added nothing.
+  It has: the **ascent** is the number the pixel height cannot supply, and the line height
+  does diverge as soon as a font asks for leading.
 - **Stage 2 — MSDF atlas.** Multi-channel signed distance fields for crisp glyphs at any
   scale, which matters for editor zoom and high-DPI displays.
 - **Stage 3 — FreeType + HarfBuzz via the FFM API.** Proper shaping, kerning, and complex
