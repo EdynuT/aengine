@@ -35,8 +35,16 @@ package com.aengine.aegis;
  */
 public final class Aegis {
 
+    /**
+     * Layout nodes available, allocated once. An editor frame of a few dozen panels and a few
+     * hundred controls sits well inside it; filling it fails loudly at build time, never in
+     * the frame loop.
+     */
+    private static final int LAYOUT_NODES = 1024;
+
     private final AegisRenderer renderer;
     private final AegisDrawList drawList;
+    private final AegisLayout   layout;
 
     /**
      * The font text is drawn with when a call does not name one.
@@ -58,6 +66,7 @@ public final class Aegis {
     public Aegis(int maxQuads) {
         this.renderer = new AegisRenderer(maxQuads);
         this.drawList = new AegisDrawList(maxQuads);
+        this.layout   = new AegisLayout(LAYOUT_NODES);
     }
 
     /**
@@ -204,6 +213,19 @@ public final class Aegis {
     public void popClipRect() {
         drawList.popClipRect();
     }
+
+    // -----------------------------------------------------------------------------------
+    // Layout
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * The layout: rows and columns that place what they contain.
+     *
+     * <p>Handed out as an object rather than forwarded method by method — the rule in the
+     * class comment. Build the tree on it once, solve it each frame, and read each node's
+     * rectangle back to draw there.</p>
+     */
+    public AegisLayout layout() { return layout; }
 
     // -----------------------------------------------------------------------------------
     // Escape hatches and lifecycle

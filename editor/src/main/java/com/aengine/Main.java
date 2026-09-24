@@ -71,6 +71,20 @@ public class Main extends Engine {
     // hunted down first. New scaffolding colours go here from now on.
     private static final float[] KERN_LOOSE = { 0.70f, 0.72f, 0.78f, 1.0f };
     private static final float[] KERN_TIGHT = { 0.95f, 0.85f, 0.45f, 1.0f };
+    private static final float[] LAYOUT_ROW_FILL   = { 0.12f, 0.14f, 0.18f, 0.92f };
+    private static final float[] LAYOUT_ROW_BORDER = { 0.38f, 0.42f, 0.52f, 1.0f };
+    private static final float[] LAYOUT_BOX        = { 0.36f, 0.62f, 0.94f, 1.0f };
+    private static final float[] LAYOUT_CAPTION    = { 0.60f, 0.62f, 0.68f, 1.0f };
+    private static final float[] LAYOUT_BOX_TEXT   = { 0.06f, 0.08f, 0.12f, 1.0f };
+
+    // SCAFFOLDING — steps 3c-1 and 3c-2: a row holding four boxes, two fixed and two growing.
+    // Handles into aegis.layout(), built once in buildLayoutScaffolding() and solved every
+    // frame in drawUiFirstLight().
+    private int layoutRow;
+    private int layoutBoxA;
+    private int layoutBoxB;
+    private int layoutBoxC;
+    private int layoutBoxD;
 
     // SCAFFOLDING — somewhere to build a line of text with a number in it, reused every
     // frame. §9 forbids String.format and concatenation in the frame loop, and addText takes
@@ -170,6 +184,7 @@ public class Main extends Engine {
         // 18px Latin-1 is 224 glyphs against ASCII's 95: it needs 86 rows, so the previous
         // 64 no longer fits and baking would refuse. 128 leaves room for a larger size later.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
+        buildLayoutScaffolding();
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
@@ -579,6 +594,52 @@ public class Main extends Engine {
                 recomputes, aegis.layoutHits());
         }
 
+        // Steps 3c-1 and 3c-2, the visible check: a row along the bottom of the window whose
+        // width follows the window. None of the boxes' positions or widths is written here —
+        // solve() works them out from the tree built in buildLayoutScaffolding(), and drawing
+        // only reads them back. Resize the window and A and D keep their width while B and C
+        // absorb the change, C always twice B; the numbers inside the boxes say so exactly.
+        com.aengine.aegis.AegisLayout layout = aegis.layout();
+
+        final float rowHeight = 84.0f;         // 60 for the boxes + 12 padding above and below
+        final float rowWidth  = w - 80.0f;     // the window's width, less 40 each side
+        final float rowTop    = h - rowHeight - 24.0f;
+
+        aegis.addTextTop(40.0f, rowTop - line - 6.0f,
+            "3c-2: row follows the window - A and D fixed, B grow 1, C grow 2",
+            LAYOUT_CAPTION[0], LAYOUT_CAPTION[1], LAYOUT_CAPTION[2], LAYOUT_CAPTION[3]);
+
+        layout.solve(layoutRow, 40.0f, rowTop, rowWidth, rowHeight);
+
+        // The row itself, drawn from its solved rectangle like everything else.
+        aegis.addRoundedRect(layout.x(layoutRow), layout.y(layoutRow),
+            layout.width(layoutRow), layout.height(layoutRow), 8.0f,
+            LAYOUT_ROW_FILL[0], LAYOUT_ROW_FILL[1], LAYOUT_ROW_FILL[2], LAYOUT_ROW_FILL[3],
+            LAYOUT_ROW_BORDER[0], LAYOUT_ROW_BORDER[1], LAYOUT_ROW_BORDER[2], LAYOUT_ROW_BORDER[3],
+            1.0f);
+
+        // One call per box, written out: read the rectangle the solve produced, draw there.
+        aegis.addRoundedRect(layout.x(layoutBoxA), layout.y(layoutBoxA),
+            layout.width(layoutBoxA), layout.height(layoutBoxA), 6.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+
+        aegis.addRoundedRect(layout.x(layoutBoxB), layout.y(layoutBoxB),
+            layout.width(layoutBoxB), layout.height(layoutBoxB), 6.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+
+        aegis.addRoundedRect(layout.x(layoutBoxC), layout.y(layoutBoxC),
+            layout.width(layoutBoxC), layout.height(layoutBoxC), 6.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+
+        aegis.addRoundedRect(layout.x(layoutBoxD), layout.y(layoutBoxD),
+            layout.width(layoutBoxD), layout.height(layoutBoxD), 6.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+
+        drawWidthLabel(layout, layoutBoxA, "A");
+        drawWidthLabel(layout, layoutBoxB, "B");
+        drawWidthLabel(layout, layoutBoxC, "C");
+        drawWidthLabel(layout, layoutBoxD, "D");
+
         aegis.end();   // closes the draw list and presents it
     }
 
@@ -589,6 +650,56 @@ public class Main extends Engine {
      */
     private void drawKernMark(float x, float top, int height, float[] rgba) {
         aegis.addRoundedRect(x, top, 2.0f, height, 0.0f, rgba[0], rgba[1], rgba[2], rgba[3]);
+    }
+
+    /**
+     * SCAFFOLDING — steps 3c-1 and 3c-2: builds the layout tree the frame will solve.
+     *
+     * <p>Runs once, at init. Building says what contains what and how big each thing asks to
+     * be; it does not say where anything goes — that is the solve's job, every frame.</p>
+     *
+     * <p>A and D ask for a fixed width and get exactly that. B and C ask for no width at all
+     * and grow instead, splitting whatever the row has left over 1 to 2 — so C is always twice
+     * as wide as B, whatever the window's size. Fixed boxes at both ends show the growers
+     * filling the space between them rather than pushing past the row's edge.</p>
+     */
+    private void buildLayoutScaffolding() {
+        com.aengine.aegis.AegisLayout layout = aegis.layout();
+
+        // The root: a row with no parent. It takes whatever rectangle solve() hands it.
+        layoutRow = layout.row(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(layoutRow, 12.0f);   // clear space inside the row's edges
+        layout.setGap(layoutRow, 8.0f);        // space between one box and the next
+
+        // Fixed: asks for 80 wide and grows by nothing.
+        layoutBoxA = layout.box(layoutRow);
+        layout.setSize(layoutBoxA, 80.0f, 60.0f);
+
+        // Grows: asks for 0 wide, so its width is its share of the spare space and nothing else.
+        layoutBoxB = layout.box(layoutRow);
+        layout.setSize(layoutBoxB, 0.0f, 60.0f);
+        layout.setGrow(layoutBoxB, 1.0f);
+
+        // Grows twice as much as B.
+        layoutBoxC = layout.box(layoutRow);
+        layout.setSize(layoutBoxC, 0.0f, 60.0f);
+        layout.setGrow(layoutBoxC, 2.0f);
+
+        // Fixed again, so the growers have an edge to stop at.
+        layoutBoxD = layout.box(layoutRow);
+        layout.setSize(layoutBoxD, 60.0f, 60.0f);
+    }
+
+    /**
+     * SCAFFOLDING — writes a box's solved width inside it, so a grow ratio can be read off the
+     * screen as numbers rather than judged by eye. Built in the reused {@code UI_TEXT}, never
+     * with concatenation, for the reason given at its declaration.
+     */
+    private void drawWidthLabel(com.aengine.aegis.AegisLayout layout, int box, String name) {
+        UI_TEXT.setLength(0);
+        UI_TEXT.append(name).append(' ').append((int) layout.width(box));
+        aegis.addTextTop(layout.x(box) + 8.0f, layout.y(box) + 8.0f, UI_TEXT,
+            LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
     }
 
     @Override
