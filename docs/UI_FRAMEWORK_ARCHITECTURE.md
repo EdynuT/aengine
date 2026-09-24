@@ -37,38 +37,6 @@ be checked before the next begins.
 | 4 ✅ | Measuring and wrapping | The width of a string; a paragraph broken at spaces to fit a width | A paragraph wrapping inside a panel |
 | 5 ✅ | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — a recompute counter that stops climbing |
 
-**Step 3f is brought forward, to sit here — between 3b and 3c.** The colours are to leave
-Java for `theme.json` before any more of them are written, because every step from here adds
-more: layout adds a few, widgets add dozens. Waiting until after them means migrating
-literals that need never have existed, and it keeps whoever designs the editor's appearance
-blocked behind a recompile.
-
-What makes this safe to move is that the tokens split by stability. The **palette and
-primitives** — `accent`, `panel.bg`, `text.body`, `panel.radius`, `spacing.md` — depend only
-on what `AegisDrawList` can draw, which has been settled since Phase 2, and typography joins
-them once 3b closes. The **widget roles** — `button.hover`, `slider.track`,
-`input.border.focus` — depend on widgets that do not exist yet. So the stable half moves now
-and the catalogue grows with 3e, rather than inventing role names against test scaffolding
-and renaming them later, which would break a theme file someone had already written.
-
-**Its scope is settled.** The file lives beside the installation, it dresses the editor's
-frame and never the content being edited, and it is **only ever read** — the arrangement half
-of §7, `layout.json`, stays in Phase 4 where it belongs, so nothing is written back in this
-step. Both decisions are recorded in §7.
-
-Four parts, in order:
-
-| # | Part | What it delivers | Visible check |
-|---|---|---|---|
-| 1 | Property catalogue | The closed list of what is themeable — name, type, default — which validation checks against and fallbacks read from | Nothing on screen; it is the definition the next three depend on |
-| 2 | Load and resolve | `theme.json` parsed, `@name` references resolved once, a baked style table indexed by handle | The scaffolding draws in the file's colours instead of Java's literals |
-| 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors refuse to start | A deliberately broken file produces three precise warnings and still starts |
-| 4 | Hot reload | Saving the file applies to the running editor | Editing a colour changes the editor without a restart |
-
-Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Parts 3
-and 4 are what turn externalised constants into something another person can edit without
-fear.
-
 **Step 3c — layout** (L3). Rows and columns that size their children with grow, gap and
 padding. *Visible:* a row of boxes that redistributes itself when the window is resized.
 
@@ -79,8 +47,33 @@ order. *Visible:* a box highlighting under the mouse.
 *Visible:* each one reacting to input.
 
 **Step 3f — theme file.** `theme.json` drives the colours over the property catalogue,
-with validation and live reload (§7). *Visible:* editing a colour in the file changes the
-running editor.
+with validation (§7). *Visible:* editing a colour in the file and restarting the editor
+changes it.
+
+**It stays after 3e.** Bringing it forward to sit between 3b and 3c was considered and
+declined. The token names would have been chosen against test scaffolding, and a theme file
+freezes its names the moment someone writes one — renaming `panel.bg` later breaks every file
+that uses it. Once layout and the first widgets exist, the names describe real things rather
+than guesses. Until then, colours in scaffolding are kept grouped in one place rather than
+scattered through drawing calls, so the migration is moving a block, not hunting literals.
+
+**Its scope is settled.** Two built-in themes, dark and light, ship with the installation;
+themes a user makes go in their data directory. A theme dresses the editor's
+frame and never the content being edited, and it is **only ever read** — the arrangement half
+of §7, `layout.json`, stays in Phase 4 where it belongs, so nothing is written back in this
+step. Both decisions are recorded in §7. It is read **once, at startup**: there is no hot
+reload, and a changed theme takes effect on the next start (§7, *Changing the theme*).
+
+Three parts, in order:
+
+| # | Part | What it delivers | Visible check |
+|---|---|---|---|
+| 1 | Property catalogue | The closed list of what is themeable — name, type, default — which validation checks against and fallbacks read from | Nothing on screen; it is the definition the next two depend on |
+| 2 | Load and resolve | `theme.json` parsed, `@name` references resolved once, a baked style table indexed by handle | The scaffolding draws in the file's colours instead of Java's literals |
+| 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors refuse to start | A deliberately broken file produces three precise warnings and still starts |
+
+Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Part 3
+is what turns externalised constants into something another person can edit without fear.
 
 **Step 3g — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.
@@ -90,12 +83,14 @@ ImGui. Both are described in §11.
 
 ### Open decisions
 
-Step 3b is closed; none of these blocks the theme step that now follows it.
+Step 3b is closed; none of these blocks the layout step that now follows it.
 
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
-- ~~**Where the shell and locale files live**~~ — **decided:** beside the engine
-  installation, not per project. See §7. A writable location for files the program writes
-  back is a Phase 4 question, not a step 3f one.
+- ~~**Where the shell, font and locale files live**~~ — **decided:** built-in dark and light
+  themes, the default font and the locale files in the installation (locales in
+  `<install>/lang/`); user themes, user fonts and `layout.json` under `AEngine/ui/` in the
+  user's data directory (`~/.local/share/AEngine/ui/`, `%LOCALAPPDATA%\AEngine\ui\`). Not per
+  project. See §7 and §8.
 - **Instancing** — 3b-4 has put real paragraphs on screen, so the size of the question is now
   known even though it has not been profiled. The scaffolding draws roughly 700 quads, of
   which about 320 are one wrapped paragraph. At 13 words a vertex that is ~146 KB of vertex
@@ -592,9 +587,9 @@ No temporary copy is needed. With writes happening only on clean exit, the in-me
 already is the working copy, and a crash discards it either way.
 
 **Both are ordinary editable files, not resources inside a jar.** Editing the interface is
-meant to be open to anyone — that is the point of shipping it as data. The default shell is
-simply the pair of files that ships with the engine, and changing them is customisation, not
-tampering. They also cannot be jar resources for a practical reason: `layout.json` is written
+meant to be open to anyone — that is the point of shipping it as data. Customising means
+adding a theme of one's own beside the built-in ones, as described under *Where the files
+live*. They also cannot be jar resources for a practical reason: `layout.json` is written
 back, and a classpath resource is read-only.
 
 ### Format
@@ -676,7 +671,7 @@ Three stages, and which stage runs how often is the whole point:
 
 | Stage | Runs | Produces |
 |---|---|---|
-| **Parse** | on load and on file change | token table and layout description |
+| **Parse** | once, at startup | token table and layout description |
 | **Resolve** | when the tree or the tokens change | a baked `Style` struct per node, a built layout tree |
 | **Draw** | every frame | reads the baked struct |
 
@@ -694,43 +689,58 @@ width and corner radius, with typography added when L2 lands. Shadows and gradie
 tokens until the shader can render them — a file that accepts properties the renderer
 silently ignores is worse than one that rejects them.
 
-### Hot reload
+### Changing the theme — on restart, not live
 
-Saving either shell file applies the change to the running editor without a recompile or a
-restart, so designing is a feedback loop rather than a build cycle.
+**There is no hot reload.** The shell files are read once at startup, and a change takes
+effect the next time the editor starts. Editing the appearance still needs no recompile —
+only a restart.
 
-**This uses its own small watcher, not `AssetWatcher`.** `AssetWatcher` exists for the
-projects built with the engine — baking and reloading their assets — and the editor's
-interface is not one of those projects. Reusing it would tie two unrelated concerns to one
-daemon. The shell watcher lives in `:editor`, which is where the file locations are known,
-and runs on its own thread.
+Reloading a running editor is rejected because it does not stay on the designer's desk: once
+it exists, end users reach it too, and a live swap has to invalidate everything resolved from
+the old theme — baked style tables, cached text layouts, glyph atlases once typography is
+themeable — without leaving any of it stale. A restart gets that right by construction.
 
-It is deliberately small:
-
-- **Directory, not file.** Java's `WatchService` watches directories, so it watches the one
-  holding the shell and filters for `theme.json` and `layout.json`.
-- **Debounced.** Text editors often save by writing a temporary file and renaming it, which
-  produces several events for one save. Events within a short window collapse into one
-  reload.
-- **It never touches interface state.** The watcher thread only raises a flag. The main loop
-  checks it at the start of a frame and does the reload there, on the thread that owns the
-  interface — the same discipline `PhysicsThread` follows with its sync lock.
-
-Two rules keep it from fighting the program's own writes:
-
-- An external edit to `layout.json` **replaces** the in-memory arrangement: the file on disk
-  is the truth, and panel moves not yet written at exit are discarded.
-- The watcher **stops before** the exit write-back, so the program never reloads the file it
-  is in the middle of writing.
-
-Reloading follows the same rule as startup with one difference: a structural error cannot
-refuse to start an editor that is already open, so it keeps the last valid shell on screen
-and reports the error. Value errors fall back to defaults exactly as at startup.
+**Planned for later:** several themes installed side by side and a list in the editor to
+choose between them. Choosing one records the choice and asks for a restart; it does not
+apply it in place. This is also why a structural error only ever has to be handled at
+startup, where refusing to start is a clear answer.
 
 ### Where the files live — decided
 
-**Beside the engine installation**, at `<install>/shell/theme.json`. Ordinary files on disk,
-as above.
+Two places, for two kinds of theme. "`theme.json`" elsewhere in this document stands for
+any theme file.
+
+**Built-in themes ship with the installation**, in `<install>/ui/themes/`. There are two, a
+dark one and a light one. They are not meant to be edited — nothing stops a curious user
+from opening them, but an update to the engine may replace them. Because they always come
+with the engine, a fresh machine starts with a working theme and nothing has to be copied
+anywhere on first start.
+
+**Themes the user makes go in the user's data directory**, the place each operating system
+reserves for an application's per-user files, under `AEngine/ui/`:
+
+| System | Directory |
+|---|---|
+| Linux | `$XDG_DATA_HOME/AEngine/ui/`, which defaults to `~/.local/share/AEngine/ui/` |
+| Windows | `%LOCALAPPDATA%\AEngine\ui\`, i.e. `C:\Users\<name>\AppData\Local\AEngine\ui\` |
+| macOS | `~/Library/Application Support/AEngine/ui/` |
+
+A new theme is a file placed in `themes/` inside that directory. The procedure — how to
+start from a built-in theme and where to put the result — is for user documentation, not
+for the editor to guide.
+
+`layout.json`, which the program writes back in Phase 4, also lives under `AEngine/ui/` and
+**never in the installation**, so an engine update cannot reset a user's arrangement. Not in
+a cache directory either (`~/.cache`): the system and cleaning tools treat a cache as
+disposable and empty it, which would reset the arrangement just the same.
+
+**Fonts a user adds** go in `fonts/` under the same directory. The default font ships with
+the engine. A user's font may lack glyphs a language needs — a Latin-only font with the
+editor in Russian — so any character missing from it is drawn from the default font instead.
+That is the glyph fallback §8 already calls for, and it needs the font set planned for L2.
+
+Both locations are resolved in one place in `:editor`, so nothing else in the code knows
+which system it is on.
 
 The per-project option — each game project carrying its own editor appearance — is
 **rejected**, and the test that rejects it is worth keeping: *is the file needed for the game
@@ -739,16 +749,13 @@ and its scripts belong to the project. How the editor is painted belongs to whoe
 the engine, and the editor should look the same whichever project is open. The same answer
 applies to the locale files in §8 for the same reason.
 
-The user's config directory was the alternative, and it is the one that matters later rather
-than now. A directory the engine is installed into is often not writable by an ordinary user
-— `/opt/aengine`, `C:\Program Files\AEngine` — which breaks two things: a file the program
-writes back, and the claim that anyone can edit the appearance without administrator rights.
-
-**Neither bites in step 3f**, because `theme.json` is only ever read. It bites in Phase 4,
-when `layout.json` starts being written back on exit. The resolution then is the ordinary
-one: defaults ship with the installation, and a user's overrides and anything written back go
-to their config directory, which takes precedence. Path resolution is therefore kept behind a
-single point so that change is small.
+Keeping everything beside the installation was the earlier choice, and it was split this
+way. A directory the engine is installed into is often not writable by an ordinary user —
+`/opt/aengine`, `C:\Program Files\AEngine` — which breaks two things: `layout.json`, which
+the program writes back, and the claim that anyone can make a theme without administrator
+rights. The user's data directory is always writable by its owner and survives reinstalling
+or updating the engine; the installation keeps only what the engine itself guarantees. The
+future theme list shows both kinds together.
 
 ### What the theme may and may not dress
 
@@ -868,9 +875,11 @@ Japanese or Korean, which would need a fallback font behind the main one.
 - **Which languages ship first.** Suggested: `en_US` and `pt_BR`.
 - **Which scripts to plan for.** Latin only for now, or East Asian and right-to-left as
   well — this decides the atlas design, so it is worth settling before step 3b-2.
-- **Where the locale files live** — settled by the same rule as the shell files in §7: beside
-  the engine installation, not per project. The language the editor speaks belongs to whoever
-  operates the engine, not to the game being made.
+- ~~**Where the locale files live**~~ — **decided:** with the engine, in `<install>/lang/`.
+  Not per project, since the language the editor speaks belongs to whoever operates the
+  engine, and not in the user's data directory like themes: translation keys change with each
+  engine version, so the files must be updated with the engine rather than kept as a user's
+  copy.
 - **Plurals.** "1 entity" and "2 entities" differ, and languages disagree on how many forms
   exist — Russian has three, Japanese has none. Simple placeholders now; proper plural rules
   later, if needed.
@@ -1006,11 +1015,10 @@ nobody can review.
 |---|---|---|
 | **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
 | **3b** ✅ | Latin-1, metrics, kerning, measuring, wrapping and a layout cache | L2 |
-| **3f'** | Colours leave Java for `theme.json` — brought forward, see *The plan ahead* | §7 |
 | **3c** | A row of boxes lays itself out with grow, gap and padding | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
-| **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and saving it reloads live | §7 |
+| **3f** | `theme.json` drives the colours and a broken file stops startup with a precise error | §7 |
 | **3g** | Editor text comes from locale files, following the system language by default | §8 |
 
 The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
