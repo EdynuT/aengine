@@ -11,6 +11,7 @@ bin/
 .vscode/
 .idea/
 *.iml
+*.ini
 
 # OS
 Thumbs.db

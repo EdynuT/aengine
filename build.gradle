@@ -1,22 +1,25 @@
-plugins {
-    id 'java-library'
-    id 'application'
-    id 'maven-publish'
-}
+// Root project: shared configuration only. All code lives in the subprojects.
+//
+//   :core    renderer, ECS, physics, audio, assets, scripting
+//   :ui      the in-house UI framework (see docs/UI_FRAMEWORK_ARCHITECTURE.md)
+//   :editor  editor surface and application host
+//
+// The dependency direction is one-way: editor -> ui -> core. It is enforced here by the
+// module graph rather than by convention, so a stray import fails the build.
 
-group   = 'com.aengine'
-version = '0.11.0'
+allprojects {
+    group   = 'com.aengine'
+    version = '0.16.0'
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+    repositories {
+        mavenCentral()
     }
 }
 
-repositories {
-    mavenCentral()
-}
+subprojects {
+    apply plugin: 'java-library'
 
+<<<<<<< HEAD
 ext {
     lwjglVersion = '3.3.4'
     jomlVersion  = '1.10.5'
@@ -32,23 +35,27 @@ ext {
     } else {
         lwjglNatives = 'natives-linux'
         imguiNatives = 'linux'
+=======
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+        withSourcesJar()
+>>>>>>> c135ee56ef1b531a536c740dd1f39980d9e2299b
     }
-}
 
-dependencies {
-    // Core Engine Bindings
-    implementation "org.lwjgl:lwjgl:${lwjglVersion}"
-    implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
-    implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
-    implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
-    api "org.joml:joml:${jomlVersion}"
+    // Directories are short (core/, ui/, editor/); published artifacts are not, so the
+    // jars and Maven coordinates stay unambiguous outside this repository.
+    base {
+        archivesName = "aengine-${project.name}"
+    }
 
-    // Native Platforms Resolvers
-    runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:${lwjglNatives}"
-    runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:${lwjglNatives}"
-    runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:${lwjglNatives}"
-    runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:${lwjglNatives}"
+    ext {
+        lwjglVersion = '3.3.4'
+        jomlVersion  = '1.10.5'
+        imguiVersion = '1.86.11'
 
+<<<<<<< HEAD
     // Json parsing library for configuration and serialization
     implementation 'com.google.code.gson:gson:2.10.1'
     
@@ -86,13 +93,18 @@ publishing {
                 name = 'AEngine'
                 description = 'Java 2D/3D graphics engine (OpenGL 3.3 backend)'
             }
+=======
+        String osName = System.getProperty('os.name').toLowerCase()
+        if (osName.contains('win')) {
+            lwjglNatives = 'natives-windows'
+            imguiNatives = 'windows'
+        } else if (osName.contains('mac')) {
+            lwjglNatives = 'natives-macos'
+            imguiNatives = 'macos'
+        } else {
+            lwjglNatives = 'natives-linux'
+            imguiNatives = 'linux'
+>>>>>>> c135ee56ef1b531a536c740dd1f39980d9e2299b
         }
     }
-    repositories {
-        mavenLocal()
-    }
-}
-
-tasks.named('run') {
-    standardInput = System.in
 }

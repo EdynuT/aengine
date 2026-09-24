@@ -1,6 +1,6 @@
 # AEngine
 
-A high-performance, multi-API capable graphics engine built in Java and driven by a lightweight, cross-platform frontend orchestrated via Rust and Tauri v2.
+A high-performance, multi-API capable graphics engine built in Java, running as a single self-contained process.
 
 The engine is engineered strictly as a decoupled reusable runtime infrastructure. The structural abstraction layer between application logic and the graphics hardware backend (`RendererAPI`, `ShaderAPI`, `TextureAPI`, `BufferAPI`) guarantees absolute isolation, allowing a seamless future migration from OpenGL to Vulkan without mutating game-space code blocks.
 
@@ -11,9 +11,8 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 | Component | Specification |
 |---|---|
 | **Core Language** | Java 25 (OpenJDK) |
-| **System Orchestrator** | Rust 1.80+ / Tauri v2 (Native OS Interprocess Management) |
-| **Interface Frontend** | Static HTML5 / CSS3 (Grid & Flexbox) / Vanilla JS (Zero-Framework WebKit) |
-| **Build System** | Gradle 9.1+ (Wrapper orchestrated) & Cargo (Rust Package Manager) |
+| **Editor Interface** | Dear ImGui (transitional) — migrating to an in-house framework, see [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md) |
+| **Build System** | Gradle 9.1+ (Wrapper orchestrated, 3-module graph) |
 | **Graphics Platform** | OpenGL 4.6 Core Profile (Mesa/ACO Optimized) via LWJGL 3.3.4 |
 | **Windowing / Input** | GLFW Native Layer (Wayland & Win32 native hardware deltas) |
 | **Math Engine** | JOML 1.10.5 (SIMD aligned vector transformations) |
@@ -23,8 +22,26 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 
 ## Engine Architecture Subsystems
 
-### Hybrid IPC Orchestration
-The application architecture splits into two main layers: the Hub Launcher and the Graphics Engine Core. The Frontend Hub uses Tauri v2 (WebKitGtk on Linux / WebView2 on Windows) to manage project state, configuration, and project initialization. When a project is launched, the Rust backend spawns the high-performance Java JVM runtime as an isolated, detached background subprocess, passing target environment variables and VFS paths directly via command-line arguments.
+### Module Layout
+The build is split into three Gradle modules with a one-way dependency graph:
+
+| Module | Contents | Depends on |
+|---|---|---|
+| `:core` | Renderer, ECS, physics, audio, assets, scripting | — |
+| `:ui` | In-house UI framework (empty until Phase 2) | `:core` |
+| `:editor` | Editor surface and application host; Dear ImGui confined here | `:core`, `:ui` |
+
+`:core` carries no UI toolkit. The engine loop drives the interface through the
+`com.aengine.core.UILayer` interface, which the editor implements today with Dear ImGui and
+the in-house framework will implement later without touching `Engine`.
+
+`:ui` is additionally restricted to a subset of core packages, enforced by a
+`checkBoundary` task that fails the build on a disallowed import.
+
+### Single-Process Architecture
+The engine, editor and interface run inside one JVM process, sharing one address space and one object graph. There is no interprocess bridge, no serialization hop and no external UI runtime: editor panels read engine state directly.
+
+The interface currently renders through Dear ImGui as a transitional layer, and is being replaced by an in-house UI framework. The design and migration plan are in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md).
 
 ### Virtual File System (VFS) & Sandboxing
 All hardware asset paths are evaluated via `FileSystem.resolve()`. It enforces strict boundary sandboxing using system path normalization to prevent directory traversal vulnerabilities. Native asset allocations bypass the JVM heap, using `MemoryUtil.memAlloc` and direct `FileChannel` streams to achieve zero-copy transfers straight to the GPU driver pipelines.
@@ -44,7 +61,7 @@ ProjectRoot/
 │   │   ├── textures/       # Source bitmaps (.atex)
 │   │   ├── shaders/        
 │   │   ├── models/         
-│   │   └── audio/          
+│   │   └── audio/          # Compiled audio (.aaud)
 │   ├── src/
 │   │   ├── textures/       # Image textures (.png, .jpg, .jpeg)
 │   │   ├── models/         # Custom objects (.obj)
@@ -65,82 +82,23 @@ Clone the repository to your workspace
 
 * **Windows**
   ```powershell
-  git clone https://github.com/EdynuT/AEngine.git
-  
-  cd .\path\to\AEngine
+  git clone https://github.com/EdynuT/aengine.git
+  cd .\aengine
   ```
 
 * **Linux**
   ```bash
-  git clone https://github.com/EdynuT/AEngine.git
-
-  cd ./path/to/AEngine
+  git clone https://github.com/EdynuT/aengine.git
+  cd ./aengine
   ```
 
 ### Prerequisites
 
-Before launching the development workspace, ensure your target operating system has the required compilers and native web rendering runtimes installed:
-
-#### 1. Core Languages & Toolchains
+Building and running the engine requires a single toolchain:
 
 * **Java 25 (OpenJDK)** configured in your global system environment path.
-* **Rust Toolchain (v1.80+)** installed via rustup:
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
-#### 2. Native WebKit Runtimes 
 
-* **Windows 10 / 11 (PowerShell Elevated)**
-Windows requires the Microsoft Edge WebView2 runtime (usually pre-installed on Windows 11). If missing, install it along with the C++ build tools using C++ core desktop workloads via Visual Studio Installer or terminal:
-
-  ```powershell
-  winget install Microsoft.EdgeWebView2Runtime
-  winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-  ```
-
-  Install tauri-cli for inteface development
-  ```powershell
-  cargo install tauri-cli --version "^2.0.0"
-  ```
-
-  If you use Node
-  ```powershell
-  npm install -g @tauri-apps/cli@next
-  ```
-
-* **Arch Based**
-
-  ```bash
-  sudo pacman -Syu --needed base-devel webkit2gtk-4.1
-  ```
-
-  ```bash
-  sudo pacman -S tauri-cli
-  ```
-
-  Or you can install via Cargo
-
-  ```bash
-  cargo install tauri-cli --version "^2.0.0"
-  ```
-
-* **Debian Based**
-
-  ```bash
-  sudo apt update
-  sudo apt install -y build-essential libwebkit2gtk-4.1-dev
-  ```
-
-  ```bash
-  cargo install tauri-cli --version "^2.0.0"
-  ```
-
-  NPM alternative if you use Node
-
-  ```bash
-  npm install -g @tauri-apps/cli@next
-  ```
-
+Everything else — LWJGL, GLFW, OpenGL, OpenAL and the native binaries for your platform — is resolved by the Gradle wrapper. No native compiler, no Rust toolchain and no web runtime are needed.
 ### Executing the Runtime Environment
 The framework dynamically switches execution pipelines at startup using JVM command-line arguments. You can pass these parameters straight through Gradle using the `--args` flag.
 
@@ -148,20 +106,21 @@ The framework dynamically switches execution pipelines at startup using JVM comm
   This initializes native hardware depth testing (`glEnable(GL_DEPTH_TEST)`), binds the custom isolated static VRAM geometry allocations, and deploys the infinite screen-space analytic wireframe grid.
 
   ```bash
-  ./gradlew run
+  ./gradlew :editor:run
   ```
   Or
 
   ```bash
-  ./gradlew run --args="--3d"
+  ./gradlew :editor:run --args="--3d"
   ```
 
 * **2. Hybrid Core 2D Perspective Pipeline**
     Spawns the application inside the multi-API agnostic 2D batching renderer ecosystem. Optimal for flat sprites, UI layouts, and standard 2D ECS validation layouts.
 
   ```bash
-  ./gradlew run --args="--2d"
+  ./gradlew :editor:run --args="--2d"
   ```
+<<<<<<< HEAD
 
 ### Starting the Interface Development Workspace
 To kickstart the Tauri v2 Hub Wizard in development mode (which automatically watches for changes in both the Rust backend and the HTML/CSS frontend assets):
@@ -266,3 +225,5 @@ To kickstart the Tauri v2 Hub Wizard in development mode (which automatically wa
 - [ ] Tauri WebKit Editor Dashboard: Finalize the Rust/Svelte (or Vue/React) frontend wrapper to intercept the 10Hz TCP telemetry loopback, visualizing real-time ECS allocation metrics, FPS graphs, and intercepted Logger streams.
 
 - [ ] Advanced Rendering Techniques: Expand the Shader subsystem to support Framebuffer Objects (FBOs) for post-processing, Shadow Mapping, and a rudimentary Physically Based Rendering (PBR) pipeline decoupled from the 2D Batch Renderer.
+=======
+>>>>>>> c135ee56ef1b531a536c740dd1f39980d9e2299b

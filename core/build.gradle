@@ -1,0 +1,51 @@
+// Engine runtime: rendering, ECS, physics, audio, assets and scripting.
+//
+// Depends on no other AEngine module, and must stay that way — it is the base of the
+// dependency graph. In particular it carries no UI toolkit: the engine loop drives the
+// interface through com.aengine.core.UILayer, which the editor implements.
+
+plugins {
+    id 'maven-publish'
+}
+
+dependencies {
+    // Core bindings
+    implementation "org.lwjgl:lwjgl:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+    implementation "org.lwjgl:lwjgl-openal:${lwjglVersion}"
+
+    // Exposed in public signatures (Camera, Transform, ...), so consumers need it too
+    api "org.joml:joml:${jomlVersion}"
+
+    // Scripting runtimes
+    implementation 'org.graalvm.polyglot:polyglot:23.1.2'
+    implementation 'org.graalvm.polyglot:js:23.1.2'
+    implementation 'black.ninia:jep:4.2.0'
+    implementation 'org.luaj:luaj-jse:3.0.1'
+
+    // Scene and prefab serialization
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Native platform resolvers
+    runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:${lwjglNatives}"
+    runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:${lwjglNatives}"
+    runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:${lwjglNatives}"
+    runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:${lwjglNatives}"
+    runtimeOnly "org.lwjgl:lwjgl-openal:${lwjglVersion}:${lwjglNatives}"
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifactId = 'aengine-core'
+            pom {
+                name = 'AEngine Core'
+                description = 'Java 2D/3D graphics engine runtime (OpenGL 3.3 backend)'
+            }
+        }
+    }
+    repositories { mavenLocal() }
+}
