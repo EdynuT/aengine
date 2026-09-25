@@ -76,30 +76,32 @@ public class Main extends Engine {
     private static final float[] LAYOUT_BOX        = { 0.36f, 0.62f, 0.94f, 1.0f };
     private static final float[] LAYOUT_CAPTION    = { 0.60f, 0.62f, 0.68f, 1.0f };
     private static final float[] LAYOUT_BOX_TEXT   = { 0.06f, 0.08f, 0.12f, 1.0f };
+    private static final float[] LAYOUT_FRAME_FILL = { 0.07f, 0.08f, 0.11f, 0.94f };
 
-    // SCAFFOLDING — steps 3c-1 and 3c-2: a row holding four boxes, two fixed and two growing.
+    // SCAFFOLDING — steps 3c-1 to 3c-3: an outline of the editor's frame. A column holding a
+    // toolbar row (four boxes, two fixed and two growing) above a body row of three panes.
     // Handles into aegis.layout(), built once in buildLayoutScaffolding() and solved every
     // frame in drawUiFirstLight().
-    private int layoutRow;
+    private int layoutFrame;
+    private int layoutRow;          // the toolbar
     private int layoutBoxA;
     private int layoutBoxB;
     private int layoutBoxC;
     private int layoutBoxD;
+    private int layoutBody;
+    private int layoutHierarchy;
+    private int layoutTreeItemA;
+    private int layoutTreeItemB;
+    private int layoutViewport;
+    private int layoutCentred;
+    private int layoutInspector;
+    private int layoutFieldA;
+    private int layoutFieldB;
 
     // SCAFFOLDING — somewhere to build a line of text with a number in it, reused every
     // frame. §9 forbids String.format and concatenation in the frame loop, and addText takes
     // a CharSequence precisely so a StringBuilder can be handed straight to it.
     private static final StringBuilder UI_TEXT = new StringBuilder(96);
-
-    /**
-     * SCAFFOLDING — the last recompute count that was reported.
-     *
-     * <p>The layout cache has no visual effect, so the only way to see it work is to watch a
-     * number stop moving. This logs when that number changes and stays silent when it does
-     * not: a quiet log after the first frames is the cache holding, and a log line per frame
-     * is the cache failing. It allocates only on a change, never in the steady state.</p>
-     */
-    private int lastLayoutRecomputes = -1;
 
     /** Scene FBO colour attachment, captured so the scaffold can present it as a thumbnail. */
     private int sceneTextureID = 0;
@@ -586,32 +588,39 @@ public class Main extends Engine {
                .append("   from cache: ").append(aegis.layoutHits());
         aegis.addTextTop(textX, textY, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
-        // The same evidence for anyone reading the log instead of the screen.
-        if (recomputes != lastLayoutRecomputes) {
-            lastLayoutRecomputes = recomputes;
-            Logger.debug(Logger.System.RENDERER,
-                "Text layout recomputed (total %d, served from cache %d).",
-                recomputes, aegis.layoutHits());
-        }
-
-        // Steps 3c-1 and 3c-2, the visible check: a row along the bottom of the window whose
-        // width follows the window. None of the boxes' positions or widths is written here —
-        // solve() works them out from the tree built in buildLayoutScaffolding(), and drawing
-        // only reads them back. Resize the window and A and D keep their width while B and C
-        // absorb the change, C always twice B; the numbers inside the boxes say so exactly.
+        // Steps 3c-1 to 3c-3, the visible check: an outline of the editor's frame along the
+        // bottom of the window — a toolbar above three panes. The only size written here is the
+        // frame's own, handed to solve(); every rectangle inside it is worked out from the tree
+        // built in buildLayoutScaffolding(), and drawing only reads them back. Resize the window
+        // and the toolbar's B and C, the viewport pane and the inspector's fields all follow.
         com.aengine.aegis.AegisLayout layout = aegis.layout();
 
-        final float rowHeight = 84.0f;         // 60 for the boxes + 12 padding above and below
-        final float rowWidth  = w - 80.0f;     // the window's width, less 40 each side
-        final float rowTop    = h - rowHeight - 24.0f;
+        final float frameHeight = 300.0f;
+        final float frameWidth  = w - 80.0f;   // the window's width, less 40 each side
+        final float frameTop    = h - frameHeight - 24.0f;
 
-        aegis.addTextTop(40.0f, rowTop - line - 6.0f,
-            "3c-2: row follows the window - A and D fixed, B grow 1, C grow 2",
+        aegis.addTextTop(40.0f, frameTop - line - 6.0f,
+            "3c-3: frame = column [ toolbar row, body row [ hierarchy X START, viewport X+Y CENTER, inspector X STRETCH ] ]",
             LAYOUT_CAPTION[0], LAYOUT_CAPTION[1], LAYOUT_CAPTION[2], LAYOUT_CAPTION[3]);
 
-        layout.solve(layoutRow, 40.0f, rowTop, rowWidth, rowHeight);
+        // One solve for the whole tree: the frame, and everything nested in it.
+        layout.solve(layoutFrame, 40.0f, frameTop, frameWidth, frameHeight);
 
-        // The row itself, drawn from its solved rectangle like everything else.
+        // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
+        // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
+        // nor the frame's rectangle changes; "skipped" climbs once a frame instead. Resizing the
+        // window changes the rectangle, so "solved" ticks up while it happens and stops again.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("layout solve - solved: ").append(layout.solves())
+               .append("   skipped: ").append(layout.solveSkips());
+        aegis.addTextTop(textX, textY + line, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // The frame behind everything else.
+        aegis.addRoundedRect(layout.x(layoutFrame), layout.y(layoutFrame),
+            layout.width(layoutFrame), layout.height(layoutFrame), 10.0f,
+            LAYOUT_FRAME_FILL[0], LAYOUT_FRAME_FILL[1], LAYOUT_FRAME_FILL[2], LAYOUT_FRAME_FILL[3]);
+
+        // The toolbar, drawn from its solved rectangle like everything else.
         aegis.addRoundedRect(layout.x(layoutRow), layout.y(layoutRow),
             layout.width(layoutRow), layout.height(layoutRow), 8.0f,
             LAYOUT_ROW_FILL[0], LAYOUT_ROW_FILL[1], LAYOUT_ROW_FILL[2], LAYOUT_ROW_FILL[3],
@@ -640,6 +649,57 @@ public class Main extends Engine {
         drawWidthLabel(layout, layoutBoxC, "C");
         drawWidthLabel(layout, layoutBoxD, "D");
 
+        // The three panes of the body. Each is the same call: its rectangle, as solved.
+        aegis.addRoundedRect(layout.x(layoutHierarchy), layout.y(layoutHierarchy),
+            layout.width(layoutHierarchy), layout.height(layoutHierarchy), 8.0f,
+            LAYOUT_ROW_FILL[0], LAYOUT_ROW_FILL[1], LAYOUT_ROW_FILL[2], LAYOUT_ROW_FILL[3],
+            LAYOUT_ROW_BORDER[0], LAYOUT_ROW_BORDER[1], LAYOUT_ROW_BORDER[2], LAYOUT_ROW_BORDER[3],
+            1.0f);
+
+        aegis.addRoundedRect(layout.x(layoutViewport), layout.y(layoutViewport),
+            layout.width(layoutViewport), layout.height(layoutViewport), 8.0f,
+            LAYOUT_ROW_FILL[0], LAYOUT_ROW_FILL[1], LAYOUT_ROW_FILL[2], LAYOUT_ROW_FILL[3],
+            LAYOUT_ROW_BORDER[0], LAYOUT_ROW_BORDER[1], LAYOUT_ROW_BORDER[2], LAYOUT_ROW_BORDER[3],
+            1.0f);
+
+        aegis.addRoundedRect(layout.x(layoutInspector), layout.y(layoutInspector),
+            layout.width(layoutInspector), layout.height(layoutInspector), 8.0f,
+            LAYOUT_ROW_FILL[0], LAYOUT_ROW_FILL[1], LAYOUT_ROW_FILL[2], LAYOUT_ROW_FILL[3],
+            LAYOUT_ROW_BORDER[0], LAYOUT_ROW_BORDER[1], LAYOUT_ROW_BORDER[2], LAYOUT_ROW_BORDER[3],
+            1.0f);
+
+        // Hierarchy items: START, so each keeps the width it asked for, against the left edge.
+        aegis.addRoundedRect(layout.x(layoutTreeItemA), layout.y(layoutTreeItemA),
+            layout.width(layoutTreeItemA), layout.height(layoutTreeItemA), 4.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+        aegis.addTextTop(layout.x(layoutTreeItemA) + 8.0f, layout.y(layoutTreeItemA) + 4.0f,
+            "START 150", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+
+        aegis.addRoundedRect(layout.x(layoutTreeItemB), layout.y(layoutTreeItemB),
+            layout.width(layoutTreeItemB), layout.height(layoutTreeItemB), 4.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+        aegis.addTextTop(layout.x(layoutTreeItemB) + 8.0f, layout.y(layoutTreeItemB) + 4.0f,
+            "START 110", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+
+        // Viewport's box: centred on X and on Y by the pane's two alignments.
+        aegis.addRoundedRect(layout.x(layoutCentred), layout.y(layoutCentred),
+            layout.width(layoutCentred), layout.height(layoutCentred), 6.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+        aegis.addTextTop(layout.x(layoutCentred) + 12.0f,
+            layout.y(layoutCentred) + (layout.height(layoutCentred) - line) * 0.5f,
+            "CENTER", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+
+        // Inspector fields: STRETCH, so each is as wide as the pane minus its padding.
+        aegis.addRoundedRect(layout.x(layoutFieldA), layout.y(layoutFieldA),
+            layout.width(layoutFieldA), layout.height(layoutFieldA), 4.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+        drawWidthLabel(layout, layoutFieldA, "STRETCH");
+
+        aegis.addRoundedRect(layout.x(layoutFieldB), layout.y(layoutFieldB),
+            layout.width(layoutFieldB), layout.height(layoutFieldB), 4.0f,
+            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+        drawWidthLabel(layout, layoutFieldB, "STRETCH");
+
         aegis.end();   // closes the draw list and presents it
     }
 
@@ -653,21 +713,39 @@ public class Main extends Engine {
     }
 
     /**
-     * SCAFFOLDING — steps 3c-1 and 3c-2: builds the layout tree the frame will solve.
+     * SCAFFOLDING — steps 3c-1 to 3c-3: builds the layout tree the frame will solve.
      *
      * <p>Runs once, at init. Building says what contains what and how big each thing asks to
      * be; it does not say where anything goes — that is the solve's job, every frame.</p>
      *
-     * <p>A and D ask for a fixed width and get exactly that. B and C ask for no width at all
-     * and grow instead, splitting whatever the row has left over 1 to 2 — so C is always twice
-     * as wide as B, whatever the window's size. Fixed boxes at both ends show the growers
-     * filling the space between them rather than pushing past the row's edge.</p>
+     * <p>The tree, from the outside in:</p>
+     * <pre>
+     * frame      column, X STRETCH
+     * ├─ toolbar row, 84 tall        A fixed · B grow 1 · C grow 2 · D fixed
+     * └─ body    row, grow 1, Y STRETCH
+     *    ├─ hierarchy  column, 240 wide, X START               two items of their own width
+     *    ├─ viewport   column, grow 1, X CENTER, Y CENTER      one box, in the middle
+     *    └─ inspector  column, 300 wide, X STRETCH             two fields as wide as the pane
+     * </pre>
+     *
+     * <p>Nobody in this tree is told the window's size. The frame receives it from solve(),
+     * and every pane's width and height follows from grow and stretch — resize the window
+     * and all of it moves.</p>
      */
     private void buildLayoutScaffolding() {
         com.aengine.aegis.AegisLayout layout = aegis.layout();
 
-        // The root: a row with no parent. It takes whatever rectangle solve() hands it.
-        layoutRow = layout.row(com.aengine.aegis.AegisLayout.NONE);
+        // The root: a column with no parent. It takes whatever rectangle solve() hands it, and
+        // STRETCH on X makes both of its rows as wide as it is, so neither asks for a width.
+        layoutFrame = layout.column(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(layoutFrame, 8.0f);
+        layout.setGap(layoutFrame, 8.0f);
+        layout.setAlignX(layoutFrame, com.aengine.aegis.AegisLayout.Align.STRETCH);
+
+        // The toolbar: the 3c-2 row, now a child. It asks for a height and no width — the
+        // frame's STRETCH supplies the width.
+        layoutRow = layout.row(layoutFrame);
+        layout.setSize(layoutRow, 0.0f, 84.0f);
         layout.setPadding(layoutRow, 12.0f);   // clear space inside the row's edges
         layout.setGap(layoutRow, 8.0f);        // space between one box and the next
 
@@ -688,17 +766,65 @@ public class Main extends Engine {
         // Fixed again, so the growers have an edge to stop at.
         layoutBoxD = layout.box(layoutRow);
         layout.setSize(layoutBoxD, 60.0f, 60.0f);
+
+        // The body: takes all the height the toolbar leaves (grow, in a column, is height),
+        // and STRETCH on Y makes its three panes that tall.
+        layoutBody = layout.row(layoutFrame);
+        layout.setGrow(layoutBody, 1.0f);
+        layout.setGap(layoutBody, 8.0f);
+        layout.setAlignY(layoutBody, com.aengine.aegis.AegisLayout.Align.STRETCH);
+
+        // Hierarchy: a fixed-width pane. START on X keeps each item at the width it asked for,
+        // against the left edge — the way tree rows of different lengths sit. START is the
+        // default; it is written out so the three panes read side by side.
+        layoutHierarchy = layout.column(layoutBody);
+        layout.setSize(layoutHierarchy, 240.0f, 0.0f);
+        layout.setPadding(layoutHierarchy, 8.0f);
+        layout.setGap(layoutHierarchy, 6.0f);
+        layout.setAlignX(layoutHierarchy, com.aengine.aegis.AegisLayout.Align.START);
+
+        layoutTreeItemA = layout.box(layoutHierarchy);
+        layout.setSize(layoutTreeItemA, 150.0f, 28.0f);
+
+        layoutTreeItemB = layout.box(layoutHierarchy);
+        layout.setSize(layoutTreeItemB, 110.0f, 28.0f);
+
+        // Viewport: takes the width the side panes leave, and centres what it holds on both
+        // axes — one call per axis.
+        layoutViewport = layout.column(layoutBody);
+        layout.setGrow(layoutViewport, 1.0f);
+        layout.setAlignX(layoutViewport, com.aengine.aegis.AegisLayout.Align.CENTER);
+        layout.setAlignY(layoutViewport, com.aengine.aegis.AegisLayout.Align.CENTER);
+
+        layoutCentred = layout.box(layoutViewport);
+        layout.setSize(layoutCentred, 180.0f, 40.0f);
+
+        // Inspector: a fixed-width pane. STRETCH on X makes every field as wide as the pane, so
+        // the fields ask only for a height.
+        layoutInspector = layout.column(layoutBody);
+        layout.setSize(layoutInspector, 300.0f, 0.0f);
+        layout.setPadding(layoutInspector, 8.0f);
+        layout.setGap(layoutInspector, 6.0f);
+        layout.setAlignX(layoutInspector, com.aengine.aegis.AegisLayout.Align.STRETCH);
+
+        layoutFieldA = layout.box(layoutInspector);
+        layout.setSize(layoutFieldA, 0.0f, 28.0f);
+
+        layoutFieldB = layout.box(layoutInspector);
+        layout.setSize(layoutFieldB, 0.0f, 28.0f);
     }
 
     /**
      * SCAFFOLDING — writes a box's solved width inside it, so a grow ratio can be read off the
      * screen as numbers rather than judged by eye. Built in the reused {@code UI_TEXT}, never
-     * with concatenation, for the reason given at its declaration.
+     * with concatenation, for the reason given at its declaration. Centred vertically in the
+     * box by its line height, so it fits a 28-pixel field as well as a 60-pixel box.
      */
     private void drawWidthLabel(com.aengine.aegis.AegisLayout layout, int box, String name) {
         UI_TEXT.setLength(0);
         UI_TEXT.append(name).append(' ').append((int) layout.width(box));
-        aegis.addTextTop(layout.x(box) + 8.0f, layout.y(box) + 8.0f, UI_TEXT,
+        float top = layout.y(box) + (layout.height(box) - aegis.lineHeight()) * 0.5f;
+        aegis.addTextTop(layout.x(box) + 8.0f, top, UI_TEXT,
             LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
     }
 

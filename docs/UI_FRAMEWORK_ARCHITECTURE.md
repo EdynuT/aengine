@@ -2,8 +2,9 @@
 
 **Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
 atlas) is done, step 3b is complete (Latin-1, font metrics, kerning, measuring and
-wrapping, and a layout cache), and **step 3c is half done**: rows and columns place their
-children with gap and padding, and grow shares spare space. The framework is named **Aegis**. Dear ImGui remains the
+wrapping, and a layout cache), and **step 3c is complete**: rows and columns nest, place
+their children with gap, padding, grow and per-axis alignment, and skip a solve when nothing
+changed. The framework is named **Aegis**. Dear ImGui remains the
 transitional editor layer, with Aegis drawing test scaffolding on top of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
 
@@ -24,6 +25,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3b-5 | Wrapped layouts are remembered, so unchanged text is not laid out again |
 | Step 3c-1 | `AegisLayout`: rows, columns and boxes as handles; children placed with gap and padding |
 | Step 3c-2 | Grow: spare space shared in proportion; a row follows the window's width |
+| Step 3c-3 | Nesting and alignment per screen axis — `setAlignX` / `setAlignY` with start, centre, end, stretch |
+| Step 3c-4 | A solve is skipped when neither the tree nor the rectangle it is given has changed |
 
 ### The plan ahead
 
@@ -41,14 +44,14 @@ be checked before the next begins.
 | 5 ✅ | Layout cache | Laid-out text cached by content, so unchanged text costs nothing per frame | No visual change — a recompute counter that stops climbing |
 
 **Step 3c — layout** (L3). Rows and columns that size their children with grow, gap and
-padding. Four parts, in order — **we stopped after part 2**:
+padding. Four parts, in order — **all four done**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
 | 1 ✅ | Fixed placement | `AegisLayout`, reached through `aegis.layout()`: a tree built once, solved each frame; children placed one after another with gap and padding | A row of three unequal boxes with equal gaps and padding |
 | 2 ✅ | Grow | Spare space shared among children in proportion to their grow factor | A row along the bottom of the window; A and D fixed, C always twice B while resizing |
-| 3 | Nesting and alignment | Rows inside columns inside rows; children aligned across the main axis (start, centre, end, stretch) | An outline of the editor's frame — hierarchy, viewport, inspector |
-| 4 | Layout cache | A solve skipped when neither the tree nor the space it is given has changed | No visual change — a solve counter that stops climbing, as in 3b-5 |
+| 3 ✅ | Nesting and alignment | Rows inside columns inside rows; children aligned per screen axis with `setAlignX` / `setAlignY` (start, centre, end, stretch) | An outline of the editor's frame — toolbar over hierarchy, viewport, inspector |
+| 4 ✅ | Layout cache | A solve skipped when neither the tree nor the space it is given has changed | No visual change — a solve counter that stops climbing, as in 3b-5 |
 
 **Step 3d — retained tree** (L4). Nodes that persist across frames, hit-testing, focus
 order. *Visible:* a box highlighting under the mouse.
@@ -93,7 +96,7 @@ ImGui. Both are described in §11.
 
 ### Open decisions
 
-None of these blocks the rest of step 3c.
+Step 3c is closed; none of these blocks step 3d, which follows it.
 
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
 - ~~**Where the shell, font and locale files live**~~ — **decided:** built-in dark and light
@@ -531,9 +534,9 @@ Layout is **cached and dirty-tracked**. A frame in which nothing changed perform
 work at all. Results are stored in parallel primitive arrays indexed by node handle, not as
 objects per node.
 
-*Implemented so far* as `AegisLayout` (steps 3c-1 and 3c-2), handed out by `aegis.layout()`
-rather than forwarded method by method, per the rule in *The entry point*. A few things
-about it are worth recording.
+*Implemented* as `AegisLayout` (step 3c), handed out by `aegis.layout()` rather than
+forwarded method by method, per the rule in *The entry point*. A few things about it are
+worth recording.
 
 **Building and solving are separate.** The tree — what contains what, what each node asks
 for — is built once. The solve turns it into a rectangle per node every frame, and drawing
@@ -556,6 +559,28 @@ and a fractional edge is drawn half-covered — a soft edge on what should be a 
 cursor is kept exact and only each child's start and end are rounded, so the error never
 accumulates and every gap stays exactly the gap asked for. The same reasoning as the rounded
 line height in L2, applied to boxes.
+
+**Alignment is named by screen axis, not by main and cross.** `setAlignX` and `setAlignY`
+each take start, centre, end or stretch, and mean the same thing on a row as on a column:
+`setAlignY(CENTER)` centres vertically either way. The solve translates them into main and
+cross once, because that is what its walk needs. Along the axis the children follow each
+other on, alignment moves the group as a whole within the spare space — which is how a
+single box is centred in a pane, with no spacer nodes. Across the other axis it places each
+child, and there stretch fills the pane edge to edge, which is what lets panels nest into a
+frame without knowing its size. Stretch along the flow axis is refused when the tree is
+built, since that is what grow does. A CSS-style `justify` property was considered and
+declined in favour of this: one concept per axis rather than two properties with different
+vocabularies, and distributing space between children can still be done with growing boxes
+when a panel needs it.
+
+**A solve that could not move anything is skipped.** Every real change to the tree bumps a
+version number; each root remembers the version and the rectangle it was last solved with,
+and `solve` returns at once when both match. Setters handed the value a node already has
+change nothing, so a tree rebuilt with the same values every frame keeps the cache. The
+granularity is the whole tree: any change re-solves all of it. At dozens of nodes a full
+solve is cheap, and tracking dirty subtrees is worth its complexity only once widgets
+change on their own — that is for L4 to decide. As with the text cache, the scaffolding
+draws a solve counter that stops climbing when the window is still.
 
 ### L4 — Widget tree
 
@@ -1051,7 +1076,7 @@ nobody can review.
 |---|---|---|
 | **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
 | **3b** ✅ | Latin-1, metrics, kerning, measuring, wrapping and a layout cache | L2 |
-| **3c** ◐ | A row of boxes lays itself out with grow, gap and padding — parts 1–2 of 4 done | L3 |
+| **3c** ✅ | Rows and columns nest and lay themselves out with grow, gap, padding and alignment | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
 | **3f** | `theme.json` drives the colours and a broken file stops startup with a precise error | §7 |
