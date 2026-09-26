@@ -59,9 +59,14 @@ order. *Visible:* a box highlighting under the mouse.
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
 *Visible:* each one reacting to input.
 
+Before the text field, the atlas gains a second, small range: the punctuation that pasted
+text carries and Latin-1 lacks — `– — ‘ ’ “ ” … • € ™`. Today each draws as `?`, and pasting
+is exactly what a text field introduces. The no-break space (`0xA0`) needs nothing: it is
+inside Latin-1 and already baked.
+
 **Step 3f — theme file.** `theme.json` drives the colours over the property catalogue,
-with validation (§7). *Visible:* editing a colour in the file and restarting the editor
-changes it.
+with validation and live reload (§7). *Visible:* with the development option on, saving a
+colour in the file changes the running editor.
 
 **It stays after 3e.** Bringing it forward to sit between 3b and 3c was considered and
 declined. The token names would have been chosen against test scaffolding, and a theme file
@@ -74,19 +79,23 @@ scattered through drawing calls, so the migration is moving a block, not hunting
 themes a user makes go in their data directory. A theme dresses the editor's
 frame and never the content being edited, and it is **only ever read** — the arrangement half
 of §7, `layout.json`, stays in Phase 4 where it belongs, so nothing is written back in this
-step. Both decisions are recorded in §7. It is read **once, at startup**: there is no hot
-reload, and a changed theme takes effect on the next start (§7, *Changing the theme*).
+step. Both decisions are recorded in §7. A theme changes while running by two separate
+paths: the user choosing one in settings, and — behind a development option, off by
+default — the author's saves applying live (§7, *Changing the theme*).
 
-Three parts, in order:
+Four parts, in order:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
-| 1 | Property catalogue | The closed list of what is themeable — name, type, default — which validation checks against and fallbacks read from | Nothing on screen; it is the definition the next two depend on |
+| 1 | Property catalogue | The closed list of what is themeable — name, type, default — which validation checks against and fallbacks read from | Nothing on screen; it is the definition the next three depend on |
 | 2 | Load and resolve | `theme.json` parsed, `@name` references resolved once, a baked style table indexed by handle | The scaffolding draws in the file's colours instead of Java's literals |
 | 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors refuse to start | A deliberately broken file produces three precise warnings and still starts |
+| 4 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
-Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Part 3
-is what turns externalised constants into something another person can edit without fear.
+Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Parts 3
+and 4 are what turn externalised constants into something another person can edit without
+fear. The settings page that lets a user pick a theme is built with the real settings panel
+in Phase 4; it calls the same reload part 4 delivers.
 
 **Step 3g — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.
@@ -201,6 +210,14 @@ violation. It runs as part of `compileJava`, so the rule is checked on every bui
 than on review. The structurally pure alternative — splitting `:core` so the UI can
 only see a rendering-and-windowing module — stays open if the rule ever needs to be
 stronger than a build check.
+
+So does **JPMS**: a `module-info.java` per module, with `:core` exporting only what the UI
+may see, would make the boundary a compiler and runtime guarantee rather than a text scan.
+Nothing blocks it — no package is split across modules. It is deferred because it
+restructures the whole build to solve a problem `checkBoundary` already solves while Aegis
+lives inside the engine. The moment to adopt it is when Aegis moves to its own repository
+(*When to split* below), which is planned; the module boundary then becomes the published
+API anyway.
 
 ### What the split exposed
 
@@ -437,6 +454,16 @@ shader parameters rather than tessellated geometry: fewer vertices, better quali
 resolution independence. This is the layer that makes the framework *look* different from
 ImGui, and it is also the cheapest layer to build.
 
+**Clipping stays on the scissor for now; clipping in the shader is recorded as the next
+move.** A scissor change splits the frame into another draw command. Moving the clip into
+the fragment shader — each vertex carrying its clip rectangle, the shader discarding what
+falls outside — would let differently clipped panels share one draw. The draw-call saving
+alone is not worth it: a few dozen draws a frame cost nothing on desktop OpenGL, and each
+vertex would grow by two to four words. The argument that *is* worth it is shape: a scissor
+only clips to straight rectangles, so a scrolling list inside a panel with rounded corners
+leaks at the corners, while a clip evaluated as a distance field follows them. Decide when
+the first scrolling panel is built, in 3e or Phase 4.
+
 ### L2 — Text
 
 Staged deliberately, because this is where projects of this kind stall.
@@ -471,6 +498,14 @@ Staged deliberately, because this is where projects of this kind stall.
   holds for Latin, Greek and Cyrillic, and the moment the atlas covers CJK the square grows
   past any sane allocation and this must become sparse.
 
+  The sparse form, when it comes, is a list per first glyph: the second glyphs it pairs
+  with, sorted, and their corrections. DejaVu averages about five pairs per first glyph, so
+  a lookup is a handful of comparisons. Two shortcuts are rejected in advance: indexing
+  `rowOffset[a] + b` only moves the dense square around, and storing corrections as
+  `byte` loses the sub-pixel precision kerning exists for. The trigger is the atlas growing
+  past Latin-1 — Latin Extended or Cyrillic for localisation — not the 200 KB, which is a
+  necessary cost the engine can carry.
+
   Step 3b-4 added measuring and wrapping, and both turn on the same rule: **a paragraph is
   one string and a set of ranges into it, never a set of substrings.** `String.substring` per
   line per frame is precisely the allocation §9 forbids, so `measure` and `addText` both take
@@ -497,6 +532,12 @@ Staged deliberately, because this is where projects of this kind stall.
   policy, no growth — nothing to allocate, nothing to leak, no per-frame bookkeeping. Two
   paragraphs colliding on one slot evict each other every frame, which is a
   worse-than-nothing case rather than a common one at 128 slots.
+
+  A 2- or 4-way set-associative cache was considered and deferred. Only wrapped paragraphs
+  go through this cache — single-line labels, which are what a dense hierarchy or inspector
+  is made of, never do — so a busy panel does not fill it. If collisions ever start costing,
+  the on-screen recompute counter climbs in a still window, and that is the signal to make
+  the change, which is small.
 
   **The key is verified, never trusted.** A hash alone would eventually serve one paragraph's
   line breaks for another — rare, silent and baffling — so each entry stores a copy of its own
@@ -582,6 +623,18 @@ solve is cheap, and tracking dirty subtrees is worth its complexity only once wi
 change on their own — that is for L4 to decide. As with the text cache, the scaffolding
 draws a solve counter that stops climbing when the window is still.
 
+When the re-solve does need narrowing, the mechanism is **layout boundaries**: a subtree
+whose size cannot change what its parent sees — a pane of fixed size, say — contains its
+own changes, and a change inside it re-solves only that subtree. That belongs with L4, when
+nodes start changing on their own.
+
+**Rounding under display scaling — the rule for when content scale arrives.** Today every
+coordinate is a physical pixel, so rounding to whole numbers is exactly right. Once
+`Window` exposes content scale (§10) and layout works in logical pixels, rounding must
+happen **in physical pixels** — `round(x * scale) / scale` — or at 150% an edge lands
+between device pixels and jitters. Leaving positions fractional and trusting the SDF to
+smooth them is the wrong fix: it brings back the soft edges rounding exists to prevent.
+
 ### L4 — Widget tree
 
 Nodes are **integer handles into struct-of-arrays storage**, not object references. Java 25
@@ -595,7 +648,11 @@ The widget set an engine editor actually needs, which is finite:
 - Choice: button, checkbox, radio, combo box, colour picker
 - Structural: panel, collapsible header, tab bar, splitter, **dock host**
 - Collections: tree view, **virtualized list** (the asset browser will hold thousands of
-  entries — virtualization is not optional)
+  entries — virtualization is not optional). The first one is built with **fixed-height
+  rows**: which rows are visible is then one division, and most of the edge cases that make
+  virtualized lists hard — rows measured after they scroll into view, a scroll position that
+  shifts as they are — do not arise. Variable heights, and grids of asynchronously loaded
+  thumbnails, come after, if a panel needs them.
 - Feedback: tooltip, modal, context menu, progress bar
 
 ---
@@ -623,7 +680,7 @@ id and declares a semantic role; the package maps roles to appearance and ids to
 This is the same cut as `<button class="primary">` against `.primary { … }`, and it is what
 makes the package genuinely detachable rather than just externalised constants.
 
-### Two files, read once
+### Two files
 
 The shell is two files, because they have different authors and change for different
 reasons:
@@ -636,8 +693,9 @@ reasons:
 Split, they swap independently — one person's theme with another person's arrangement,
 without either file knowing about the other.
 
-**The program reads both once at startup and never writes at startup.** Everything after
-that works from what was parsed. When the user drags a divider or moves a panel, the change
+**The program reads both at startup and never writes at startup.** Everything after that
+works from what was parsed; the theme alone can be read again while running, as described
+under *Changing the theme*. When the user drags a divider or moves a panel, the change
 lives in memory and is written back to `layout.json` when the editor closes cleanly.
 
 A sudden shutdown loses the arrangement changes made in that session. That is accepted: the
@@ -732,7 +790,7 @@ Three stages, and which stage runs how often is the whole point:
 
 | Stage | Runs | Produces |
 |---|---|---|
-| **Parse** | once, at startup | token table and layout description |
+| **Parse** | at startup; for the theme, again on a theme switch or — with the development option on — a save | token table and layout description |
 | **Resolve** | when the tree or the tokens change | a baked `Style` struct per node, a built layout tree |
 | **Draw** | every frame | reads the baked struct |
 
@@ -750,21 +808,50 @@ width and corner radius, with typography added when L2 lands. Shadows and gradie
 tokens until the shader can render them — a file that accepts properties the renderer
 silently ignores is worse than one that rejects them.
 
-### Changing the theme — on restart, not live
+### Changing the theme — two paths
 
-**There is no hot reload.** The shell files are read once at startup, and a change takes
-effect the next time the editor starts. Editing the appearance still needs no recompile —
-only a restart.
+A theme changes in a running editor in one of two ways, and they are kept deliberately
+apart.
 
-Reloading a running editor is rejected because it does not stay on the designer's desk: once
-it exists, end users reach it too, and a live swap has to invalidate everything resolved from
-the old theme — baked style tables, cached text layouts, glyph atlases once typography is
-themeable — without leaving any of it stale. A restart gets that right by construction.
+**The user switches themes.** Settings has an *Interface and themes* page listing the
+installed themes, built-in and the user's own. The user picks one and confirms; the editor
+reloads the interface with it, in place, without restarting. Editing a theme file changes
+nothing on this path — what the user sees only ever changes because they chose it.
 
-**Planned for later:** several themes installed side by side and a list in the editor to
-choose between them. Choosing one records the choice and asks for a restart; it does not
-apply it in place. This is also why a structural error only ever has to be handled at
-startup, where refusing to start is a clear answer.
+**The theme author edits live.** Saving a theme file applies it to the running editor almost
+at once, so designing is a feedback loop rather than a build-and-restart cycle. This is a
+**development option**, off by default, in the same settings page, shown with a note that it
+is recommended for theme development only. An end user never has their interface change
+under them because a file was touched.
+
+Both paths end in the same reload, and the reload is the hard part: switching a theme must
+invalidate everything resolved from the old one — the baked style table, cached text
+layouts, glyph atlases once typography is themeable — and leave none of it stale. That was
+the reason hot reload was first dropped, in favour of a restart that gets it right by
+construction. It came back because the theme author's loop matters, and because the same
+reload also lets a user switch themes without restarting. It is done once, carefully, and
+both paths share it.
+
+A structural error during a reload cannot refuse to start an editor that is already open,
+so it **keeps the last valid theme on screen** and reports the error; value errors fall back
+to defaults exactly as at startup. A broken edit therefore never leaves the editor
+unusable — the author sees the message, fixes the file, saves again.
+
+**The watcher is small and the editor's own — never `AssetWatcher`.** `AssetWatcher` serves
+the projects built with the engine, and the editor's interface is not one of them. The theme
+watcher lives in `:editor`, where the file locations are known, runs only while the
+development option is on, and:
+
+- **watches directories, not files** — `WatchService` works that way — filtering for the
+  theme in use;
+- **is debounced**, since editors often save by writing a temporary file and renaming it,
+  which raises several events for one save;
+- **never touches interface state.** Its thread only raises a flag; the main loop checks it
+  at the start of a frame and reloads there, on the thread that owns the interface — the
+  discipline `PhysicsThread` follows with its sync lock.
+
+It watches themes only. `layout.json` is written back by the program (Phase 4) and is not
+live-reloaded, which keeps the watcher from ever reacting to the editor's own writes.
 
 ### Where the files live — decided
 
@@ -946,12 +1033,24 @@ Japanese or Korean, which would need a fallback font behind the main one.
   later, if needed.
 - **What gets translated.** Suggested: the editor interface only. Log messages stay in
   English, so they can be searched and pasted into bug reports by anyone.
+- **Input methods (IME).** Typing Chinese, Japanese or Korean goes through the operating
+  system's input method, which draws its own composition box and needs to be told where the
+  caret is. That takes platform-specific hooks beyond what GLFW's character callback gives.
+  Not a problem while CJK is not planned; it becomes one the day it is, alongside the
+  growing atlas in the table above.
 
 ---
 
 ## 9. Zero-allocation rules
 
 These are binding constraints on `aengine-ui`, not aspirations.
+
+**They are about allocation rate, not memory footprint.** A structure of a few kilobytes or
+megabytes that buys correct behaviour — a dense kerning table, a layout cache — is an
+acceptable, necessary cost, allocated once. What this project exists to avoid is the other
+kind: a runtime like the removed WebKit frontend, which cost hundreds of megabytes simply by
+existing. Memory is not squeezed for its own sake; an optimisation that only saves memory
+needs a concrete problem behind it.
 
 **Forbidden in the frame loop:**
 
@@ -1079,7 +1178,7 @@ nobody can review.
 | **3c** ✅ | Rows and columns nest and lay themselves out with grow, gap, padding and alignment | L3 |
 | **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
-| **3f** | `theme.json` drives the colours and a broken file stops startup with a precise error | §7 |
+| **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and — with the development option on — saving it reloads live | §7 |
 | **3g** | Editor text comes from locale files, following the system language by default | §8 |
 
 The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
