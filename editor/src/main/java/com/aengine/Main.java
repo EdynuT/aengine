@@ -77,6 +77,10 @@ public class Main extends Engine {
     private static final float[] LAYOUT_CAPTION    = { 0.60f, 0.62f, 0.68f, 1.0f };
     private static final float[] LAYOUT_BOX_TEXT   = { 0.06f, 0.08f, 0.12f, 1.0f };
     private static final float[] LAYOUT_FRAME_FILL = { 0.07f, 0.08f, 0.11f, 0.94f };
+    private static final float[] HIT_OUTLINE       = { 0.98f, 0.80f, 0.25f, 1.0f };
+    private static final float[] BOX_HOVER         = { 0.55f, 0.76f, 1.00f, 1.0f };
+    private static final float[] BOX_PRESSED       = { 0.22f, 0.44f, 0.76f, 1.0f };
+    private static final float[] FOCUS_RING        = { 0.95f, 0.97f, 1.00f, 1.0f };
 
     // SCAFFOLDING — steps 3c-1 to 3c-3: an outline of the editor's frame. A column holding a
     // toolbar row (four boxes, two fixed and two growing) above a body row of three panes.
@@ -97,6 +101,16 @@ public class Main extends Engine {
     private int layoutInspector;
     private int layoutFieldA;
     private int layoutFieldB;
+
+    // SCAFFOLDING — step 3d-2: clicks each interactive box has received, drawn inside it.
+    private int clicksA;
+    private int clicksB;
+    private int clicksC;
+    private int clicksD;
+    private int clicksCentred;
+
+    // SCAFFOLDING — step 3d-3: whether Tab was held last frame, so a press is seen once.
+    private boolean tabWasDown;
 
     // SCAFFOLDING — somewhere to build a line of text with a number in it, reused every
     // frame. §9 forbids String.format and concatenation in the frame loop, and addText takes
@@ -606,6 +620,40 @@ public class Main extends Engine {
         // One solve for the whole tree: the frame, and everything nested in it.
         layout.solve(layoutFrame, 40.0f, frameTop, frameWidth, frameHeight);
 
+        // Step 3d-2: the pointer, handed to the tree right after the solve so it tests against
+        // what this frame draws, and before drawing so each box can show its state. The tree
+        // does not read input itself — the editor decides what it sees. Over a Dear ImGui
+        // window the pointer belongs to ImGui, so the tree is given a point outside the frame.
+        com.aengine.aegis.AegisTree tree = aegis.tree();
+
+        final boolean imguiHasMouse = ImGui.getIO().getWantCaptureMouse();
+        final float   mouseX        = imguiHasMouse ? -1.0f : (float) Input.getMouseX();
+        final float   mouseY        = imguiHasMouse ? -1.0f : (float) Input.getMouseY();
+        final boolean leftDown      = Input.isMouseButtonPressed(0);   // 0 = left button
+
+        tree.update(layoutFrame, mouseX, mouseY, leftDown);
+
+        // A click is true for exactly one frame, so counting it here counts each click once.
+        if (tree.wasClicked(layoutBoxA))    clicksA++;
+        if (tree.wasClicked(layoutBoxB))    clicksB++;
+        if (tree.wasClicked(layoutBoxC))    clicksC++;
+        if (tree.wasClicked(layoutBoxD))    clicksD++;
+        if (tree.wasClicked(layoutCentred)) clicksCentred++;
+
+        // Step 3d-3: Tab and Shift+Tab move focus. The key is polled, so "pressed" is found by
+        // comparing with last frame — enough for Tab, though holding it does not repeat; key
+        // repeat needs the input event queue that comes before the text field in 3e. While
+        // ImGui is taking keyboard input (one of its fields is active), Tab is left to it.
+        final boolean imguiHasKeyboard = ImGui.getIO().getWantCaptureKeyboard();
+        final boolean tabDown   = !imguiHasKeyboard && Input.isKeyPressed(Keys.TAB);
+        final boolean shiftDown = Input.isKeyPressed(Keys.SHIFT_L) || Input.isKeyPressed(Keys.SHIFT_R);
+
+        if (tabDown && !tabWasDown) {
+            if (shiftDown) tree.focusPrevious(layoutFrame);
+            else           tree.focusNext(layoutFrame);
+        }
+        tabWasDown = tabDown;
+
         // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
         // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
         // nor the frame's rectangle changes; "skipped" climbs once a frame instead. Resizing the
@@ -627,27 +675,32 @@ public class Main extends Engine {
             LAYOUT_ROW_BORDER[0], LAYOUT_ROW_BORDER[1], LAYOUT_ROW_BORDER[2], LAYOUT_ROW_BORDER[3],
             1.0f);
 
-        // One call per box, written out: read the rectangle the solve produced, draw there.
+        // One call per box, written out: read the rectangle the solve produced, draw there, in
+        // the colour its state calls for — see boxColour(). Each box reports its clicks.
+        float[] colourA = boxColour(tree, layoutBoxA);
         aegis.addRoundedRect(layout.x(layoutBoxA), layout.y(layoutBoxA),
             layout.width(layoutBoxA), layout.height(layoutBoxA), 6.0f,
-            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+            colourA[0], colourA[1], colourA[2], colourA[3]);
 
+        float[] colourB = boxColour(tree, layoutBoxB);
         aegis.addRoundedRect(layout.x(layoutBoxB), layout.y(layoutBoxB),
             layout.width(layoutBoxB), layout.height(layoutBoxB), 6.0f,
-            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+            colourB[0], colourB[1], colourB[2], colourB[3]);
 
+        float[] colourC = boxColour(tree, layoutBoxC);
         aegis.addRoundedRect(layout.x(layoutBoxC), layout.y(layoutBoxC),
             layout.width(layoutBoxC), layout.height(layoutBoxC), 6.0f,
-            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+            colourC[0], colourC[1], colourC[2], colourC[3]);
 
+        float[] colourD = boxColour(tree, layoutBoxD);
         aegis.addRoundedRect(layout.x(layoutBoxD), layout.y(layoutBoxD),
             layout.width(layoutBoxD), layout.height(layoutBoxD), 6.0f,
-            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
+            colourD[0], colourD[1], colourD[2], colourD[3]);
 
-        drawWidthLabel(layout, layoutBoxA, "A");
-        drawWidthLabel(layout, layoutBoxB, "B");
-        drawWidthLabel(layout, layoutBoxC, "C");
-        drawWidthLabel(layout, layoutBoxD, "D");
+        drawClickLabel(layout, layoutBoxA, "A", clicksA);
+        drawClickLabel(layout, layoutBoxB, "B", clicksB);
+        drawClickLabel(layout, layoutBoxC, "C", clicksC);
+        drawClickLabel(layout, layoutBoxD, "D", clicksD);
 
         // The three panes of the body. Each is the same call: its rectangle, as solved.
         aegis.addRoundedRect(layout.x(layoutHierarchy), layout.y(layoutHierarchy),
@@ -681,13 +734,13 @@ public class Main extends Engine {
         aegis.addTextTop(layout.x(layoutTreeItemB) + 8.0f, layout.y(layoutTreeItemB) + 4.0f,
             "START 110", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
 
-        // Viewport's box: centred on X and on Y by the pane's two alignments.
+        // Viewport's box: centred on X and on Y by the pane's two alignments, and interactive
+        // like the toolbar's.
+        float[] colourCentred = boxColour(tree, layoutCentred);
         aegis.addRoundedRect(layout.x(layoutCentred), layout.y(layoutCentred),
             layout.width(layoutCentred), layout.height(layoutCentred), 6.0f,
-            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
-        aegis.addTextTop(layout.x(layoutCentred) + 12.0f,
-            layout.y(layoutCentred) + (layout.height(layoutCentred) - line) * 0.5f,
-            "CENTER", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+            colourCentred[0], colourCentred[1], colourCentred[2], colourCentred[3]);
+        drawClickLabel(layout, layoutCentred, "CENTER", clicksCentred);
 
         // Inspector fields: STRETCH, so each is as wide as the pane minus its padding.
         aegis.addRoundedRect(layout.x(layoutFieldA), layout.y(layoutFieldA),
@@ -699,6 +752,52 @@ public class Main extends Engine {
             layout.width(layoutFieldB), layout.height(layoutFieldB), 4.0f,
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
         drawWidthLabel(layout, layoutFieldB, "STRETCH");
+
+        // Step 3d-3, the visible check: a ring around the focused node, standing 3 pixels off
+        // it so it reads as a ring rather than a border. One call, whichever node has focus.
+        int focusedNode = tree.focused();
+        if (focusedNode != com.aengine.aegis.AegisLayout.NONE) {
+            aegis.addRoundedRect(layout.x(focusedNode) - 3.0f, layout.y(focusedNode) - 3.0f,
+                layout.width(focusedNode) + 6.0f, layout.height(focusedNode) + 6.0f, 8.0f,
+                0.0f, 0.0f, 0.0f, 0.0f,                               // no fill: ring only
+                FOCUS_RING[0], FOCUS_RING[1], FOCUS_RING[2], FOCUS_RING[3],
+                2.0f);
+        }
+
+        // Step 3d-1, the visible check: whichever node is under the mouse gets an outline.
+        // nodeAt() answers with the innermost one, so moving from the frame's edge into a pane
+        // and then onto a box inside it hands the outline inward, one level at a time. Asked
+        // after this frame's solve, so it answers for exactly what is on screen. Drawn last, so
+        // it sits on top of everything it outlines. It marks every node, interactive or not,
+        // which is the difference between the raw hit-test and the tree's hover above.
+        int underMouse = layout.nodeAt(layoutFrame, mouseX, mouseY);
+
+        if (underMouse != com.aengine.aegis.AegisLayout.NONE) {
+            aegis.addRoundedRect(layout.x(underMouse), layout.y(underMouse),
+                layout.width(underMouse), layout.height(underMouse), 6.0f,
+                0.0f, 0.0f, 0.0f, 0.0f,                               // no fill: outline only
+                HIT_OUTLINE[0], HIT_OUTLINE[1], HIT_OUTLINE[2], HIT_OUTLINE[3],
+                2.0f);
+        }
+
+        // The handle the hit-test returned, beside the other counters: NONE (-1) outside the
+        // frame, and a different number for every node the mouse crosses.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("hit-test - node under mouse: ").append(underMouse);
+        aegis.addTextTop(textX, textY + line * 2, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3d-2: the tree's answer, which only ever names an interactive node — the five
+        // boxes (2, 3, 4, 5 and 11) — or -1. Over a pane, or over ImGui, it stays -1 while the
+        // hit-test line above still names what is there.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("tree - hovered: ").append(tree.hovered());
+        aegis.addTextTop(textX, textY + line * 3, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 11 13 14 and wraps, Shift+Tab
+        // walks it backwards, and a press on a pane clears it to -1.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("tree - focused: ").append(tree.focused());
+        aegis.addTextTop(textX, textY + line * 4, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }
@@ -812,6 +911,61 @@ public class Main extends Engine {
 
         layoutFieldB = layout.box(layoutInspector);
         layout.setSize(layoutFieldB, 0.0f, 28.0f);
+
+        // Step 3d-2: which nodes react to the pointer. Everything else — panes, the toolbar
+        // itself, the fields — lets it pass through to whatever interactive node holds it.
+        com.aengine.aegis.AegisTree tree = aegis.tree();
+        tree.setInteractive(layoutBoxA, true);
+        tree.setInteractive(layoutBoxB, true);
+        tree.setInteractive(layoutBoxC, true);
+        tree.setInteractive(layoutBoxD, true);
+        tree.setInteractive(layoutCentred, true);
+
+        // Step 3d-3: which nodes Tab stops at. Nothing here says in what order — that comes
+        // from the tree: the toolbar's A B C D, then the hierarchy's two items, then CENTER,
+        // then the inspector's two fields. The fields and the hierarchy items take focus
+        // without being clickable, which is why focusable is a marking of its own.
+        tree.setFocusable(layoutBoxA, true);
+        tree.setFocusable(layoutBoxB, true);
+        tree.setFocusable(layoutBoxC, true);
+        tree.setFocusable(layoutBoxD, true);
+        tree.setFocusable(layoutTreeItemA, true);
+        tree.setFocusable(layoutTreeItemB, true);
+        tree.setFocusable(layoutCentred, true);
+        tree.setFocusable(layoutFieldA, true);
+        tree.setFocusable(layoutFieldB, true);
+    }
+
+    /**
+     * SCAFFOLDING — the colour a box is drawn in, from its state in the tree.
+     *
+     * <p>Pressed only while the pointer is still over it: a box whose press has wandered off
+     * goes back to its resting colour, telling the user that letting go now will not click.
+     * This is the choice every widget in 3e will make, so it is written once here.</p>
+     */
+    private float[] boxColour(com.aengine.aegis.AegisTree tree, int box) {
+        if (tree.isPressed(box) && tree.isHovered(box)) return BOX_PRESSED;
+        if (tree.isHovered(box))                        return BOX_HOVER;
+        return LAYOUT_BOX;
+    }
+
+    /**
+     * SCAFFOLDING — a box's name and how many clicks it has had, centred vertically in it.
+     * Built in the reused {@code UI_TEXT}, like the width labels.
+     *
+     * <p>Clipped to the box: a label longer than the box is cut at its edge rather than drawn
+     * across its neighbour — which is what "A  clicks 11" did in an 80-pixel box. Every widget
+     * label will need the same guard; this is the clip stack from Phase 2 doing that job.</p>
+     */
+    private void drawClickLabel(com.aengine.aegis.AegisLayout layout, int box, String name, int clicks) {
+        UI_TEXT.setLength(0);
+        UI_TEXT.append(name).append(' ').append(clicks);
+        float top = layout.y(box) + (layout.height(box) - aegis.lineHeight()) * 0.5f;
+
+        aegis.pushClipRect(layout.x(box), layout.y(box), layout.width(box), layout.height(box));
+        aegis.addTextTop(layout.x(box) + 8.0f, top, UI_TEXT,
+            LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+        aegis.popClipRect();
     }
 
     /**

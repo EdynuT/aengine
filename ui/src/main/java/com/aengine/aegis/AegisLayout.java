@@ -296,6 +296,18 @@ public final class AegisLayout {
     /** How many nodes the tree holds. */
     public int nodeCount() { return count; }
 
+    /** The node this one was added to, or {@link #NONE} for a root. */
+    public int parent(int node) { return parent[node]; }
+
+    /** A node's first child, or {@link #NONE} if it has none. */
+    public int firstChild(int node) { return firstChild[node]; }
+
+    /** A node's last child, or {@link #NONE} if it has none. */
+    public int lastChild(int node) { return lastChild[node]; }
+
+    /** The child added to the same parent after this one, or {@link #NONE} if it was the last. */
+    public int nextSibling(int node) { return nextSibling[node]; }
+
     // -----------------------------------------------------------------------------------
     // Solving
     // -----------------------------------------------------------------------------------
@@ -351,6 +363,45 @@ public final class AegisLayout {
 
     /** Height of a node after the last solve, in pixels. */
     public float height(int node) { return solvedHeight[node]; }
+
+    // -----------------------------------------------------------------------------------
+    // Hit-testing
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * The deepest node under a point, as the last solve placed it — or {@link #NONE} if the
+     * point is outside {@code root}.
+     *
+     * <p>"Deepest" because a box inside a pane inside the frame is under the point too, and
+     * the one the pointer is <em>on</em> is the innermost. Where siblings overlap, the later
+     * one wins: children are drawn in the order they were added, so the later one is on top,
+     * and the one on top is the one the pointer touches.</p>
+     *
+     * <p>A rectangle holds its left and top edges but not its right and bottom ones, so a
+     * point on the seam between two touching boxes belongs to exactly one of them.</p>
+     *
+     * <p>Reads the rectangles, so it answers for the layout as last solved. Called after this
+     * frame's solve, that is this frame; called before, it is the previous frame's, which is
+     * one frame late and not visible. It allocates nothing.</p>
+     */
+    public int nodeAt(int root, float px, float py) {
+        if (!contains(root, px, py)) return NONE;
+
+        // Walk every child rather than stopping at the first hit, so that of two overlapping
+        // siblings the later — the one drawn on top — is the one that answers.
+        int deepest = root;
+        for (int child = firstChild[root]; child != NONE; child = nextSibling[child]) {
+            int hit = nodeAt(child, px, py);
+            if (hit != NONE) deepest = hit;
+        }
+        return deepest;
+    }
+
+    /** Whether a point lies in a node's solved rectangle: left and top edges in, right and bottom out. */
+    private boolean contains(int node, float px, float py) {
+        return px >= solvedX[node] && px < solvedX[node] + solvedWidth[node]
+            && py >= solvedY[node] && py < solvedY[node] + solvedHeight[node];
+    }
 
     // -----------------------------------------------------------------------------------
     // Internals

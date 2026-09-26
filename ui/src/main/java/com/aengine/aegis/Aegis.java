@@ -45,6 +45,7 @@ public final class Aegis {
     private final AegisRenderer renderer;
     private final AegisDrawList drawList;
     private final AegisLayout   layout;
+    private final AegisTree     tree;
 
     /**
      * The font text is drawn with when a call does not name one.
@@ -67,6 +68,7 @@ public final class Aegis {
         this.renderer = new AegisRenderer(maxQuads);
         this.drawList = new AegisDrawList(maxQuads);
         this.layout   = new AegisLayout(LAYOUT_NODES);
+        this.tree     = new AegisTree(layout, LAYOUT_NODES);
     }
 
     /**
@@ -226,6 +228,16 @@ public final class Aegis {
      * rectangle back to draw there.</p>
      */
     public AegisLayout layout() { return layout; }
+
+    /**
+     * The interaction state over the layout's nodes: which one the pointer is over, pressed
+     * or clicked.
+     *
+     * <p>Shares the layout's handles — a node is one {@code int} in both — and is handed out
+     * as an object for the same reason the layout is. Update it once a frame, after the
+     * layout's solve.</p>
+     */
+    public AegisTree tree() { return tree; }
 
     // -----------------------------------------------------------------------------------
     // Escape hatches and lifecycle

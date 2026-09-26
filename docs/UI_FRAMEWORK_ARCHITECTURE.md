@@ -2,9 +2,10 @@
 
 **Status:** In progress. Phases 0–2 complete, Phase 3 started: step 3a (text from a glyph
 atlas) is done, step 3b is complete (Latin-1, font metrics, kerning, measuring and
-wrapping, and a layout cache), and **step 3c is complete**: rows and columns nest, place
-their children with gap, padding, grow and per-axis alignment, and skip a solve when nothing
-changed. The framework is named **Aegis**. Dear ImGui remains the
+wrapping, and a layout cache), step 3c is complete (rows and columns that nest, grow, align
+per axis and skip unchanged solves), and **step 3d is complete**: nodes can be hit-tested,
+hovered, pressed, clicked and focused, with Tab walking focus in tree order. The framework
+is named **Aegis**. Dear ImGui remains the
 transitional editor layer, with Aegis drawing test scaffolding on top of it.
 **Supersedes:** `FRONTEND_INTEGRATION.md` (Tauri/WebKit frontend), now deleted.
 
@@ -27,6 +28,9 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3c-2 | Grow: spare space shared in proportion; a row follows the window's width |
 | Step 3c-3 | Nesting and alignment per screen axis — `setAlignX` / `setAlignY` with start, centre, end, stretch |
 | Step 3c-4 | A solve is skipped when neither the tree nor the rectangle it is given has changed |
+| Step 3d-1 | `nodeAt`: the innermost node under a point, the later sibling winning an overlap |
+| Step 3d-2 | `AegisTree`: interactive nodes are hovered, pressed with capture, and clicked |
+| Step 3d-3 | Focusable nodes; Tab and Shift+Tab walk them in tree order, a press moves focus |
 
 ### The plan ahead
 
@@ -54,7 +58,17 @@ padding. Four parts, in order — **all four done**:
 | 4 ✅ | Layout cache | A solve skipped when neither the tree nor the space it is given has changed | No visual change — a solve counter that stops climbing, as in 3b-5 |
 
 **Step 3d — retained tree** (L4). Nodes that persist across frames, hit-testing, focus
-order. *Visible:* a box highlighting under the mouse.
+order. Three parts, in order — **all three done**:
+
+| # | Part | What it delivers | Visible check |
+|---|---|---|---|
+| 1 ✅ | Hit-testing | `layout.nodeAt(root, x, y)`: the innermost node under a point | An outline that moves inward as the mouse crosses frame, pane and box |
+| 2 ✅ | Interaction | `AegisTree`, reached through `aegis.tree()`: hover, press with capture, click | Boxes that lighten on hover, darken while pressed, and count their clicks |
+| 3 ✅ | Focus order | Focusable nodes; Tab and Shift+Tab in tree order; a press moves focus | A focus ring stepping through nine boxes with Tab |
+
+The declarative build pass of §5 — describing a tree and letting the framework reconcile it
+against the existing one — is not part of 3d. It earns its complexity once real widgets
+exist, so it is decided with them.
 
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
 *Visible:* each one reacting to input.
@@ -105,7 +119,7 @@ ImGui. Both are described in §11.
 
 ### Open decisions
 
-Step 3c is closed; none of these blocks step 3d, which follows it.
+Step 3d is closed; none of these blocks step 3e, which follows it.
 
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
 - ~~**Where the shell, font and locale files live**~~ — **decided:** built-in dark and light
@@ -640,6 +654,40 @@ smooth them is the wrong fix: it brings back the soft edges rounding exists to p
 Nodes are **integer handles into struct-of-arrays storage**, not object references. Java 25
 has no value types — Valhalla is not stable — so flat primitive arrays (or `MemorySegment`
 via the FFM API) are how a tree is represented without an object per node.
+
+*Started* as `AegisTree` (step 3d), handed out by `aegis.tree()`. What is worth recording:
+
+**One tree, not two.** An `AegisTree` node is the same `int` as the `AegisLayout` node; L4
+only adds its own arrays of markings beside L3's. There is nothing to keep in sync, and the
+layout's rectangles are directly what the pointer is tested against. Hit-testing itself
+(`nodeAt`) lives in L3, since it is a purely geometric question about solved rectangles.
+
+**Input is handed in, not read.** `update(root, mouseX, mouseY, buttonDown)` takes the
+pointer as arguments. The caller decides what the interface may see — the editor hides the
+pointer from Aegis while it is over a Dear ImGui window, which only the editor can know.
+
+**Markings are separate.** A node is *interactive* (reacts to the pointer) and/or
+*focusable* (takes the keyboard) independently: a text field takes focus without being a
+button. The hit-test finds the innermost node, and the tree walks up to the nearest node
+with the marking it needs, so pressing a label presses its button.
+
+**A click is a press and a release on the same node.** The node a press lands on captures the
+pointer until release: nothing else is hovered meanwhile, and it reads as hovered only while
+the pointer is over it. Releasing elsewhere cancels, and a widget drawn pressed only while
+also hovered shows the user that it would.
+
+**Focus follows the tree.** Tab and Shift+Tab step through focusable nodes in tree order — a
+node, its children in the order they were added, then its next sibling — which is reading
+order for an interface built top to bottom and left to right, with no order maintained by
+hand. The walk uses the layout's own parent, child and sibling links, with no stack. A press
+moves focus to the focusable node under it, or clears it.
+
+**Edges are found by comparing frames**, which is enough for a mouse button and for Tab but
+not for typed characters or key repeat. The input event queue in §10 is therefore due before
+the text field in 3e.
+
+The pointer state is four integers — at most one node hovered, pressed, clicked and focused
+at a time — so it allocates nothing.
 
 The widget set an engine editor actually needs, which is finite:
 
@@ -1176,7 +1224,7 @@ nobody can review.
 | **3a** ✅ | A string of ASCII renders from a glyph atlas | L2 |
 | **3b** ✅ | Latin-1, metrics, kerning, measuring, wrapping and a layout cache | L2 |
 | **3c** ✅ | Rows and columns nest and lay themselves out with grow, gap, padding and alignment | L3 |
-| **3d** | A retained tree survives frames; hit-testing and focus order work | L4 |
+| **3d** ✅ | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** | Button, checkbox, slider and text field behave correctly | L4 |
 | **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and — with the development option on — saving it reloads live | §7 |
 | **3g** | Editor text comes from locale files, following the system language by default | §8 |
