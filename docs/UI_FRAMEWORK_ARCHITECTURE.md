@@ -33,6 +33,9 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3d-3 | Focusable nodes; Tab and Shift+Tab walk them in tree order, a press moves focus |
 | Step 3e-1 | `Input` event queue: characters, key press / repeat / release, mouse, scroll; own key repeat on Wayland |
 | Step 3e-2 | Punctuation beyond Latin-1 packed into the atlas as a second range |
+| Step 3e-3 | `AegisWidgets` and the button: sized to its label, activated by click, Enter or Space; colours in `AegisStyle` |
+| Step 3e-4 | Checkbox: toggled by click, Enter or Space |
+| Step 3e-5 | Slider: dragged with capture; arrows, Shift+arrows, Home/End and `+`/`-` when focused; value shown as a whole number |
 
 ### The plan ahead
 
@@ -73,15 +76,15 @@ against the existing one — is not part of 3d. It earns its complexity once rea
 exist, so it is decided with them.
 
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
-Seven parts, in order — **we stopped after part 2**:
+Seven parts, in order — **we stopped after part 5**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
 | 1 ✅ | Input event queue | Characters, key press / repeat / release with modifiers, mouse buttons and scrolling, queued per frame in `:core` (§10) | Typed text, accents included, and a held key repeating evenly |
 | 2 ✅ | Punctuation in the atlas | A second atlas range: `– — ‘ ’ “ ” … • € ™` | A line of pasted-style punctuation with no `?` |
-| 3 | Widgets and the button | `AegisWidgets` through `aegis.widgets()`; a button sized to its label, activated by click, Enter or Space; colours from one `AegisStyle` | Play / Pause / Stop buttons that react to mouse and keyboard |
-| 4 | Checkbox | Toggles on click or Space | Boxes that tick and untick |
-| 5 | Slider | Drag with capture; arrow keys when focused | A value following the drag |
+| 3 ✅ | Widgets and the button | `AegisWidgets` through `aegis.widgets()`; a button sized to its label, activated by click, Enter or Space; colours from one `AegisStyle` | Play / Pause / Stop buttons that react to mouse and keyboard |
+| 4 ✅ | Checkbox | Toggles on click, Enter or Space | Boxes that tick and untick |
+| 5 ✅ | Slider | Drag with capture; arrows (Shift for ten steps), Home/End, `+`/`-` when focused; the value is a float, shown as a whole number | A value following the drag |
 | 6 | Text field: editing | Caret, typing, Backspace/Delete, arrows, Home/End, click to place the caret, long text scrolling inside the field | Typing and editing in a field |
 | 7 | Text field: selection and clipboard | Shift+arrows and mouse-drag selection; copy, cut, paste — needs clipboard access in `Window` (§10) | Selecting, copying and pasting text from outside |
 
@@ -709,6 +712,29 @@ the text field in 3e.
 
 The pointer state is four integers — at most one node hovered, pressed, clicked and focused
 at a time — so it allocates nothing.
+
+*Widgets* are `AegisWidgets` (step 3e), handed out by `aegis.widgets()`. What is worth
+recording:
+
+**One generic call per kind, not one per use.** `ae.button(parent, "Play")` creates a layout
+node, marks it interactive and focusable, and records its kind and label in the widgets' own
+arrays — the same handle again. The caller asks `ae.wasActivated(playButton)` each frame;
+there are no callbacks and no object per widget.
+
+**Keyboard intent is handed in, like the pointer.** `ae.key(key, mods, repeat)` and
+`ae.character(codepoint)` are fed from the `Input` event queue by the caller, which decides
+whether the interface has the keyboard (the editor withholds it while Dear ImGui wants it).
+`ae.update(root)` then applies what arrived: Tab and Shift+Tab move focus, a click or Enter
+or Space *acts* on a widget — Enter on any kind, so the whole interface works from the
+keyboard alone — and a focused slider takes arrows, Home/End and `+`/`-`.
+
+**Acting is defined per kind in one place.** A button is activated, a checkbox flips and
+reports a change. A slider follows the pointer while it holds the capture, clamped to its
+range, and steps by a hundredth of it from the keyboard, or a tenth with Shift.
+
+**Colours and sizes live only in `AegisStyle`**, a class of public fields no drawing code
+bypasses. It is what 3f turns into the theme's property catalogue, which is why the theme
+waits for the widgets: the names are chosen against real ones.
 
 The widget set an engine editor actually needs, which is finite:
 

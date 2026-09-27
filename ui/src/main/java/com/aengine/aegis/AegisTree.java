@@ -74,6 +74,10 @@ public final class AegisTree {
 
     private boolean buttonWasDown;
 
+    // The pointer as last handed to update(), for widgets that follow it — a slider's drag.
+    private float pointerX;
+    private float pointerY;
+
     /**
      * @param layout   the layout whose nodes this adds state to
      * @param capacity the layout's capacity, so every handle it can give out has a slot here
@@ -132,6 +136,8 @@ public final class AegisTree {
      * @param buttonDown whether the primary button is held this frame
      */
     public void update(int root, float mouseX, float mouseY, boolean buttonDown) {
+        pointerX = mouseX;
+        pointerY = mouseY;
         int target = interactiveAt(root, mouseX, mouseY);
 
         boolean justPressed  =  buttonDown && !buttonWasDown;
@@ -177,6 +183,18 @@ public final class AegisTree {
 
     /** The hovered node, or {@link AegisLayout#NONE}. */
     public int hovered() { return hovered; }
+
+    /** The node clicked this frame, or {@link AegisLayout#NONE}. */
+    public int clicked() { return clicked; }
+
+    /** The node holding the pointer's capture — pressed and not yet released — or {@link AegisLayout#NONE}. */
+    public int pressed() { return pressed; }
+
+    /** The pointer's x as last handed to {@link #update} — what a drag follows. */
+    public float pointerX() { return pointerX; }
+
+    /** The pointer's y as last handed to {@link #update}. */
+    public float pointerY() { return pointerY; }
 
     // -----------------------------------------------------------------------------------
     // Focus

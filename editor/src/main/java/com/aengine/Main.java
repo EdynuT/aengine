@@ -96,21 +96,35 @@ public class Main extends Engine {
     private int layoutHierarchy;
     private int layoutTreeItemA;
     private int layoutTreeItemB;
+    private int opacitySlider;      // step 3e-5: a slider, in the hierarchy pane
     private int layoutViewport;
-    private int layoutCentred;
+    private int playButton;         // step 3e-3: three buttons from the one ae.button() method
+    private int pauseButton;
+    private int stopButton;
     private int layoutInspector;
     private int layoutFieldA;
     private int layoutFieldB;
+    private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
+    private int snapCheckbox;
 
     // SCAFFOLDING — step 3d-2: clicks each interactive box has received, drawn inside it.
     private int clicksA;
     private int clicksB;
     private int clicksC;
     private int clicksD;
-    private int clicksCentred;
 
-    // SCAFFOLDING — step 3d-3: whether Tab was held last frame, so a press is seen once.
-    private boolean tabWasDown;
+    // SCAFFOLDING — step 3e-3: how often each button was activated, and the last one and how.
+    private int    playPresses;
+    private int    pausePresses;
+    private int    stopPresses;
+    private String lastActivated   = "-";
+    private String lastActivatedBy = "-";
+
+    // SCAFFOLDING — step 3e-4: how many times the user flipped a checkbox.
+    private int checkboxChanges;
+
+    // SCAFFOLDING — step 3e-5: how many frames the user moved the slider on.
+    private int sliderChanges;
 
     // SCAFFOLDING — step 3e-1: the input event queue made visible. What has been typed (the
     // last TYPED_KEEP characters), and a count of each kind of key event and of the wheel.
@@ -654,40 +668,37 @@ public class Main extends Engine {
         if (tree.wasClicked(layoutBoxB))    clicksB++;
         if (tree.wasClicked(layoutBoxC))    clicksC++;
         if (tree.wasClicked(layoutBoxD))    clicksD++;
-        if (tree.wasClicked(layoutCentred)) clicksCentred++;
 
-        // Step 3d-3: Tab and Shift+Tab move focus. The key is polled, so "pressed" is found by
-        // comparing with last frame — enough for Tab, though holding it does not repeat; key
-        // repeat needs the input event queue that comes before the text field in 3e. While
-        // ImGui is taking keyboard input (one of its fields is active), Tab is left to it.
+        // Step 3e-3: the widgets. The keyboard reaches them the way the pointer reaches the
+        // tree — handed in by the editor, which keeps keys from Aegis while ImGui has the
+        // keyboard (one of its fields is being typed into).
+        com.aengine.aegis.AegisWidgets ae = aegis.widgets();
         final boolean imguiHasKeyboard = ImGui.getIO().getWantCaptureKeyboard();
-        final boolean tabDown   = !imguiHasKeyboard && Input.isKeyPressed(Keys.TAB);
-        final boolean shiftDown = Input.isKeyPressed(Keys.SHIFT_L) || Input.isKeyPressed(Keys.SHIFT_R);
-
-        if (tabDown && !tabWasDown) {
-            if (shiftDown) tree.focusPrevious(layoutFrame);
-            else           tree.focusNext(layoutFrame);
-        }
-        tabWasDown = tabDown;
 
         // Step 3e-1: this frame's input events, in the order they happened. Characters are
         // appended as typed — including 'ç' or 'ã' composed from a dead key, which arrive as
         // one character though they took two key presses. Backspace removes the last one, on
-        // its press and on every repeat, so holding it shows the operating system's repeat at
-        // work. Left to ImGui while it has the keyboard, like Tab.
+        // its press and on every repeat, so holding it shows the key repeat at work.
+        //
+        // Every key press and repeat is also handed to the widgets: Tab and Shift+Tab move
+        // focus — and, now that repeats exist, holding Tab keeps moving it — while Enter and
+        // Space activate the focused button.
         if (!imguiHasKeyboard) {
             for (int i = 0; i < Input.eventCount(); i++) {
                 switch (Input.eventType(i)) {
                     case CHAR -> {
+                        ae.character(Input.eventCode(i));   // + and - step a focused slider
                         TYPED.appendCodePoint(Input.eventCode(i));
                         if (TYPED.length() > TYPED_KEEP) TYPED.delete(0, TYPED.length() - TYPED_KEEP);
                     }
                     case KEY_PRESS -> {
                         keyPresses++;
+                        ae.key(Input.eventCode(i), Input.eventMods(i), false);
                         if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);
                     }
                     case KEY_REPEAT -> {
                         keyRepeats++;
+                        ae.key(Input.eventCode(i), Input.eventMods(i), true);
                         if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);
                     }
                     case KEY_RELEASE -> keyReleases++;
@@ -696,6 +707,23 @@ public class Main extends Engine {
                 }
             }
         }
+
+        // Pointer and keys applied: now the widgets know what was activated this frame.
+        ae.update(layoutFrame);
+
+        if (ae.wasActivated(playButton))  { playPresses++;  lastActivated = "Play"; }
+        if (ae.wasActivated(pauseButton)) { pausePresses++; lastActivated = "Pause"; }
+        if (ae.wasActivated(stopButton))  { stopPresses++;  lastActivated = "Stop"; }
+        if (ae.wasActivated(playButton) || ae.wasActivated(pauseButton) || ae.wasActivated(stopButton)) {
+            lastActivatedBy = ae.activatedByKeyboard() ? "keyboard" : "mouse";
+        }
+
+        // A checkbox reports its state with isChecked() at any time, and wasChanged() on the
+        // one frame the user flipped it — the setChecked() at build time is not counted.
+        if (ae.wasChanged(showGridCheckbox) || ae.wasChanged(snapCheckbox)) checkboxChanges++;
+
+        // A slider reports on every frame its value moves — each frame of a drag, each step.
+        if (ae.wasChanged(opacitySlider)) sliderChanges++;
 
         // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
         // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
@@ -777,14 +805,6 @@ public class Main extends Engine {
         aegis.addTextTop(layout.x(layoutTreeItemB) + 8.0f, layout.y(layoutTreeItemB) + 4.0f,
             "START 110", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
 
-        // Viewport's box: centred on X and on Y by the pane's two alignments, and interactive
-        // like the toolbar's.
-        float[] colourCentred = boxColour(tree, layoutCentred);
-        aegis.addRoundedRect(layout.x(layoutCentred), layout.y(layoutCentred),
-            layout.width(layoutCentred), layout.height(layoutCentred), 6.0f,
-            colourCentred[0], colourCentred[1], colourCentred[2], colourCentred[3]);
-        drawClickLabel(layout, layoutCentred, "CENTER", clicksCentred);
-
         // Inspector fields: STRETCH, so each is as wide as the pane minus its padding.
         aegis.addRoundedRect(layout.x(layoutFieldA), layout.y(layoutFieldA),
             layout.width(layoutFieldA), layout.height(layoutFieldA), 4.0f,
@@ -796,10 +816,17 @@ public class Main extends Engine {
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
         drawWidthLabel(layout, layoutFieldB, "STRETCH");
 
+        // Step 3e-3: every widget under the frame, drawn by the widgets themselves — fill for
+        // their state, border, label and, when focused, their own focus ring. One call for all
+        // of them, after the panes so they sit on top. Today that is the three buttons in the
+        // viewport pane; each widget added later is drawn by this same line.
+        ae.draw(layoutFrame);
+
         // Step 3d-3, the visible check: a ring around the focused node, standing 3 pixels off
-        // it so it reads as a ring rather than a border. One call, whichever node has focus.
+        // it so it reads as a ring rather than a border. Widgets draw their own ring now, so
+        // this one is only for the plain boxes that are focusable without being widgets.
         int focusedNode = tree.focused();
-        if (focusedNode != com.aengine.aegis.AegisLayout.NONE) {
+        if (focusedNode != com.aengine.aegis.AegisLayout.NONE && !ae.isWidget(focusedNode)) {
             aegis.addRoundedRect(layout.x(focusedNode) - 3.0f, layout.y(focusedNode) - 3.0f,
                 layout.width(focusedNode) + 6.0f, layout.height(focusedNode) + 6.0f, 8.0f,
                 0.0f, 0.0f, 0.0f, 0.0f,                               // no fill: ring only
@@ -829,15 +856,16 @@ public class Main extends Engine {
         UI_TEXT.append("hit-test - node under mouse: ").append(underMouse);
         aegis.addTextTop(textX, textY + line * 2, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
-        // Step 3d-2: the tree's answer, which only ever names an interactive node — the five
-        // boxes (2, 3, 4, 5 and 11) — or -1. Over a pane, or over ImGui, it stays -1 while the
+        // Step 3d-2: the tree's answer, which only ever names an interactive node — the toolbar's
+        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14) and the two
+        // checkboxes (18, 19) — or -1. Over a pane, or over ImGui, it stays -1 while the
         // hit-test line above still names what is there.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - hovered: ").append(tree.hovered());
         aegis.addTextTop(textX, textY + line * 3, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
-        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 11 13 14 and wraps, Shift+Tab
-        // walks it backwards, and a press on a pane clears it to -1.
+        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 10 12 13 14 16 17 18 19 and wraps,
+        // Shift+Tab walks it backwards, and a press on a pane clears it to -1.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - focused: ").append(tree.focused());
         aegis.addTextTop(textX, textY + line * 4, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
@@ -855,6 +883,33 @@ public class Main extends Engine {
                .append("   wheel ").append((int) wheelTotal)
                .append("   dropped ").append(Input.droppedEvents());
         aegis.addTextTop(textX, textY + line * 6, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3e-3, the visible check: each button's activations, the last one, and whether it
+        // came from the mouse or from Enter/Space — wasActivated() answers the same for both.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("buttons - Play ").append(playPresses)
+               .append("  Pause ").append(pausePresses)
+               .append("  Stop ").append(stopPresses)
+               .append("   last: ").append(lastActivated)
+               .append(" (").append(lastActivatedBy).append(')');
+        aegis.addTextTop(textX, textY + line * 7, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3e-4, the visible check: each checkbox's state as isChecked() reports it, and
+        // how many times the user has flipped one. Snap starts on, from setChecked(), with the
+        // change count still 0.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("checkboxes - Show grid ").append(ae.isChecked(showGridCheckbox) ? "on" : "off")
+               .append("   Snap ").append(ae.isChecked(snapCheckbox) ? "on" : "off")
+               .append("   changes ").append(checkboxChanges);
+        aegis.addTextTop(textX, textY + line * 8, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3e-5, the visible check: the slider's value as sliderValue() reports it, at full
+        // precision — rounded to a whole number it is what the slider draws beside its track —
+        // and how many frames it moved on.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("slider - value ").append(ae.sliderValue(opacitySlider))
+               .append("   changes ").append(sliderChanges);
+        aegis.addTextTop(textX, textY + line * 9, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }
@@ -890,6 +945,7 @@ public class Main extends Engine {
      */
     private void buildLayoutScaffolding() {
         com.aengine.aegis.AegisLayout layout = aegis.layout();
+        com.aengine.aegis.AegisWidgets ae    = aegis.widgets();   // short name: see the ae convention
 
         // The root: a column with no parent. It takes whatever rectangle solve() hands it, and
         // STRETCH on X makes both of its rows as wide as it is, so neither asks for a width.
@@ -945,15 +1001,28 @@ public class Main extends Engine {
         layoutTreeItemB = layout.box(layoutHierarchy);
         layout.setSize(layoutTreeItemB, 110.0f, 28.0f);
 
+        // Step 3e-5: a slider from 0 to 100, starting at the middle. The value is a float, but
+        // the number shown beside the track is whole, so the range is chosen for whole numbers
+        // to mean something. It asks for 200 pixels of the pane's 224 and, the pane being START
+        // on X, gets exactly that. One small step is a hundredth of the range by default — 1
+        // here — and Shift makes it ten.
+        opacitySlider = ae.slider(layoutHierarchy, 0.0f, 100.0f, 50.0f);
+
         // Viewport: takes the width the side panes leave, and centres what it holds on both
-        // axes — one call per axis.
-        layoutViewport = layout.column(layoutBody);
+        // axes — one call per axis. A row, so its buttons sit side by side: CENTER on X moves
+        // the three of them together into the middle, CENTER on Y centres each one vertically.
+        layoutViewport = layout.row(layoutBody);
         layout.setGrow(layoutViewport, 1.0f);
+        layout.setGap(layoutViewport, 8.0f);
         layout.setAlignX(layoutViewport, com.aengine.aegis.AegisLayout.Align.CENTER);
         layout.setAlignY(layoutViewport, com.aengine.aegis.AegisLayout.Align.CENTER);
 
-        layoutCentred = layout.box(layoutViewport);
-        layout.setSize(layoutCentred, 180.0f, 40.0f);
+        // Step 3e-3: three real buttons. Each call makes the layout node, sizes it to its label,
+        // makes it clickable and reachable with Tab, and records that it is a button — nothing
+        // else to wire. ae is the widgets object, declared at the top of this method.
+        playButton = ae.button(layoutViewport, "Play");
+        pauseButton = ae.button(layoutViewport, "Pause");
+        stopButton  = ae.button(layoutViewport, "Stop");
 
         // Inspector: a fixed-width pane. STRETCH on X makes every field as wide as the pane, so
         // the fields ask only for a height.
@@ -969,6 +1038,14 @@ public class Main extends Engine {
         layoutFieldB = layout.box(layoutInspector);
         layout.setSize(layoutFieldB, 0.0f, 28.0f);
 
+        // Step 3e-4: two checkboxes, the way an inspector lists settings. The pane's STRETCH on
+        // X makes each as wide as the pane, so a click anywhere along its row ticks it — the
+        // label is part of the target, as in every desktop toolkit. "Snap to grid" starts
+        // ticked through setChecked(), which sets it without counting as the user's change.
+        showGridCheckbox = ae.checkbox(layoutInspector, "Show grid");
+        snapCheckbox     = ae.checkbox(layoutInspector, "Snap to grid");
+        ae.setChecked(snapCheckbox, true);
+
         // Step 3d-2: which nodes react to the pointer. Everything else — panes, the toolbar
         // itself, the fields — lets it pass through to whatever interactive node holds it.
         com.aengine.aegis.AegisTree tree = aegis.tree();
@@ -976,19 +1053,18 @@ public class Main extends Engine {
         tree.setInteractive(layoutBoxB, true);
         tree.setInteractive(layoutBoxC, true);
         tree.setInteractive(layoutBoxD, true);
-        tree.setInteractive(layoutCentred, true);
 
         // Step 3d-3: which nodes Tab stops at. Nothing here says in what order — that comes
-        // from the tree: the toolbar's A B C D, then the hierarchy's two items, then CENTER,
-        // then the inspector's two fields. The fields and the hierarchy items take focus
-        // without being clickable, which is why focusable is a marking of its own.
+        // from the tree: the toolbar's A B C D, then the hierarchy's two items, then the three
+        // buttons (which marked themselves), then the inspector's two fields. The fields and
+        // the hierarchy items take focus without being clickable, which is why focusable is a
+        // marking of its own.
         tree.setFocusable(layoutBoxA, true);
         tree.setFocusable(layoutBoxB, true);
         tree.setFocusable(layoutBoxC, true);
         tree.setFocusable(layoutBoxD, true);
         tree.setFocusable(layoutTreeItemA, true);
         tree.setFocusable(layoutTreeItemB, true);
-        tree.setFocusable(layoutCentred, true);
         tree.setFocusable(layoutFieldA, true);
         tree.setFocusable(layoutFieldB, true);
     }

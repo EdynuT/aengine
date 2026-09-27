@@ -46,6 +46,7 @@ public final class Aegis {
     private final AegisDrawList drawList;
     private final AegisLayout   layout;
     private final AegisTree     tree;
+    private final AegisWidgets  widgets;
 
     /**
      * The font text is drawn with when a call does not name one.
@@ -69,6 +70,7 @@ public final class Aegis {
         this.drawList = new AegisDrawList(maxQuads);
         this.layout   = new AegisLayout(LAYOUT_NODES);
         this.tree     = new AegisTree(layout, LAYOUT_NODES);
+        this.widgets  = new AegisWidgets(this, layout, tree, LAYOUT_NODES);
     }
 
     /**
@@ -238,6 +240,19 @@ public final class Aegis {
      * layout's solve.</p>
      */
     public AegisTree tree() { return tree; }
+
+    /**
+     * The widgets: buttons now, and the rest of the controls as they arrive.
+     *
+     * <p>Made on the layout's nodes and the tree's state, and handed out as an object like
+     * both. Kept in a short variable, it is called {@code ae} — never a generic {@code ui}:</p>
+     *
+     * <pre>{@code
+     * AegisWidgets ae = aegis.widgets();
+     * int play = ae.button(toolbar, "Play");
+     * }</pre>
+     */
+    public AegisWidgets widgets() { return widgets; }
 
     // -----------------------------------------------------------------------------------
     // Escape hatches and lifecycle
