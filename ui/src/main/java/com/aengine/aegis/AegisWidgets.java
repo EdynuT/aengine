@@ -60,9 +60,13 @@ public final class AegisWidgets {
     private static final byte BUTTON       = 1;
     private static final byte CHECKBOX     = 2;
     private static final byte SLIDER       = 3;
+    private static final byte TEXT_FIELD   = 4;
 
     /** Shift + arrow moves a slider this many steps at once. */
     private static final int LARGE_STEP = 10;
+
+    /** How long the caret stays shown, then hidden, while it blinks. */
+    private static final long CARET_BLINK_NANOS = 530_000_000L;
 
     private final Aegis       aegis;
     private final AegisLayout layout;
@@ -71,7 +75,7 @@ public final class AegisWidgets {
 
     /** Indexed by layout handle. */
     private final byte[]   kind;
-    private final String[] label;   // set once at build time; never built per frame
+    private final String[] label;   // set once at build time; never built per frame. A text field's placeholder.
     private final boolean[] checked; // checkboxes: ticked or not
 
     // Sliders: the value, its range, and how far one small step moves it.
@@ -82,6 +86,22 @@ public final class AegisWidgets {
 
     /** Where a slider's value is written as text each frame, reused rather than rebuilt. */
     private final StringBuilder valueText = new StringBuilder(16);
+
+    // Text fields: the text, in a builder sized to the field's limit when the field is made, so
+    // typing never grows it; the limit; where the caret is, as a character index (0 is before
+    // the first character, length is after the last); and how far the text is scrolled left, in
+    // pixels, when it is wider than the field.
+    private final StringBuilder[] fieldText;
+    private final int[]           fieldMaxLength;
+    private final int[]           caret;
+    private final float[]         fieldScroll;
+
+    /** The text field edited by this frame's key() and character() calls, reported by update(). */
+    private int  edited = AegisLayout.NONE;
+    /** When the caret was last shown afresh: it blinks from here, so it is visible while typing. */
+    private long caretShownAt = System.nanoTime();
+    /** The focus at the last update(), to restart the blink when a field gains focus. */
+    private int  lastFocused = AegisLayout.NONE;
 
     // Keyboard intent gathered by key() and character(), applied by update(), which knows the root.
     private int     pendingFocusMove;   // +1 Tab, -1 Shift+Tab, 0 none
@@ -107,6 +127,11 @@ public final class AegisWidgets {
         this.sliderMin   = new float[capacity];
         this.sliderMax   = new float[capacity];
         this.sliderStep  = new float[capacity];
+
+        this.fieldText      = new StringBuilder[capacity];
+        this.fieldMaxLength = new int[capacity];
+        this.caret          = new int[capacity];
+        this.fieldScroll    = new float[capacity];
     }
 
     /** The colours and sizes every widget draws with. See {@link AegisStyle}. */
@@ -215,7 +240,62 @@ public final class AegisWidgets {
     /** How far one small step — an arrow key, {@code +} or {@code -} — moves a slider. */
     public void setSliderStep(int node, float step) { sliderStep[node] = step; }
 
-    /** Whether a node was made by this class — a button, a checkbox, a slider, and later the others. */
+    /**
+     * A single-line text field holding at most {@code maxLength} characters, added to
+     * {@code parent}. Starts empty.
+     *
+     * <p>Its text lives in a buffer of exactly that size, made here: typing and deleting only
+     * move characters inside it, so editing allocates nothing. Characters past the limit are
+     * not inserted.</p>
+     *
+     * <p>Asks for {@code textFieldWidth} and one line's height plus padding; a stretching
+     * parent may make it wider. Text wider than the field scrolls inside it, keeping the caret
+     * in view. Interactive and focusable.</p>
+     *
+     * @return its handle
+     */
+    public int textField(int parent, int maxLength) {
+        int node = layout.box(parent);
+        layout.setSize(node, style.textFieldWidth,
+            aegis.lineHeight() + style.textFieldPaddingY * 2.0f);
+
+        tree.setInteractive(node, true);
+        tree.setFocusable(node, true);
+
+        kind[node]           = TEXT_FIELD;
+        fieldText[node]      = new StringBuilder(maxLength);
+        fieldMaxLength[node] = maxLength;
+        caret[node]          = 0;
+        fieldScroll[node]    = 0.0f;
+        return node;
+    }
+
+    /**
+     * A text field's text. The field's own buffer, handed out for reading — measure it, draw
+     * it, compare it, copy it with {@code toString()} when a {@code String} is really needed.
+     * Change it only through {@link #setText}.
+     */
+    public CharSequence text(int node) { return fieldText[node]; }
+
+    /**
+     * Replaces a text field's text from code — to show an entity's current name, say — cut to
+     * the field's limit, with the caret at the end. Not reported by {@link #wasChanged}.
+     */
+    public void setText(int node, CharSequence text) {
+        StringBuilder buffer = fieldText[node];
+        buffer.setLength(0);
+        buffer.append(text, 0, Math.min(text.length(), fieldMaxLength[node]));
+        caret[node]       = buffer.length();
+        fieldScroll[node] = 0.0f;
+    }
+
+    /** The hint a text field shows, dimmed, while it is empty. {@code null} for none. */
+    public void setPlaceholder(int node, String text) { label[node] = text; }
+
+    /** Where a text field's caret is: 0 before the first character, the length after the last. */
+    public int caret(int node) { return caret[node]; }
+
+    /** Whether a node was made by this class — a button, a checkbox, a slider, a text field. */
     public boolean isWidget(int node) { return kind[node] != NOT_A_WIDGET; }
 
     /**
@@ -226,8 +306,10 @@ public final class AegisWidgets {
         Arrays.fill(kind, NOT_A_WIDGET);
         Arrays.fill(label, null);
         Arrays.fill(checked, false);
+        Arrays.fill(fieldText, null);
         activated = AegisLayout.NONE;
         changed   = AegisLayout.NONE;
+        edited    = AegisLayout.NONE;
     }
 
     // -----------------------------------------------------------------------------------
@@ -242,6 +324,9 @@ public final class AegisWidgets {
      *   <li>Tab and Shift+Tab move focus, and repeat when held.</li>
      *   <li>Enter and Space act on the focused widget: a button fires, a checkbox flips. On the
      *       press only, so holding them does not fire again and again.</li>
+     *   <li>While a text field has focus, the editing keys are its own and are applied at
+     *       once, in the order they arrive — see {@link #editKey}. Tab and Enter still do what
+     *       they do everywhere.</li>
      * </ul>
      *
      * @param key    the key, as in {@link Keys}
@@ -249,6 +334,12 @@ public final class AegisWidgets {
      * @param repeat whether this is a repeat of a held key rather than a fresh press
      */
     public void key(int key, int mods, boolean repeat) {
+        int focused = tree.focused();
+        if (focused != AegisLayout.NONE && kind[focused] == TEXT_FIELD
+                && editKey(focused, key, repeat)) {
+            return;
+        }
+
         boolean shift = (mods & Keys.MOD_SHIFT) != 0;
 
         if (key == Keys.TAB) {
@@ -275,11 +366,88 @@ public final class AegisWidgets {
      * <p>A slider takes {@code +} and {@code -} as a step up or down. They are read as typed
      * characters rather than as keys on purpose: which physical key types {@code +} depends on
      * the keyboard layout, and the numeric keypad has its own; the character is the same on all
-     * of them. The text field will take every character here, in part 6.</p>
+     * of them.</p>
+     *
+     * <p>A focused text field takes every character instead — {@code +}, {@code -} and space
+     * included — inserting it at the caret at once, so that typing, deleting and typing again
+     * in one frame come out in the order they were done.</p>
      */
     public void character(int codepoint) {
+        int focused = tree.focused();
+        if (focused != AegisLayout.NONE && kind[focused] == TEXT_FIELD) {
+            insert(focused, codepoint);
+            return;
+        }
+
         if (codepoint == '+')      pendingSteps++;
         else if (codepoint == '-') pendingSteps--;
+    }
+
+    /**
+     * One key, applied to the focused text field. Returns whether the field used it; a key it
+     * does not use — Tab, Enter, anything else — goes on to be handled like any other.
+     *
+     * <ul>
+     *   <li>Backspace and Delete remove the character before and after the caret.</li>
+     *   <li>Left and Right move the caret one character; Home and End to the ends.</li>
+     *   <li>Space is used and does nothing here: it types a space through {@link #character},
+     *       and must not also act on the field the way it acts on a button.</li>
+     *   <li>Esc takes focus away from the field.</li>
+     * </ul>
+     *
+     * All but Esc repeat while held.
+     */
+    private boolean editKey(int node, int key, boolean repeat) {
+        StringBuilder text = fieldText[node];
+        int at = caret[node];
+
+        if (key == Keys.BACKSPACE) {
+            if (at > 0) {
+                text.deleteCharAt(at - 1);
+                caret[node] = at - 1;
+                edited = node;
+            }
+        } else if (key == Keys.DELETE) {
+            if (at < text.length()) {
+                text.deleteCharAt(at);
+                edited = node;
+            }
+        } else if (key == Keys.LEFT) {
+            caret[node] = Math.max(0, at - 1);
+        } else if (key == Keys.RIGHT) {
+            caret[node] = Math.min(text.length(), at + 1);
+        } else if (key == Keys.HOME) {
+            caret[node] = 0;
+        } else if (key == Keys.END) {
+            caret[node] = text.length();
+        } else if (key == Keys.SPACE) {
+            return true;
+        } else if (key == Keys.ESCAPE) {
+            if (!repeat) tree.focus(AegisLayout.NONE);
+            return true;
+        } else {
+            return false;
+        }
+
+        caretShownAt = System.nanoTime();   // the caret shows at once wherever it went
+        return true;
+    }
+
+    /**
+     * Types one character into a text field at its caret. Control characters are not text, and
+     * characters beyond the 16-bit range would need two {@code char}s and a caret that steps
+     * over pairs — nothing the atlas can draw today — so both are refused, as is anything past
+     * the field's limit.
+     */
+    private void insert(int node, int codepoint) {
+        StringBuilder text = fieldText[node];
+        if (codepoint < 0x20 || (codepoint >= 0x7F && codepoint < 0xA0) || codepoint > 0xFFFF) return;
+        if (text.length() >= fieldMaxLength[node]) return;
+
+        text.insert(caret[node], (char) codepoint);
+        caret[node]++;
+        edited = node;
+        caretShownAt = System.nanoTime();
     }
 
     /**
@@ -290,6 +458,10 @@ public final class AegisWidgets {
         activated = AegisLayout.NONE;
         changed   = AegisLayout.NONE;
         activatedByKeyboard = false;
+
+        // Text was edited as the keys arrived; this frame reports it.
+        changed = edited;
+        edited  = AegisLayout.NONE;
 
         if (pendingFocusMove > 0) tree.focusNext(root);
         if (pendingFocusMove < 0) tree.focusPrevious(root);
@@ -312,6 +484,22 @@ public final class AegisWidgets {
         int pressed = tree.pressed();
         if (pressed != AegisLayout.NONE && kind[pressed] == SLIDER) {
             setFromPointer(pressed, tree.pointerX());
+        }
+
+        // A text field being pressed puts its caret between the two characters nearest the
+        // pointer — every frame of the press, which is what dragging will select from in part 7.
+        if (pressed != AegisLayout.NONE && kind[pressed] == TEXT_FIELD) {
+            int at = caretAt(pressed, tree.pointerX());
+            if (at != caret[pressed]) {
+                caret[pressed] = at;
+                caretShownAt = System.nanoTime();
+            }
+        }
+
+        // A field that has just gained focus shows its caret at once rather than mid-blink.
+        if (focused != lastFocused) {
+            caretShownAt = System.nanoTime();
+            lastFocused  = focused;
         }
 
         // A focused slider takes the arrows, + and -, Home and End.
@@ -361,11 +549,79 @@ public final class AegisWidgets {
              - style.sliderValueWidth - style.sliderGap - style.sliderThumbSize * 0.5f;
     }
 
+    /** Where a text field's text starts, before scrolling: inside its left padding. */
+    private float fieldTextLeft(int node) {
+        return layout.x(node) + style.textFieldPaddingX;
+    }
+
+    /** How wide the part of a text field that shows text is. */
+    private float fieldTextWidth(int node) {
+        return Math.max(0.0f, layout.width(node) - style.textFieldPaddingX * 2.0f);
+    }
+
+    /**
+     * How far from the start of the text the caret sits when it is before character
+     * {@code index} — exactly where that character is drawn.
+     *
+     * <p>A measured range kerns only inside itself, but the drawn character {@code index} is
+     * also moved by its kerning against the one before it; that pair is added, so the caret sits
+     * against the glyph and not a kerning's width away from it.</p>
+     */
+    private float caretOffset(int node, int index) {
+        StringBuilder text = fieldText[node];
+        AegisFont font = aegis.font();
+        float offset = font.measure(text, 0, index);
+        if (index > 0 && index < text.length()) {
+            offset += font.kerning(text.charAt(index - 1), text.charAt(index));
+        }
+        return offset;
+    }
+
+    /**
+     * The caret position nearest a pointer's x: the boundary between the two characters the
+     * pointer falls between, going to whichever side of a character's middle it is on.
+     * Walks the text once, adding advances and kerning the way drawing does.
+     */
+    private int caretAt(int node, float pointerX) {
+        StringBuilder text = fieldText[node];
+        AegisFont font = aegis.font();
+        float local = pointerX - fieldTextLeft(node) + fieldScroll[node];
+
+        float pen = 0.0f;
+        for (int i = 0; i < text.length(); i++) {
+            float start   = pen + (i > 0 ? font.kerning(text.charAt(i - 1), text.charAt(i)) : 0.0f);
+            float advance = font.measure(text, i, i + 1);
+            if (local < start + advance * 0.5f) return i;
+            pen = start + advance;
+        }
+        return text.length();
+    }
+
+    /**
+     * Scrolls a text field so its caret is in view, and so no empty space is left at the
+     * right while text is hidden at the left — deleting from the end of a long text pulls it
+     * back into the field.
+     */
+    private void keepCaretInView(int node) {
+        float visible = fieldTextWidth(node) - style.textFieldCaretWidth;
+        float caretX  = caretOffset(node, caret[node]);
+        float textW   = aegis.measure(fieldText[node]);
+
+        float scroll = fieldScroll[node];
+        if (caretX - scroll > visible) scroll = caretX - visible;
+        if (caretX - scroll < 0.0f)    scroll = caretX;
+        scroll = Math.min(scroll, Math.max(0.0f, textW - visible));
+        fieldScroll[node] = Math.max(0.0f, scroll);
+    }
+
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
 
-    /** What activating a widget means for its kind: a button fires, a checkbox flips. */
+    /**
+     * What activating a widget means for its kind: a button fires, a checkbox flips, a text
+     * field is confirmed — by Enter only, since a click on a field is for placing the caret.
+     */
     private void act(int node, boolean byKeyboard) {
         switch (kind[node]) {
             case BUTTON -> {
@@ -376,17 +632,27 @@ public final class AegisWidgets {
                 checked[node] = !checked[node];
                 changed = node;
             }
+            case TEXT_FIELD -> {
+                if (byKeyboard) {
+                    activated = node;
+                    activatedByKeyboard = true;
+                }
+            }
             default -> { }   // not a widget: a click on a plain node does nothing here
         }
     }
 
-    /** Whether this button was activated this frame — by a click, Enter or Space. */
+    /**
+     * Whether this widget was activated this frame — a button by a click, Enter or Space; a
+     * text field by Enter, the user confirming what they typed.
+     */
     public boolean wasActivated(int node) { return activated == node; }
 
     /**
      * Whether the user changed this widget this frame — for a checkbox, ticked or unticked it
-     * by a click, Enter or Space; for a slider, moved it by dragging or by a key. Changes made
-     * from code, with {@link #setChecked} or {@link #setSliderValue}, do not count.
+     * by a click, Enter or Space; for a slider, moved it by dragging or by a key; for a text
+     * field, typed or deleted in it. Changes made from code, with {@link #setChecked},
+     * {@link #setSliderValue} or {@link #setText}, do not count.
      */
     public boolean wasChanged(int node) { return changed == node; }
 
@@ -406,6 +672,7 @@ public final class AegisWidgets {
         if (kind[root] == BUTTON)   drawButton(root);
         if (kind[root] == CHECKBOX) drawCheckbox(root);
         if (kind[root] == SLIDER)   drawSlider(root);
+        if (kind[root] == TEXT_FIELD) drawTextField(root);
         for (int child = layout.firstChild(root); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
             draw(child);
@@ -532,6 +799,51 @@ public final class AegisWidgets {
             ink[0], ink[1], ink[2], ink[3]);
 
         if (tree.isFocused(node)) drawFocusRing(x, y, w, h, size * 0.5f);
+    }
+
+    /**
+     * A text field: its fill, lighter while hovered; a border that turns the accent colour
+     * while focused, standing in for the focus ring; the text, scrolled so the caret is in
+     * view and clipped to the space inside the padding — or the placeholder, dimmed, while it
+     * is empty; and, while focused, the blinking caret.
+     */
+    private void drawTextField(int node) {
+        float x = layout.x(node), y = layout.y(node);
+        float w = layout.width(node), h = layout.height(node);
+        boolean focused = tree.isFocused(node);
+
+        float[] fill   = tree.isHovered(node) ? style.textFieldHover : style.textFieldFill;
+        float[] border = focused ? style.textFieldBorderFocused : style.textFieldBorder;
+        aegis.addRoundedRect(x, y, w, h, style.textFieldRadius,
+            fill[0], fill[1], fill[2], fill[3],
+            border[0], border[1], border[2], border[3], style.textFieldBorderWidth);
+
+        keepCaretInView(node);
+
+        float left  = fieldTextLeft(node);
+        float textX = Math.round(left - fieldScroll[node]);   // whole pixels keep glyphs crisp
+        float textY = y + (h - aegis.lineHeight()) * 0.5f;
+        StringBuilder text = fieldText[node];
+
+        aegis.pushClipRect(left, y, fieldTextWidth(node), h);
+        if (text.length() == 0 && label[node] != null) {
+            float[] hint = style.textFieldPlaceholder;
+            aegis.addTextTop(left, textY, label[node], hint[0], hint[1], hint[2], hint[3]);
+        } else {
+            float[] ink = style.textFieldText;
+            aegis.addTextTop(textX, textY, text, ink[0], ink[1], ink[2], ink[3]);
+        }
+
+        // Shown for one blink interval, hidden for the next, counted from the last time it
+        // moved or the field gained focus.
+        boolean caretOn = ((System.nanoTime() - caretShownAt) / CARET_BLINK_NANOS) % 2 == 0;
+        if (focused && caretOn) {
+            float[] c = style.textFieldCaret;
+            aegis.addRoundedRect(Math.round(textX + caretOffset(node, caret[node])), textY,
+                style.textFieldCaretWidth, aegis.lineHeight(), 0.0f,
+                c[0], c[1], c[2], c[3]);
+        }
+        aegis.popClipRect();
     }
 
 

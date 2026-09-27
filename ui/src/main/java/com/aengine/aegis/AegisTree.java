@@ -207,6 +207,13 @@ public final class AegisTree {
     public int focused() { return focused; }
 
     /**
+     * Gives focus to a node, or with {@link AegisLayout#NONE} takes it from everything — what
+     * Esc does in a text field. The node is not checked for being focusable: the caller is
+     * code, not the user, and is trusted to name one.
+     */
+    public void focus(int node) { focused = node; }
+
+    /**
      * Moves focus to the next focusable node under {@code root}, in tree order — what Tab
      * does. Past the last it wraps to the first; with nothing focused it starts at the first.
      * If no node under {@code root} is focusable, focus is left as it is.

@@ -78,4 +78,25 @@ public final class AegisStyle {
     public float         sliderGap          = 8.0f;
     /** Space above and below the value's line box. */
     public float         sliderPaddingY     = 4.0f;
+
+    // ── Text field ──────────────────────────────────────────────────────────
+
+    public final float[] textFieldFill          = { 0.14f, 0.16f, 0.21f, 1.0f };
+    public final float[] textFieldHover         = { 0.17f, 0.19f, 0.25f, 1.0f };
+    public final float[] textFieldBorder        = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** The border while the field has focus — it stands in for the focus ring. */
+    public final float[] textFieldBorderFocused = { 0.36f, 0.62f, 0.94f, 1.0f };
+    public final float[] textFieldText          = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The hint shown while the field is empty. */
+    public final float[] textFieldPlaceholder   = { 0.50f, 0.54f, 0.62f, 1.0f };
+    public final float[] textFieldCaret         = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** Width a text field asks for; a stretching parent may give it more. */
+    public float         textFieldWidth         = 200.0f;
+    public float         textFieldRadius        = 4.0f;
+    public float         textFieldBorderWidth   = 1.0f;
+    /** Space between the text and the field's left and right edges. */
+    public float         textFieldPaddingX      = 8.0f;
+    /** Space between the text's line box and the field's top and bottom edges. */
+    public float         textFieldPaddingY      = 6.0f;
+    public float         textFieldCaretWidth    = 2.0f;
 }

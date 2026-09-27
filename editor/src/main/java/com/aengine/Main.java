@@ -103,7 +103,7 @@ public class Main extends Engine {
     private int stopButton;
     private int layoutInspector;
     private int layoutFieldA;
-    private int layoutFieldB;
+    private int nameField;          // step 3e-6: a text field, from the one ae.textField() method
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
 
@@ -122,6 +122,12 @@ public class Main extends Engine {
 
     // SCAFFOLDING — step 3e-4: how many times the user flipped a checkbox.
     private int checkboxChanges;
+
+    // SCAFFOLDING — step 3e-6: edits to the name field, and what it held the last time Enter
+    // confirmed it — copied into a builder made once, so confirming allocates nothing.
+    private int                 nameEdits;
+    private int                 nameConfirms;
+    private final StringBuilder nameConfirmed = new StringBuilder(64);
 
     // SCAFFOLDING — step 3e-5: how many frames the user moved the slider on.
     private int sliderChanges;
@@ -725,6 +731,16 @@ public class Main extends Engine {
         // A slider reports on every frame its value moves — each frame of a drag, each step.
         if (ae.wasChanged(opacitySlider)) sliderChanges++;
 
+        // A text field reports wasChanged() on every frame the user typed or deleted in it, and
+        // wasActivated() when Enter confirmed it. text() is the field's own buffer, read here
+        // without making a String.
+        if (ae.wasChanged(nameField)) nameEdits++;
+        if (ae.wasActivated(nameField)) {
+            nameConfirms++;
+            nameConfirmed.setLength(0);
+            nameConfirmed.append(ae.text(nameField));
+        }
+
         // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
         // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
         // nor the frame's rectangle changes; "skipped" climbs once a frame instead. Resizing the
@@ -811,11 +827,6 @@ public class Main extends Engine {
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
         drawWidthLabel(layout, layoutFieldA, "STRETCH");
 
-        aegis.addRoundedRect(layout.x(layoutFieldB), layout.y(layoutFieldB),
-            layout.width(layoutFieldB), layout.height(layoutFieldB), 4.0f,
-            LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
-        drawWidthLabel(layout, layoutFieldB, "STRETCH");
-
         // Step 3e-3: every widget under the frame, drawn by the widgets themselves — fill for
         // their state, border, label and, when focused, their own focus ring. One call for all
         // of them, after the panes so they sit on top. Today that is the three buttons in the
@@ -857,9 +868,9 @@ public class Main extends Engine {
         aegis.addTextTop(textX, textY + line * 2, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         // Step 3d-2: the tree's answer, which only ever names an interactive node — the toolbar's
-        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14) and the two
-        // checkboxes (18, 19) — or -1. Over a pane, or over ImGui, it stays -1 while the
-        // hit-test line above still names what is there.
+        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14), the name field
+        // (17) and the two checkboxes (18, 19) — or -1. Over a pane, or over ImGui, it stays -1
+        // while the hit-test line above still names what is there.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - hovered: ").append(tree.hovered());
         aegis.addTextTop(textX, textY + line * 3, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
@@ -910,6 +921,19 @@ public class Main extends Engine {
         UI_TEXT.append("slider - value ").append(ae.sliderValue(opacitySlider))
                .append("   changes ").append(sliderChanges);
         aegis.addTextTop(textX, textY + line * 9, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3e-6, the visible check: the field's text as text() reports it, with a bar where
+        // caret() says the caret is; how many frames it was edited on; and what Enter last
+        // confirmed.
+        CharSequence name = ae.text(nameField);
+        int nameCaret = ae.caret(nameField);
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("text field - \"").append(name, 0, nameCaret).append('|')
+               .append(name, nameCaret, name.length()).append("\"   caret ").append(nameCaret)
+               .append("   edits ").append(nameEdits)
+               .append("   confirmed ").append(nameConfirms)
+               .append(": \"").append(nameConfirmed).append('"');
+        aegis.addTextTop(textX, textY + line * 10, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }
@@ -1035,8 +1059,14 @@ public class Main extends Engine {
         layoutFieldA = layout.box(layoutInspector);
         layout.setSize(layoutFieldA, 0.0f, 28.0f);
 
-        layoutFieldB = layout.box(layoutInspector);
-        layout.setSize(layoutFieldB, 0.0f, 28.0f);
+        // Step 3e-6: a text field for the entity's name, holding at most 64 characters. The
+        // pane's STRETCH makes it as wide as the pane. It starts empty, so the placeholder
+        // shows: dimmed text behind the field that is not part of its text, gone as soon as
+        // something is typed and back when the field is emptied again. To start it with a real
+        // value instead — an entity's current name — call ae.setText(nameField, "Main Camera"),
+        // which fills it from code without counting as an edit.
+        nameField = ae.textField(layoutInspector, 64);
+        ae.setPlaceholder(nameField, "Typing text here");
 
         // Step 3e-4: two checkboxes, the way an inspector lists settings. The pane's STRETCH on
         // X makes each as wide as the pane, so a click anywhere along its row ticks it — the
@@ -1056,9 +1086,9 @@ public class Main extends Engine {
 
         // Step 3d-3: which nodes Tab stops at. Nothing here says in what order — that comes
         // from the tree: the toolbar's A B C D, then the hierarchy's two items, then the three
-        // buttons (which marked themselves), then the inspector's two fields. The fields and
-        // the hierarchy items take focus without being clickable, which is why focusable is a
-        // marking of its own.
+        // buttons (which marked themselves), then the inspector's field A, the name field and
+        // the checkboxes. Field A and the hierarchy items take focus without being clickable,
+        // which is why focusable is a marking of its own.
         tree.setFocusable(layoutBoxA, true);
         tree.setFocusable(layoutBoxB, true);
         tree.setFocusable(layoutBoxC, true);
@@ -1066,7 +1096,6 @@ public class Main extends Engine {
         tree.setFocusable(layoutTreeItemA, true);
         tree.setFocusable(layoutTreeItemB, true);
         tree.setFocusable(layoutFieldA, true);
-        tree.setFocusable(layoutFieldB, true);
     }
 
     /**

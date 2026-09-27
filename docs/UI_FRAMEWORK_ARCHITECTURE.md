@@ -36,6 +36,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3e-3 | `AegisWidgets` and the button: sized to its label, activated by click, Enter or Space; colours in `AegisStyle` |
 | Step 3e-4 | Checkbox: toggled by click, Enter or Space |
 | Step 3e-5 | Slider: dragged with capture; arrows, Shift+arrows, Home/End and `+`/`-` when focused; value shown as a whole number |
+| Step 3e-6 | Text field: typing, Backspace/Delete, arrows, Home/End, click to place the caret, scrolling, placeholder, Enter confirms |
 
 ### The plan ahead
 
@@ -76,7 +77,7 @@ against the existing one — is not part of 3d. It earns its complexity once rea
 exist, so it is decided with them.
 
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
-Seven parts, in order — **we stopped after part 5**:
+Seven parts, in order — **we stopped after part 6**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
@@ -85,7 +86,7 @@ Seven parts, in order — **we stopped after part 5**:
 | 3 ✅ | Widgets and the button | `AegisWidgets` through `aegis.widgets()`; a button sized to its label, activated by click, Enter or Space; colours from one `AegisStyle` | Play / Pause / Stop buttons that react to mouse and keyboard |
 | 4 ✅ | Checkbox | Toggles on click, Enter or Space | Boxes that tick and untick |
 | 5 ✅ | Slider | Drag with capture; arrows (Shift for ten steps), Home/End, `+`/`-` when focused; the value is a float, shown as a whole number | A value following the drag |
-| 6 | Text field: editing | Caret, typing, Backspace/Delete, arrows, Home/End, click to place the caret, long text scrolling inside the field | Typing and editing in a field |
+| 6 ✅ | Text field: editing | Caret, typing, Backspace/Delete, arrows, Home/End, click to place the caret, long text scrolling inside the field; a placeholder while empty; Enter confirms, Esc leaves | Typing and editing in a field |
 | 7 | Text field: selection and clipboard | Shift+arrows and mouse-drag selection; copy, cut, paste — needs clipboard access in `Window` (§10) | Selecting, copying and pasting text from outside |
 
 Undo and redo in the text field are not part of 3e; they are a step of their own later.
@@ -732,6 +733,14 @@ keyboard alone — and a focused slider takes arrows, Home/End and `+`/`-`.
 reports a change. A slider follows the pointer while it holds the capture, clamped to its
 range, and steps by a hundredth of it from the keyboard, or a tenth with Shift.
 
+**A text field edits as the keys arrive.** The other widgets gather a frame's keys and apply
+them in `update`; a focused text field applies each key and character the moment it is
+handed in, because typing, deleting and typing again in one frame must come out in that
+order. Its text lives in a `StringBuilder` sized to the field's limit when the field is
+made, so editing allocates nothing, and `text()` hands that buffer out as a `CharSequence`
+for reading. The caret is placed by walking advances and kerning exactly as drawing does, so
+a click lands between the characters it looks like it lands between.
+
 **Colours and sizes live only in `AegisStyle`**, a class of public fields no drawing code
 bypasses. It is what 3f turns into the theme's property catalogue, which is why the theme
 waits for the widgets: the names are chosen against real ones.
@@ -1297,6 +1306,12 @@ the effort table in §2 assigns to the draw list and GPU backend.
 **Phase 4 — Panel-by-panel migration.** ImGui and the new framework coexist, both rendering
 through the same backend. Panels move one at a time. Order: stats and physics debug panels
 (read-only, trivial) → menu bar → inspector → hierarchy → asset browser → viewport docking.
+
+**The viewport owns the camera controls.** Today the fly camera reads the keyboard by
+polling and acts wherever the pointer is, so Space and Ctrl typed into an Aegis widget also
+raise and lower it. When the viewport is native, the camera takes input only once the
+viewport has been clicked — has focus — and a click anywhere else, or focus in any widget,
+takes the camera's keys away. Until then it is left as it is.
 
 Each panel arrives as a **registration under a stable id** rather than a hardcoded call, so
 the shell package's `layout` can place it. That is the arrangement half of §7, and it costs
