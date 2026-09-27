@@ -112,6 +112,15 @@ public class Main extends Engine {
     // SCAFFOLDING — step 3d-3: whether Tab was held last frame, so a press is seen once.
     private boolean tabWasDown;
 
+    // SCAFFOLDING — step 3e-1: the input event queue made visible. What has been typed (the
+    // last TYPED_KEEP characters), and a count of each kind of key event and of the wheel.
+    private static final int           TYPED_KEEP = 48;
+    private static final StringBuilder TYPED      = new StringBuilder(TYPED_KEEP + 4);
+    private int   keyPresses;
+    private int   keyRepeats;
+    private int   keyReleases;
+    private float wheelTotal;
+
     // SCAFFOLDING — somewhere to build a line of text with a number in it, reused every
     // frame. §9 forbids String.format and concatenation in the frame loop, and addText takes
     // a CharSequence precisely so a StringBuilder can be handed straight to it.
@@ -551,6 +560,13 @@ public class Main extends Engine {
         aegis.addTextTop(textX, textY, "Grüße, Ångström, ¿cómo?, ½ £ © ÷ ×",
             0.95f, 0.60f, 0.30f, 1.0f);
         textY += line;
+
+        // Step 3e-2: the punctuation pasted text brings, packed as a second atlas range. Every
+        // one of these drew as '?' before — dashes, curly quotes, ellipsis, bullet, euro, ™.
+        aegis.addTextTop(textX, textY, "Pasted: “quoted” ‘single’ it’s – en — em … • 9,99 € ™",
+            0.95f, 0.60f, 0.30f, 1.0f);
+        textY += line;
+
         aegis.addTextTop(textX, textY, "Beyond Latin-1: Привет 日本語 -> ?",
             0.60f, 0.62f, 0.68f, 1.0f);
         textY += line + 16.0f;
@@ -653,6 +669,33 @@ public class Main extends Engine {
             else           tree.focusNext(layoutFrame);
         }
         tabWasDown = tabDown;
+
+        // Step 3e-1: this frame's input events, in the order they happened. Characters are
+        // appended as typed — including 'ç' or 'ã' composed from a dead key, which arrive as
+        // one character though they took two key presses. Backspace removes the last one, on
+        // its press and on every repeat, so holding it shows the operating system's repeat at
+        // work. Left to ImGui while it has the keyboard, like Tab.
+        if (!imguiHasKeyboard) {
+            for (int i = 0; i < Input.eventCount(); i++) {
+                switch (Input.eventType(i)) {
+                    case CHAR -> {
+                        TYPED.appendCodePoint(Input.eventCode(i));
+                        if (TYPED.length() > TYPED_KEEP) TYPED.delete(0, TYPED.length() - TYPED_KEEP);
+                    }
+                    case KEY_PRESS -> {
+                        keyPresses++;
+                        if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);
+                    }
+                    case KEY_REPEAT -> {
+                        keyRepeats++;
+                        if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);
+                    }
+                    case KEY_RELEASE -> keyReleases++;
+                    case SCROLL      -> wheelTotal += Input.eventScrollY(i);
+                    default          -> { }   // mouse buttons: the tree already handles them
+                }
+            }
+        }
 
         // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
         // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
@@ -798,6 +841,20 @@ public class Main extends Engine {
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - focused: ").append(tree.focused());
         aegis.addTextTop(textX, textY + line * 4, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3e-1, the visible check: what has been typed, with a bar where the next
+        // character goes, and the event counts. "repeated" only climbs while a key is held.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("typed: ").append(TYPED).append('|');
+        aegis.addTextTop(textX, textY + line * 5, UI_TEXT, 0.90f, 0.92f, 0.95f, 1.0f);
+
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("keys - pressed ").append(keyPresses)
+               .append("  repeated ").append(keyRepeats)
+               .append("  released ").append(keyReleases)
+               .append("   wheel ").append((int) wheelTotal)
+               .append("   dropped ").append(Input.droppedEvents());
+        aegis.addTextTop(textX, textY + line * 6, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }

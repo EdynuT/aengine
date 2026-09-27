@@ -112,7 +112,7 @@ public abstract class Engine {
                 lastReloadCheckTime = currentMillis;
             }
 
-            org.lwjgl.glfw.GLFW.glfwPollEvents(); 
+            Input.poll();     // empties last frame's event queue, then collects this frame's
             Input.update();
 
             int vpW = (int) ui.viewportWidth();

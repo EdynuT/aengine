@@ -101,6 +101,11 @@ public final class Keys {
     public static final int F11 = GLFW_KEY_F11;
     public static final int F12 = GLFW_KEY_F12;
 
+    // ── Modifier bits (used with Input.eventMods — test with &, e.g. (mods & MOD_SHIFT) != 0)
+    public static final int MOD_SHIFT   = GLFW_MOD_SHIFT;
+    public static final int MOD_CONTROL = GLFW_MOD_CONTROL;
+    public static final int MOD_ALT     = GLFW_MOD_ALT;
+
     // ── Mouse buttons (used with Input.isMouseButtonPressed) ─────────────────
     public static final int MOUSE_LEFT   = GLFW_MOUSE_BUTTON_LEFT;
     public static final int MOUSE_RIGHT  = GLFW_MOUSE_BUTTON_RIGHT;

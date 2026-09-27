@@ -4,27 +4,34 @@ import com.aengine.graphics.RenderContext;
 import com.aengine.graphics.TextureAPI;
 import com.aengine.graphics.TextureFormat;
 import com.aengine.utils.Logger;
-import org.lwjgl.stb.STBTTBakedChar;
 import org.lwjgl.stb.STBTTFontinfo;
+import org.lwjgl.stb.STBTTPackContext;
+import org.lwjgl.stb.STBTTPackRange;
+import org.lwjgl.stb.STBTTPackedchar;
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 
-import static org.lwjgl.stb.STBTruetype.stbtt_BakeFontBitmap;
 import static org.lwjgl.stb.STBTruetype.stbtt_GetCodepointKernAdvance;
 import static org.lwjgl.stb.STBTruetype.stbtt_GetFontVMetrics;
 import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
+import static org.lwjgl.stb.STBTruetype.stbtt_PackBegin;
+import static org.lwjgl.stb.STBTruetype.stbtt_PackEnd;
+import static org.lwjgl.stb.STBTruetype.stbtt_PackFontRanges;
+import static org.lwjgl.stb.STBTruetype.stbtt_PackSetOversampling;
 import static org.lwjgl.stb.STBTruetype.stbtt_ScaleForPixelHeight;
 
 /**
  * A TrueType font baked into a glyph atlas at one fixed size.
  *
  * <p>This is stage 1 of the text stack in §6 of the design document: stb_truetype, Latin-1
- * only, no kerning, one pixel size per font. It exists so every other layer has real text to
- * be built against. Kerning, wrapping and scale-independent glyphs come in later stages and
- * replace what is here rather than extending it.</p>
+ * plus the punctuation pasted text carries, legacy {@code kern}-table kerning, measuring and
+ * wrapping, one pixel size per font. Scale-independent glyphs (MSDF) and real shaping
+ * (HarfBuzz) are later stages, and replace the rasterising and the pair lookup here rather
+ * than extending them.</p>
  *
  * <p>The atlas is one byte per pixel, where each byte is glyph coverage rather than colour,
  * so the shader tints it with the vertex colour.</p>
@@ -41,11 +48,36 @@ public final class AegisFont {
 
     /**
      * Characters 32 to 255 — printable ASCII plus the Latin-1 supplement, which covers
-     * Portuguese, Spanish, French, German and Italian. Baked as one contiguous range
-     * because stb bakes ranges, and the 33 unassigned control codes inside it cost a few
-     * empty atlas cells rather than a second range to manage.
+     * Portuguese, Spanish, French, German and Italian. Packed as one contiguous range, the
+     * 33 unassigned control codes inside it included: they cost a few empty atlas cells, and
+     * a contiguous range keeps a character's glyph row a subtraction away.
      */
     public static final int CHAR_COUNT = LAST_CHAR - FIRST_CHAR + 1;
+
+    /**
+     * Punctuation outside Latin-1 that pasted text brings with it — dashes, curly quotes, the
+     * ellipsis, the bullet, the euro and the trade mark. Without these, text copied from a
+     * browser or a document shows {@code ?} where a word processor put a nicer character.
+     * Packed as a second range after Latin-1; their glyph rows follow its rows, in this order.
+     *
+     * <p>Not kerned: the kerning table covers Latin-1 pairs only, and a missing correction
+     * beside a dash or a quote is far less visible than a missing glyph.</p>
+     */
+    private static final int[] EXTRA_CODEPOINTS = {
+        0x2013,   // – en dash
+        0x2014,   // — em dash
+        0x2018,   // ‘ left single quote
+        0x2019,   // ’ right single quote, also the apostrophe word processors type
+        0x201C,   // “ left double quote
+        0x201D,   // ” right double quote
+        0x2022,   // • bullet
+        0x2026,   // … ellipsis
+        0x20AC,   // € euro
+        0x2122,   // ™ trade mark
+    };
+
+    /** Every glyph in the atlas: Latin-1, then the extra punctuation. */
+    private static final int GLYPH_COUNT = CHAR_COUNT + EXTRA_CODEPOINTS.length;
 
     /** First and last of the C1 control codes, which sit inside the range but have no glyph. */
     private static final int CONTROLS_FIRST = 0x7F; // DEL
@@ -97,12 +129,13 @@ public final class AegisFont {
     /**
      * Glyph placement, copied out of stb's native structs at construction:
      * {@code x0, y0, x1, y1} (atlas pixels), {@code xoff, yoff} (offset from the pen to the
-     * glyph's top-left) and {@code xadvance}, per glyph.
+     * glyph's top-left) and {@code xadvance}, per glyph — Latin-1's rows first, then one row
+     * per {@link #EXTRA_CODEPOINTS} entry.
      *
-     * <p>Copied rather than read through {@code STBTTBakedChar.Buffer.get(i)}, which creates a
+     * <p>Copied rather than read through {@code STBTTPackedchar.Buffer.get(i)}, which creates a
      * new wrapper object on every call — one allocation per character per frame.</p>
      */
-    private final float[] metrics = new float[CHAR_COUNT * STRIDE];
+    private final float[] metrics = new float[GLYPH_COUNT * STRIDE];
 
     /**
      * Per-pair spacing corrections in pixels, indexed {@code previous * CHAR_COUNT + current}.
@@ -157,16 +190,21 @@ public final class AegisFont {
 
         ByteBuffer ttf    = readResource(resourcePath);
         ByteBuffer bitmap = MemoryUtil.memAlloc(atlasWidth * atlasHeight);
-        STBTTBakedChar.Buffer baked = STBTTBakedChar.malloc(CHAR_COUNT);
         STBTTFontinfo info = STBTTFontinfo.malloc();
+
+        STBTTPackContext        packer      = STBTTPackContext.malloc();
+        STBTTPackRange.Buffer   ranges      = STBTTPackRange.malloc(2);
+        STBTTPackedchar.Buffer  latinChars  = STBTTPackedchar.malloc(CHAR_COUNT);
+        STBTTPackedchar.Buffer  extraChars  = STBTTPackedchar.malloc(EXTRA_CODEPOINTS.length);
+        IntBuffer               extraPoints = MemoryUtil.memAllocInt(EXTRA_CODEPOINTS.length);
 
         try {
             if (!stbtt_InitFont(info, ttf)) {
                 throw new IllegalStateException("Not a font stb_truetype can read: " + resourcePath);
             }
 
-            // The same scale stbtt_BakeFontBitmap derives internally, so the metrics and the
-            // baked glyphs describe one font at one size rather than two near-agreeing ones.
+            // The same scale the packer derives from a positive font size, so the metrics and
+            // the packed glyphs describe one font at one size rather than two near-agreeing ones.
             float scale = stbtt_ScaleForPixelHeight(info, pixelHeight);
 
             int[] a = new int[1], d = new int[1], g = new int[1];
@@ -177,26 +215,44 @@ public final class AegisFont {
             this.lineGap =  g[0] * scale;
             this.lineHeight = Math.round(this.ascent + this.descent + this.lineGap);
 
-            int result = stbtt_BakeFontBitmap(ttf, pixelHeight, bitmap,
-                                              atlasWidth, atlasHeight, FIRST_CHAR, baked);
+            // Two ranges in one atlas: Latin-1 as a contiguous run, then the extra punctuation
+            // as a list of scattered code points. stb's older one-call baker takes a single
+            // contiguous range only, which is why the packer is used. At 1x oversampling it
+            // rasterises exactly as the baker did, so existing text looks the same; 1 pixel of
+            // padding keeps neighbouring glyphs from bleeding into each other when sampled.
+            extraPoints.put(EXTRA_CODEPOINTS).flip();
 
-            // Positive: the first unused row. Zero or negative: not every glyph fit.
-            if (result <= 0) {
+            ranges.get(0)
+                  .font_size(pixelHeight)
+                  .first_unicode_codepoint_in_range(FIRST_CHAR)
+                  .chardata_for_range(latinChars);
+            ranges.get(0).num_chars(CHAR_COUNT);
+
+            ranges.get(1)
+                  .font_size(pixelHeight)
+                  .first_unicode_codepoint_in_range(0)
+                  .array_of_unicode_codepoints(extraPoints)
+                  .chardata_for_range(extraChars);
+            ranges.get(1).num_chars(EXTRA_CODEPOINTS.length);
+
+            if (!stbtt_PackBegin(packer, bitmap, atlasWidth, atlasHeight, 0, 1, MemoryUtil.NULL)) {
+                throw new IllegalStateException("Could not start packing the glyph atlas for " + resourcePath);
+            }
+            stbtt_PackSetOversampling(packer, 1, 1);
+            boolean packed = stbtt_PackFontRanges(packer, ttf, 0, ranges);
+            stbtt_PackEnd(packer);
+
+            if (!packed) {
                 throw new IllegalStateException(String.format(
-                    "Glyph atlas too small: %s at %.0fpx fits only %d of %d characters in %dx%d.",
-                    resourcePath, pixelHeight, -result, CHAR_COUNT, atlasWidth, atlasHeight));
+                    "Glyph atlas too small: %s at %.0fpx does not fit %d glyphs in %dx%d.",
+                    resourcePath, pixelHeight, GLYPH_COUNT, atlasWidth, atlasHeight));
             }
 
             for (int i = 0; i < CHAR_COUNT; i++) {
-                STBTTBakedChar glyph = baked.get(i);
-                int m = i * STRIDE;
-                metrics[m]     = glyph.x0();
-                metrics[m + 1] = glyph.y0();
-                metrics[m + 2] = glyph.x1();
-                metrics[m + 3] = glyph.y1();
-                metrics[m + 4] = glyph.xoff();
-                metrics[m + 5] = glyph.yoff();
-                metrics[m + 6] = glyph.xadvance();
+                copyGlyph(latinChars.get(i), i);
+            }
+            for (int k = 0; k < EXTRA_CODEPOINTS.length; k++) {
+                copyGlyph(extraChars.get(k), CHAR_COUNT + k);
             }
 
             // Every pair in the baked range, asked once here rather than per character per
@@ -216,9 +272,9 @@ public final class AegisFont {
             this.atlas = RenderContext.createTexture(atlasWidth, atlasHeight, TextureFormat.R8, bitmap);
 
             Logger.info(Logger.System.RENDERER,
-                "Font baked: %s at %.0fpx, %d glyphs, atlas %dx%d (%d of %d rows used); "
+                "Font baked: %s at %.0fpx, %d glyphs (Latin-1 + %d punctuation), atlas %dx%d; "
                 + "ascent %.1f, descent %.1f, gap %.1f, line height %d; %d kerning pairs.",
-                resourcePath, pixelHeight, CHAR_COUNT, atlasWidth, atlasHeight, result, atlasHeight,
+                resourcePath, pixelHeight, GLYPH_COUNT, EXTRA_CODEPOINTS.length, atlasWidth, atlasHeight,
                 this.ascent, this.descent, this.lineGap, this.lineHeight, kernPairs);
 
             // A font with no readable kern table is not an error — it is a font whose kerning
@@ -235,10 +291,26 @@ public final class AegisFont {
             // memory is needed past this point. Baking the kerning table here rather than
             // querying per pair at layout time is what keeps it that way.
             info.free();
-            baked.free();
+            packer.free();
+            ranges.free();
+            latinChars.free();
+            extraChars.free();
+            MemoryUtil.memFree(extraPoints);
             MemoryUtil.memFree(bitmap);
             MemoryUtil.memFree(ttf);
         }
+    }
+
+    /** Copies one packed glyph's placement into its row of {@link #metrics}. */
+    private void copyGlyph(STBTTPackedchar glyph, int row) {
+        int m = row * STRIDE;
+        metrics[m]     = glyph.x0();
+        metrics[m + 1] = glyph.y0();
+        metrics[m + 2] = glyph.x1();
+        metrics[m + 3] = glyph.y1();
+        metrics[m + 4] = glyph.xoff();
+        metrics[m + 5] = glyph.yoff();
+        metrics[m + 6] = glyph.xadvance();
     }
 
     /**
@@ -309,15 +381,26 @@ public final class AegisFont {
     /**
      * The row in {@link #metrics} a character draws from.
      *
-     * <p>One place, because measuring and drawing must agree about it. A character outside
-     * Latin-1, or one of the control codes inside it, resolves to the replacement glyph — so
-     * if the two resolved it differently, a measured width and a drawn width would disagree
-     * exactly on the strings hardest to notice it in.</p>
+     * <p>One place, because measuring and drawing must agree about it. A character with no
+     * glyph — beyond Latin-1 and not in the extra punctuation, or one of the control codes
+     * inside Latin-1 — resolves to the replacement glyph; so if the two resolved it
+     * differently, a measured width and a drawn width would disagree exactly on the strings
+     * hardest to notice it in.</p>
+     *
+     * <p>Latin-1 is a subtraction. The punctuation is a scan of ten entries, reached only by
+     * characters above Latin-1, which in editor text are rare.</p>
      */
     private int glyphIndex(char c) {
-        boolean drawable = c >= FIRST_CHAR && c <= LAST_CHAR
-                        && !(c >= CONTROLS_FIRST && c <= CONTROLS_LAST);
-        return (drawable ? c : REPLACEMENT) - FIRST_CHAR;
+        if (c >= FIRST_CHAR && c <= LAST_CHAR) {
+            boolean control = c >= CONTROLS_FIRST && c <= CONTROLS_LAST;
+            return (control ? REPLACEMENT : c) - FIRST_CHAR;
+        }
+        if (c > LAST_CHAR) {
+            for (int k = 0; k < EXTRA_CODEPOINTS.length; k++) {
+                if (EXTRA_CODEPOINTS[k] == c) return CHAR_COUNT + k;
+            }
+        }
+        return REPLACEMENT - FIRST_CHAR;
     }
 
     /** How far the pen moves past this character, before kerning, in pixels. */

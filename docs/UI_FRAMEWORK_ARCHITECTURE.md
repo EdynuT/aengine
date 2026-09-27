@@ -31,6 +31,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3d-1 | `nodeAt`: the innermost node under a point, the later sibling winning an overlap |
 | Step 3d-2 | `AegisTree`: interactive nodes are hovered, pressed with capture, and clicked |
 | Step 3d-3 | Focusable nodes; Tab and Shift+Tab walk them in tree order, a press moves focus |
+| Step 3e-1 | `Input` event queue: characters, key press / repeat / release, mouse, scroll; own key repeat on Wayland |
+| Step 3e-2 | Punctuation beyond Latin-1 packed into the atlas as a second range |
 
 ### The plan ahead
 
@@ -71,12 +73,31 @@ against the existing one — is not part of 3d. It earns its complexity once rea
 exist, so it is decided with them.
 
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
-*Visible:* each one reacting to input.
+Seven parts, in order — **we stopped after part 2**:
 
-Before the text field, the atlas gains a second, small range: the punctuation that pasted
-text carries and Latin-1 lacks — `– — ‘ ’ “ ” … • € ™`. Today each draws as `?`, and pasting
-is exactly what a text field introduces. The no-break space (`0xA0`) needs nothing: it is
-inside Latin-1 and already baked.
+| # | Part | What it delivers | Visible check |
+|---|---|---|---|
+| 1 ✅ | Input event queue | Characters, key press / repeat / release with modifiers, mouse buttons and scrolling, queued per frame in `:core` (§10) | Typed text, accents included, and a held key repeating evenly |
+| 2 ✅ | Punctuation in the atlas | A second atlas range: `– — ‘ ’ “ ” … • € ™` | A line of pasted-style punctuation with no `?` |
+| 3 | Widgets and the button | `AegisWidgets` through `aegis.widgets()`; a button sized to its label, activated by click, Enter or Space; colours from one `AegisStyle` | Play / Pause / Stop buttons that react to mouse and keyboard |
+| 4 | Checkbox | Toggles on click or Space | Boxes that tick and untick |
+| 5 | Slider | Drag with capture; arrow keys when focused | A value following the drag |
+| 6 | Text field: editing | Caret, typing, Backspace/Delete, arrows, Home/End, click to place the caret, long text scrolling inside the field | Typing and editing in a field |
+| 7 | Text field: selection and clipboard | Shift+arrows and mouse-drag selection; copy, cut, paste — needs clipboard access in `Window` (§10) | Selecting, copying and pasting text from outside |
+
+Undo and redo in the text field are not part of 3e; they are a step of their own later.
+
+**Naming convention for the examples and scaffolding.** The long form,
+`aegis.widgets().button(...)`, is always right. When the widgets object is kept in a short
+local variable, it is called **`ae`** — `AegisWidgets ae = aegis.widgets(); ae.button(...)` —
+never a generic `ui`: a short name should still say where the thing comes from, which is the
+same objection as to `using namespace std` in C++.
+
+The punctuation range exists because pasting is exactly what a text field introduces. The
+no-break space (`0xA0`) needed nothing: it is inside Latin-1 and was already baked. Packing a
+second range meant moving from stb's one-call baker, which takes a single contiguous range,
+to its packer; at 1x oversampling the packer rasterises identically, so existing text is
+unchanged.
 
 **Step 3f — theme file.** `theme.json` drives the colours over the property catalogue,
 with validation and live reload (§7). *Visible:* with the development option on, saving a
@@ -1141,13 +1162,22 @@ Known cross-boundary work. All of it is additive: nothing existing callers use w
   textures the engine generates itself such as the glyph atlas. A separate class from the
   asset-streaming `OpenGLTexture`, which is untouched.
 - **`drawBatch`** no longer allocates a fresh array per call.
+- **`Input`** gained an **event queue** beside its polling API (step 3e-1): characters as
+  code points, key press / repeat / release with modifier bits (`Keys.MOD_SHIFT`,
+  `MOD_CONTROL`, `MOD_ALT`), mouse press and release, and scrolling. Parallel arrays sized
+  once, emptied at the start of each `Input.poll()` — which the engine loop now calls instead
+  of `glfwPollEvents` — so during a frame it holds that frame's events; overflow is dropped
+  and counted, never grown. Polling is unchanged for gameplay.
+
+  **Key repeat is our own on Wayland.** Wayland leaves repeating to the client, and the GLFW
+  bundled with LWJGL 3.3.4 (3.5.0-dev) does not service its repeat timer every poll: repeats
+  piled up and arrived in bursts of twenty, seconds late. On Wayland, GLFW's repeats and
+  their characters are ignored and `Input` repeats the held key itself — after 500 ms, 20 a
+  second, each repeat carrying the character the key typed. X11 and Windows keep the
+  operating system's repeat. The cost is that on Wayland the user's own repeat settings are
+  not honoured, since GLFW does not report them.
 
 **Still to do:**
-
-**`Input`** — poll-based today (`isKeyPressed`, `getMouseX`, `getMouseDeltaX`). UI requires
-an **edge-triggered event queue**: character input (not key codes), scroll deltas, button
-press and release as distinct events, and key repeat. The polling API stays for gameplay;
-the event queue is added beside it and drained once per frame by the UI.
 
 **`Window`** — needs to expose content scale (high-DPI), cursor shape control, and clipboard
 access. All three are GLFW calls already available through the existing handle.
