@@ -1131,6 +1131,27 @@ public class Main extends Engine {
         snapCheckbox     = ae.checkbox(layoutInspector, "Snap to grid");
         ae.setChecked(snapCheckbox, true);
 
+        // Step 3f-1: ids, so a theme can reach a panel or a widget by name — never by handle,
+        // since handles shift whenever a node is added before another. The frame and the body
+        // row get none, and are left out of every path: the Stop button's path is
+        // viewport.stopButton, not frame.body.viewport.stopButton, so regrouping the rows
+        // later breaks no theme. The paths these give:
+        //   hierarchy.opacitySlider
+        //   viewport.playButton   viewport.pauseButton   viewport.stopButton   viewport.descriptionBox
+        //   inspector.nameField   inspector.notesField   inspector.showGridCheckbox   inspector.snapCheckbox
+        layout.setId(layoutHierarchy,  "hierarchy");
+        layout.setId(layoutViewport,   "viewport");
+        layout.setId(layoutInspector,  "inspector");
+        layout.setId(opacitySlider,    "opacitySlider");
+        layout.setId(playButton,       "playButton");
+        layout.setId(pauseButton,      "pauseButton");
+        layout.setId(stopButton,       "stopButton");
+        layout.setId(descriptionBox,   "descriptionBox");
+        layout.setId(nameField,        "nameField");
+        layout.setId(notesField,       "notesField");
+        layout.setId(showGridCheckbox, "showGridCheckbox");
+        layout.setId(snapCheckbox,     "snapCheckbox");
+
         // Step 3d-2: which nodes react to the pointer. Everything else — panes, the toolbar
         // itself, the fields — lets it pass through to whatever interactive node holds it.
         com.aengine.aegis.AegisTree tree = aegis.tree();

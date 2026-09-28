@@ -127,27 +127,38 @@ that uses it. Once layout and the first widgets exist, the names describe real t
 than guesses. Until then, colours in scaffolding are kept grouped in one place rather than
 scattered through drawing calls, so the migration is moving a block, not hunting literals.
 
-**Its scope is settled.** Two built-in themes, dark and light, ship with the installation;
-themes a user makes go in their data directory. A theme dresses the editor's
-frame and never the content being edited, and it is **only ever read** — the arrangement half
-of §7, `layout.json`, stays in Phase 4 where it belongs, so nothing is written back in this
-step. Both decisions are recorded in §7. A theme changes while running by two separate
+**Its scope is settled.** A theme dresses the editor's frame and never the content being
+edited, and it is **only ever read**. It is looked for in the user's data directory, then in
+the installation, and when neither has one the property catalogue's defaults — the factory
+theme, compiled in — are used (§7, *Two files*). A theme changes while running by two separate
 paths: the user choosing one in settings, and — behind a development option, off by
 default — the author's saves applying live (§7, *Changing the theme*).
 
-Four parts, in order:
+**The shipped theme files are not ours to write.** The themes that come with the
+installation are made by the shell's designer. This step builds the machinery and, last, a
+guide that lets the designer work without reading the code; the files that test the loader
+are test files, and do not ship.
+
+Five parts, in order, with `layout.json` brought forward from Phase 4:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
-| 1 | Property catalogue | The closed list of what is themeable — name, type, default — which validation checks against and fallbacks read from | Nothing on screen; it is the definition the next three depend on |
-| 2 | Load and resolve | `theme.json` parsed, `@name` references resolved once, a baked style table indexed by handle | The scaffolding draws in the file's colours instead of Java's literals |
-| 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors refuse to start | A deliberately broken file produces three precise warnings and still starts |
-| 4 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
+| 1 | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; ids on layout nodes | Nothing on screen; it is the definition the next parts depend on |
+| 2 | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
+| 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
+| 4 | Layout | `layout.json` read by screens, panels registered by id, the chain user → installation → factory per screen, the factory layout in code, the atomic write of the user's copy | The scaffolding's frame built from a layout file; changing a width in it moves a pane |
+| 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
+
+Then **a round of tests against the factory interface** — test themes and layouts that are
+missing, partial, broken, contradictory or out of date — to find the gaps before anyone else
+does. Only after it, the **guide for the shell's designer**: the format, the whole catalogue
+with what each entry changes on screen, the ids there are to reach, and the advice to write
+in `global` — describing only what those tests have shown to work.
 
 Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Parts 3
-and 4 are what turn externalised constants into something another person can edit without
+and 5 are what turn externalised constants into something another person can edit without
 fear. The settings page that lets a user pick a theme is built with the real settings panel
-in Phase 4; it calls the same reload part 4 delivers.
+in Phase 4; it calls the same reload part 5 delivers.
 
 **Step 3g — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.
@@ -840,64 +851,188 @@ reasons:
 | File | Holds | Written by the program |
 |---|---|---|
 | `theme.json` | Appearance: colours, radii, spacing, typography | Never |
-| `layout.json` | Arrangement: which panels exist, where, at what size | On clean exit, if panels were moved |
+| `layout.json` | Arrangement: which panels each screen shows, where, at what size | Only the user's copy, only the screens the user changed |
 
 Split, they swap independently — one person's theme with another person's arrangement,
 without either file knowing about the other.
 
+**Each is looked for in three places, and the first that exists and is usable wins:**
+
+1. **The user's** — in the user's data directory (*Where the files live*). The only place the
+   program ever writes.
+2. **The installation's** — the defaults the engine ships, made by the shell's designer. Read,
+   never written, so an installation the user cannot write to is no obstacle, and an engine
+   update brings new defaults to everyone who has not replaced them.
+3. **The factory's** — written in Java, inside the executable, reached only when neither file
+   exists or is usable. For the theme it is the property catalogue's defaults; for the layout,
+   a description built in code. Nobody edits it and nobody needs to find it: it is what
+   guarantees the editor always opens with something on screen.
+
 **The program reads both at startup and never writes at startup.** Everything after that
 works from what was parsed; the theme alone can be read again while running, as described
-under *Changing the theme*. When the user drags a divider or moves a panel, the change
-lives in memory and is written back to `layout.json` when the editor closes cleanly.
+under *Changing the theme*.
 
-A sudden shutdown loses the arrangement changes made in that session. That is accepted: the
-alternative is writing during the session, and occasionally redoing a panel arrangement costs
-less than a program that keeps rewriting its own configuration.
+**The layout in memory is the one in use.** When the user drags a divider, the new size goes
+into the layout held in memory; leaving the editor screen for settings and coming back reads
+no file and loses nothing. It is written to the user's `layout.json` **a second after the
+divider is released, and when the editor closes** — only when something changed. Writing
+only at exit would lose a session's arrangement to a crash or a power cut. Each write goes to
+`layout.json.tmp` first and is then renamed over `layout.json`, so a crash in the middle of
+writing leaves the previous file whole rather than half a file.
 
-No temporary copy is needed. With writes happening only on clean exit, the in-memory state
-already is the working copy, and a crash discards it either way.
+**Only the screens the user changed are written.** Someone who resized the editor's panels
+gets an `editor` entry in their own file; every other screen keeps following the
+installation's defaults, so an update that improves the settings screen still reaches them.
+A screen the user did change stops following those updates — which is why settings is to
+offer **Restore default layout**, deleting the user's copy, once it exists.
 
-**Both are ordinary editable files, not resources inside a jar.** Editing the interface is
-meant to be open to anyone — that is the point of shipping it as data. Customising means
-adding a theme of one's own beside the built-in ones, as described under *Where the files
-live*. They also cannot be jar resources for a practical reason: `layout.json` is written
-back, and a classpath resource is read-only.
+**The files are ordinary editable data; the factory defaults are code.** Editing the
+interface is meant to be open to anyone — that is the point of shipping it as data — and
+customising means adding a theme of one's own beside the built-in ones, as described under
+*Where the files live*. The factory defaults are deliberately not a file: there is nothing
+for a user to open, break or delete.
 
 ### Format
 
 **JSON, parsed with Gson**, which the project already depends on and already uses for
 `.scene` and `.entity`. No grammar to write, no parser to maintain, and one less format for
-a contributor to learn. Gson's lenient mode accepts `//` comments, which a hand-maintained
-file needs and strict JSON does not have.
+a contributor to learn.
+
+**Theme files are plain `.json`, without comments.** Strict JSON has none, and an editor
+such as VS Code marks every comment in a `.json` file as an error, so a theme a user opens to
+edit must not arrive covered in red. What a comment would say about the theme goes in its
+`"description"`. Gson still reads in lenient mode, so a user who adds a comment anyway gets a
+theme that loads — tolerance, not a feature the shipped themes use.
 
 **`theme.json`**
 
 ```json
 {
-  "accent":       "#3B82F6",
-  "panel.bg":     "#1F2328",
-  "panel.border": "@accent",
-  "panel.radius": 6,
-  "text.body":    "#C9D1D9",
-  "spacing.md":   8
+  "name":        "Dark",
+  "description": "The built-in dark theme.",
+  "format":      1,
+
+  "global": {
+    "accent":         "#5C9EF0",
+    "surface":        "#242936",
+    "surface.raised": "#333B4A",
+    "text":           "#E6EBF2",
+    "button.fill":    "@global.surface.raised",
+    "button.radius":  6
+  },
+
+  "danger": "#C04040",
+
+  "inspector.textfield.fill": "#1A1D26",
+  "viewport.stopButton.fill": "@danger"
 }
 ```
+
+A theme holds four kinds of entry:
+
+| Entry | Written as | Means |
+|---|---|---|
+| Metadata | `name`, `description`, `format` | What the theme list shows, and which catalogue version the theme was written against. Not colours. |
+| Global | inside `"global"` | Applies everywhere: the **palette** (`accent`, `surface`, `text`…) and the look of each **kind** of widget (`button.fill` — every button). |
+| Local variable | a key **without** a dot, outside `global` | Paints nothing by itself; takes effect only where referenced as `@name`. |
+| Scoped rule | a key **with** a dot, outside `global` | A path of ids, then a property. `panel.kind.property` — `inspector.textfield.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetId.property` — `viewport.stopButton.fill` — styles one widget. |
+
+The dot is what tells a local variable from a scoped rule, which is why local variables are
+one word (`danger`, `warning`). References say where they point: `@global.accent` reads the
+global, `@danger` a local variable.
+
+**Precedence:** one widget's own rule > panel and kind > global > the catalogue's default.
+
+**Paths are made of ids given in code** — `layout.setId(stopButton, "stopButton")` — never of
+handles, which shift whenever a widget is added before another. Containers without an id are
+left out of the path, so wrapping part of a panel in a new row does not break a theme. Ids are
+thereby part of the contract with theme authors: renaming one is a change to announce in the
+release notes, and a path that no longer matches is reported, not silently ignored.
+
+**How a custom theme survives an engine update.** An update that adds widgets must not leave
+them looking foreign in someone's theme. Three layers see to it, strongest first:
+
+1. **The catalogue's defaults point at the palette**, not at fixed colours — `button.fill`
+   defaults to `@global.surface.raised`. A widget a theme has never heard of still wears the
+   theme's palette.
+2. **Panel-and-kind rules cover what is added later.** `inspector.textfield.fill` applies to a
+   field an update adds to the inspector.
+3. **An older theme is reported.** Catalogue entries record the format they arrived in; a
+   theme declaring an older `format` gets a log line naming the entries it does not set.
+
+The guidance for theme authors, for the user documentation: **the base look goes in
+`global`, a panel's look in panel-and-kind rules, and one widget's own rule only for
+exceptions.** A theme written that way survives updates; one written widget by widget is
+warned about, not repaired — nobody can know how its author would have dressed a widget they
+never saw.
+
+References are resolved once at load. Cycles are an error reported at parse time, not a
+hang.
 
 **`layout.json`**
 
 ```json
 {
-  "type": "row",
-  "children": [
-    { "panel": "hierarchy", "width": 240 },
-    { "panel": "viewport",  "grow": 1    },
-    { "panel": "inspector", "width": 300 }
-  ]
+  "name":        "Default",
+  "description": "Toolbar on top; hierarchy, viewport and inspector below.",
+  "format":      1,
+
+  "screens": {
+    "editor": {
+      "root": { "type": "column", "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "toolbar", "height": 40 },
+        { "type": "row", "grow": 1, "alignY": "stretch", "gap": 4, "children": [
+          { "type": "panel", "panel": "hierarchy", "width": 240 },
+          { "type": "panel", "panel": "viewport",  "grow": 1 },
+          { "type": "panel", "panel": "inspector", "width": 300 }
+        ]}
+      ]}
+    },
+    "settings": {
+      "root": { "type": "row", "alignY": "stretch", "children": [
+        { "type": "panel", "panel": "settingsMenu", "width": 200 },
+        { "type": "tabs", "grow": 1,
+          "panels": ["settingsGeneral", "settingsInterface", "settingsInput"] }
+      ]}
+    }
+  }
 }
 ```
 
-A value may reference another with `@name`, resolved once at load. Cycles are an error
-reported at parse time, not a hang.
+**The file says where each panel goes and how much room it gets** — not what is inside a
+panel, which is the panel's code, nor what it looks like, which is the theme.
+
+**It describes screens, not one window.** The editor's main screen is one entry of
+`"screens"`; settings is another, and screens not yet decided are added the same way. A
+screen is registered in code under an id, as a panel is. **Code decides what the user may
+rearrange through the interface** — the editor's dividers can be dragged, the settings
+screen's cannot — while **the file can rearrange any screen**, so the shell's designer can
+lay out settings without end users moving it by accident.
+
+Four kinds of node, mirroring `AegisLayout`:
+
+| Node | Holds |
+|---|---|
+| `row` | Children side by side, left to right |
+| `column` | Children stacked, top to bottom |
+| `panel` | One panel's slot, by the id its code registered — `"panel": "inspector"` |
+| `tabs` | Several panels sharing a slot, one shown at a time, in the order listed |
+
+Sizes and spacing are the layout's own: `width`, `height`, `grow`, and on rows and columns
+`gap`, `padding`, `alignX`, `alignY` (`start`, `center`, `end`, `stretch`). The `"type"` is
+always written, so the four kinds read plainly.
+
+**Panel ids are unique across the whole engine**, not per screen, so a theme path stays
+`panel.widget` — `settingsGeneral.fontSize.border` — with no screen in it; a panel belongs to
+one screen. Rows, columns and tabs in the layout carry no id and never appear in a theme
+path, so moving the inspector to the other side changes no theme.
+
+Screens fall back **one by one**: the editor screen may come from the user's file while
+settings comes from the installation's, and a screen an update adds is taken from the
+installation or the factory rather than appearing empty.
+
+Kept for later, without changing this format: draggable dividers writing back (Phase 4), a
+minimum size so a divider cannot crush a panel, and dragging panels between slots.
 
 **Docking is not a separate system.** A dock arrangement is a layout tree whose dividers can
 be dragged, so the shell's `layout` feeds the same L3 solver as everything else rather than
@@ -905,21 +1040,29 @@ getting a parallel implementation.
 
 ### Validation
 
-One rule decides every case: **a structural error refuses to start; a value error falls back
-to the default.** A structural error means nothing usable can be built from the file. A value
-error means the structure is fine and one property is wrong.
+One rule decides every case: **a structural error sets the file aside for the next one in
+line; a value error falls back to the default for that one property.** A structural error
+means nothing usable can be built from the file. A value error means the structure is fine
+and one property is wrong.
+
+The editor never refuses to start over a shell file. An earlier draft had it refuse, when a
+broken file left nothing to show; with the factory defaults compiled in (*Two files*), there
+is always something to fall back to, and refusing would only lock the user out of the very
+settings that could fix the problem.
 
 | Situation | Kind | Outcome |
 |---|---|---|
-| File missing | structure | Refuse to start |
-| JSON does not parse | structure | Refuse to start |
-| `layout.json` does not form a tree — `"type": "diagonal"`, `children` not a list | structure | Refuse to start |
+| File missing | — | The next in line — installation, then factory — with no warning for the user's, which is normally absent |
+| JSON does not parse | structure | The next in line, with a warning |
+| A layout screen does not form a tree — `"type": "diagonal"`, `children` not a list | structure | That screen from the next in line, with a warning; the file's other screens still apply |
 | Invalid value — `"bleu"` for a colour | value | Default, with a warning |
-| Unknown property name — `panel.bgg` | value | Ignored, with a warning; the intended property falls to its default |
+| Unknown property name — `button.fil` | value | Ignored, with a warning; the intended property falls to its default |
+| A path that matches no widget — an id renamed | value | Ignored, with a warning |
 | `@reference` to a name that does not exist | value | Default, with a warning |
 | `@reference` cycle | value | Default for every property in the cycle, with a warning |
 | Invalid size in the layout — `"width": -40` | value | Automatic sizing, with a warning |
-| `panel` id not registered in code | value | Slot skipped, with a warning; the rest still lays out |
+| `panel` id not registered in code | value | Slot left empty, with a warning; the rest still lays out |
+| The same panel in two slots | value | The second is left empty, with a warning |
 | Registered panel absent from `layout.json` | — | Not shown — how a minimal layout is authored |
 | Property omitted | — | Default, no warning — this is what allows a partial theme |
 
@@ -984,8 +1127,9 @@ construction. It came back because the theme author's loop matters, and because 
 reload also lets a user switch themes without restarting. It is done once, carefully, and
 both paths share it.
 
-A structural error during a reload cannot refuse to start an editor that is already open,
-so it **keeps the last valid theme on screen** and reports the error; value errors fall back
+A structural error during a reload **keeps the last valid theme on screen** — rather than
+dropping to the next file in line, which would repaint the editor under the author's hands
+because of a typo — and reports the error; value errors fall back
 to defaults exactly as at startup. A broken edit therefore never leaves the editor
 unusable — the author sees the message, fixes the file, saves again.
 
@@ -1010,8 +1154,8 @@ live-reloaded, which keeps the watcher from ever reacting to the editor's own wr
 Two places, for two kinds of theme. "`theme.json`" elsewhere in this document stands for
 any theme file.
 
-**Built-in themes ship with the installation**, in `<install>/ui/themes/`. There are two, a
-dark one and a light one. They are not meant to be edited — nothing stops a curious user
+**Built-in themes ship with the installation**, in `<install>/ui/themes/`, made by the
+shell's designer — a dark one and a light one are planned. They are not meant to be edited — nothing stops a curious user
 from opening them, but an update to the engine may replace them. Because they always come
 with the engine, a fresh machine starts with a working theme and nothing has to be copied
 anywhere on first start.
@@ -1029,9 +1173,10 @@ A new theme is a file placed in `themes/` inside that directory. The procedure �
 start from a built-in theme and where to put the result — is for user documentation, not
 for the editor to guide.
 
-`layout.json`, which the program writes back in Phase 4, also lives under `AEngine/ui/` and
-**never in the installation**, so an engine update cannot reset a user's arrangement. Not in
-a cache directory either (`~/.cache`): the system and cleaning tools treat a cache as
+The installation carries a default `layout.json` beside its themes, made by the shell's
+designer and never written. **The user's `layout.json`**, which the program writes, lives
+under `AEngine/ui/` and **never in the installation**, so an engine update cannot reset a
+user's arrangement. Not in a cache directory either (`~/.cache`): the system and cleaning tools treat a cache as
 disposable and empty it, which would reset the arrangement just the same.
 
 **Fonts a user adds** go in `fonts/` under the same directory. The default font ships with
@@ -1339,14 +1484,15 @@ nobody can review.
 | **3c** ✅ | Rows and columns nest and lay themselves out with grow, gap, padding and alignment | L3 |
 | **3d** ✅ | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** ✅ | Button, checkbox, slider, text field and text box behave correctly | L4 |
-| **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and — with the development option on — saving it reloads live | §7 |
+| **3f** | `theme.json` drives the colours and `layout.json` the arrangement, each falling back to the factory defaults in code; a broken file is reported precisely and never stops the editor; with the development option on, saving the theme reloads it live | §7 |
 | **3g** | Editor text comes from locale files, following the system language by default | §8 |
 
 The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
 
 The arrangement half of the shell package — panels placed from data rather than from code —
-lands in Phase 4 instead, because it needs panels that register by id, which is what
-migrating them produces.
+was first put in Phase 4, since it needs panels that register by id. It moved into 3f: the
+scaffolding's panes are enough to register, and settling the format with the theme's let
+both be designed together.
 
 Step 3a is the real start of the mountain. Everything before it in this document is the 10%
 the effort table in §2 assigns to the draw list and GPU backend.
@@ -1362,10 +1508,11 @@ viewport has been clicked — has focus — and a click anywhere else, or focus 
 takes the camera's keys away. Until then it is left as it is.
 
 Each panel arrives as a **registration under a stable id** rather than a hardcoded call, so
-the shell package's `layout` can place it. That is the arrangement half of §7, and it costs
-almost nothing extra here because a panel being migrated has to be rewritten anyway. The
-phase ends when the shipped `layout.json` places every panel, with no arrangement left in
-code.
+`layout.json` — read since 3f — can place it; it costs almost nothing extra here because a
+panel being migrated has to be rewritten anyway. This phase adds what needs real panels:
+dividers the user drags, written back to their `layout.json` a second after release, and
+**Restore default layout** in settings. It ends when the shipped `layout.json` places every
+panel, with no arrangement left in code.
 
 **Phase 5 — Remove Dear ImGui.** Drop the three `io.github.spair` dependencies and the JNI
 boundary with them.

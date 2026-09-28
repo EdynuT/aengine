@@ -114,6 +114,9 @@ public final class AegisLayout {
     private final Align[] alignX;
     private final Align[] alignY;
 
+    // A name given in code, for a theme to find the node by. Null for a node without one.
+    private final String[] id;
+
     // What the solve gave it.
     private final float[] solvedX;
     private final float[] solvedY;
@@ -153,6 +156,8 @@ public final class AegisLayout {
         grow            = new float[capacity];
         alignX          = new Align[capacity];
         alignY          = new Align[capacity];
+
+        id = new String[capacity];
 
         solvedX      = new float[capacity];
         solvedY      = new float[capacity];
@@ -281,6 +286,43 @@ public final class AegisLayout {
         if (alignY[node] == how) return;
         alignY[node] = how;
         version++;
+    }
+
+    /**
+     * Names a node, so a theme can reach it.
+     *
+     * <p>A theme finds a widget by the path of ids from the top of the tree down to it —
+     * {@code viewport.stopButton} — never by handle, since handles shift whenever a node is
+     * added before another. Nodes without an id are left out of the path: wrapping part of a
+     * panel in a new row changes no path, so no theme breaks.</p>
+     *
+     * <p>That makes ids part of the contract with theme authors. Renaming one silently drops
+     * every theme rule that named it; do it as deliberately as renaming a public method.</p>
+     *
+     * @param name letters, digits and underscores, starting with a letter — no dots, since a
+     *             dot is what separates the parts of a path
+     * @throws IllegalArgumentException for a name that could not appear in a path
+     */
+    public void setId(int node, String name) {
+        if (!isValidId(name)) {
+            throw new IllegalArgumentException(
+                "\"" + name + "\" cannot be an id: use letters, digits and underscores, "
+                + "starting with a letter. A dot would split it into two parts of a theme path.");
+        }
+        id[node] = name;
+    }
+
+    /** A node's id, or {@code null} if it was not given one. */
+    public String id(int node) { return id[node]; }
+
+    /** Whether a name is usable as an id: a letter, then letters, digits or underscores. */
+    public static boolean isValidId(String name) {
+        if (name == null || name.isEmpty() || !Character.isLetter(name.charAt(0))) return false;
+        for (int i = 1; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!Character.isLetterOrDigit(c) && c != '_') return false;
+        }
+        return true;
     }
 
     /**
@@ -431,6 +473,7 @@ public final class AegisLayout {
         grow[node]            = 0.0f;
         alignX[node]          = Align.START;
         alignY[node]          = Align.START;
+        id[node]              = null;
 
         // Never solved. A handle reused after clear() must not inherit the version its
         // previous owner was solved at, or its first solve could be skipped.
