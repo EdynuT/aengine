@@ -3,9 +3,9 @@ package com.aengine.aegis;
 /**
  * Aegis — the entry point to AEngine's UI framework.
  *
- * <p>One object to create and one object to call, in the spirit of {@code java.util.Scanner}:
- * the renderer, the draw list and the current font are wired together here instead of at
- * every call site, and a frame reads as a sequence of drawing calls rather than as a
+ * <p>One object to create and one object to call the renderer, the draw list and 
+ * the current font are wired together here instead of at every call site, 
+ * and a frame reads as a sequence of drawing calls rather than as a
  * coordination of three collaborators.</p>
  *
  * <pre>{@code
