@@ -25,7 +25,8 @@ public class Logger {
         WINDOW("WINDOW"),
         RENDERER("RENDERER"),
         SHADER("SHADER"),
-        ASSET("ASSET");
+        ASSET("ASSET"),
+        UI("UI");
 
         final String label;
         Level currentLevel = Level.DEBUG; 

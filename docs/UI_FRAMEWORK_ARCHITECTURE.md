@@ -40,6 +40,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3e-7 | Selection by Shift+keys and dragging, word jumps, Ctrl+A/C/X/V through the system clipboard; typed and pasted text filtered alike |
 | Step 3e-8 | Undo and redo in the field being edited, in blocks: a word, a run of spaces, of Backspaces or of Deletes, a paste |
 | Step 3e-9 | Text box: several lines wrapped to its width, Enter breaks and Ctrl+Enter confirms, Up/Down keep the column, scrolled by caret or wheel |
+| Step 3f-1 | The theme catalogue: every themeable property with its type and a default on the palette; ids on layout nodes |
+| Step 3f-2 | Themes read and resolved into a style per widget — global, local variables, panel-and-kind and one-widget rules — with the factory theme when no file is found |
 
 ### The plan ahead
 
@@ -139,12 +141,13 @@ installation are made by the shell's designer. This step builds the machinery an
 guide that lets the designer work without reading the code; the files that test the loader
 are test files, and do not ship.
 
-Five parts, in order, with `layout.json` brought forward from Phase 4:
+Five parts, in order, with `layout.json` brought forward from Phase 4 — **we stopped after
+part 2**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
-| 1 | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; ids on layout nodes | Nothing on screen; it is the definition the next parts depend on |
-| 2 | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
+| 1 ✅ | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; ids on layout nodes | Nothing on screen; it is the definition the next parts depend on |
+| 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
 | 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
 | 4 | Layout | `layout.json` read by screens, panels registered by id, the chain user → installation → factory per screen, the factory layout in code, the atomic write of the user's copy | The scaffolding's frame built from a layout file; changing a width in it moves a pane |
 | 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
@@ -1184,8 +1187,14 @@ the engine. A user's font may lack glyphs a language needs — a Latin-only font
 editor in Russian — so any character missing from it is drawn from the default font instead.
 That is the glyph fallback §8 already calls for, and it needs the font set planned for L2.
 
-Both locations are resolved in one place in `:editor`, so nothing else in the code knows
-which system it is on.
+Both locations are resolved in one place in `:editor` — `ShellFiles` — so nothing else in
+the code knows which system it is on. Each can be moved with a system property, which is how
+development runs work: `aengine.home` is the installation, and `./gradlew :editor:run` points
+it at `editor/src/dist`, which is what the application plugin copies into an installation;
+`aengine.userdata` is the user's directory, and `-PtestShell` points it at
+`editor/test-shell`, where the test themes and layouts live, so trying one never touches the
+real `~/.local/share/AEngine`. `-Ptheme=<name>` picks a theme by name. Nothing in
+`test-shell` ships.
 
 The per-project option — each game project carrying its own editor appearance — is
 **rejected**, and the test that rejects it is worth keeping: *is the file needed for the game

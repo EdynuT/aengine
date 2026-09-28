@@ -37,4 +37,18 @@ tasks.named('run') {
         '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
         '--add-opens', 'java.base/java.nio=ALL-UNNAMED'
     ]
+
+    // The installation's shell files (§7): src/dist is what the application plugin copies
+    // into the installation, so running from here sees what an installed engine would.
+    systemProperty 'aengine.home', file('src/dist').absolutePath
+
+    // ./gradlew :editor:run -PtestShell stands the test themes and layouts in test-shell/ in
+    // for the user's own, so trying one never touches ~/.local/share/AEngine. They do not ship.
+    if (project.hasProperty('testShell')) {
+        systemProperty 'aengine.userdata', file('test-shell').absolutePath
+    }
+    // ./gradlew :editor:run -Ptheme=<name> picks a theme by name; "dark" otherwise.
+    if (project.hasProperty('theme')) {
+        systemProperty 'aengine.theme', project.property('theme')
+    }
 }

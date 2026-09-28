@@ -235,6 +235,16 @@ public class Main extends Engine {
         // 64 no longer fits and baking would refuse. 128 leaves room for a larger size later.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
         buildLayoutScaffolding();
+
+        // Step 3f-2: dress the widgets in a theme. ShellFiles looks for it in the user's data
+        // directory, then the installation's ui/themes, and falls back to the factory theme —
+        // the catalogue's defaults, compiled in — so there is always one. Applied after the
+        // tree is built and its ids are set, because a theme finds widgets by their paths.
+        // "dark" unless -Ptheme=<name> says otherwise; -PtestShell uses the test themes.
+        com.aengine.aegis.AegisTheme theme =
+            com.aengine.editor.ShellFiles.loadTheme(System.getProperty("aengine.theme", "dark"));
+        aegis.widgets().applyTheme(theme, layoutFrame);
+
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 

@@ -1,0 +1,20 @@
+{
+  "name": "Test - scoped rules",
+  "description": "A test theme for step 3f-2; it does not ship. The global accent turns orange, so focus rings, ticked checkboxes, the slider and a focused field's border follow it. Every text field in the inspector gets a darker fill through a panel-and-kind rule. The Stop button alone turns red, through a rule of its own and a local variable. The name field alone takes a violet border from another local variable, while the notes field keeps the global one.",
+  "format": 1,
+
+  "global": {
+    "accent": "#E0A030"
+  },
+
+  "danger": "#C04040",
+  "violet": "#8A6CE0",
+
+  "inspector.textfield.fill": "#141820",
+
+  "viewport.stopButton.fill":       "@danger",
+  "viewport.stopButton.fill.hover": "#D05858",
+
+  "inspector.nameField.border":         "@violet",
+  "inspector.nameField.border.focused": "@violet"
+}

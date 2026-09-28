@@ -32,6 +32,10 @@ dependencies {
     // Glyph atlas baking. The natives arrive at runtime through :core, which already
     // depends on them for image decoding.
     implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+
+    // Reading theme.json and layout.json (§7). The same version the rest of the project uses;
+    // :core has it too, but as its own implementation detail, not on this module's classpath.
+    implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 // ---------------------------------------------------------------------------------------

@@ -3,6 +3,7 @@ package com.aengine.aegis;
 import com.aengine.core.Keys;
 import com.aengine.core.Window;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 /**
  * The widgets — layer L4's controls, built on the layout and the tree.
@@ -72,7 +73,22 @@ public final class AegisWidgets {
     private final Aegis       aegis;
     private final AegisLayout layout;
     private final AegisTree   tree;
-    private final AegisStyle  style = new AegisStyle();
+    /**
+     * The style every widget draws with unless the theme gives it one of its own: the theme's
+     * global values, or the factory's until a theme is applied. Replaced, not changed in place,
+     * when a theme is applied — see {@link #applyTheme}.
+     */
+    private AegisStyle globalStyle = new AegisStyle();
+
+    /**
+     * A widget's own style, when a scoped rule of the theme reaches it; {@code null} for the
+     * rest, which draw with {@link #globalStyle}. Most widgets have none, so most share one.
+     * Indexed by layout handle.
+     */
+    private final AegisStyle[] styleOf;
+
+    /** How many lines a text box shows — kept so its height can be worked out again when a theme changes the padding. */
+    private final int[] visibleLines;
 
     /** Indexed by layout handle. */
     private final byte[]   kind;
@@ -207,10 +223,98 @@ public final class AegisWidgets {
         this.caret          = new int[capacity];
         this.anchor         = new int[capacity];
         this.fieldScroll    = new float[capacity];
+
+        this.styleOf      = new AegisStyle[capacity];
+        this.visibleLines = new int[capacity];
     }
 
-    /** The colours and sizes every widget draws with. See {@link AegisStyle}. */
-    public AegisStyle style() { return style; }
+    /**
+     * The colours and sizes widgets draw with when the theme gives them none of their own. See
+     * {@link AegisStyle}. A new object each time a theme is applied, so hold on to it no longer
+     * than the current theme.
+     */
+    public AegisStyle style() { return globalStyle; }
+
+    /** The style a widget draws with: its own if a scoped theme rule reached it, the global one otherwise. */
+    AegisStyle styleOf(int node) {
+        AegisStyle own = styleOf[node];
+        return own != null ? own : globalStyle;
+    }
+
+    /**
+     * Dresses every widget under {@code root} in a theme: the theme's global values become the
+     * style all widgets share, and each widget a scoped rule reaches gets a style of its own.
+     * Widgets are then sized again, since a theme may change their padding.
+     *
+     * <p>Call it after the tree is built and its ids are set — paths are made of ids — and again
+     * after building more under {@code root}. Never in the frame loop: rules are matched here,
+     * by name, so that drawing only ever reads a field.</p>
+     *
+     * <p>A widget's size is worked out again from its content and the theme, which replaces a
+     * size set on it by hand with {@link AegisLayout#setSize}.</p>
+     */
+    public void applyTheme(AegisTheme theme, int root) {
+        globalStyle = theme.globalStyle();
+        Arrays.fill(styleOf, null);
+
+        pathScratch.clear();
+        dressSubtree(theme, root);
+        theme.reportUnmatchedRules();
+    }
+
+    /** The ids from the top of the tree down to the node being dressed. */
+    private final ArrayList<String> pathScratch = new ArrayList<>();
+
+    /** Walks a subtree, giving each widget the style its path calls for, and sizing it again. */
+    private void dressSubtree(AegisTheme theme, int node) {
+        String id = layout.id(node);
+        if (id != null) pathScratch.add(id);
+
+        if (kind[node] != NOT_A_WIDGET) {
+            styleOf[node] = theme.styleFor(pathScratch, id != null, themeKind(node));
+            fitToContent(node);
+        }
+        for (int child = layout.firstChild(node); child != AegisLayout.NONE;
+             child = layout.nextSibling(child)) {
+            dressSubtree(theme, child);
+        }
+
+        if (id != null) pathScratch.remove(pathScratch.size() - 1);
+    }
+
+    /** The kind a theme knows a widget by: the first part of the catalogue names that dress it. */
+    private String themeKind(int node) {
+        return switch (kind[node]) {
+            case BUTTON               -> "button";
+            case CHECKBOX             -> "checkbox";
+            case SLIDER               -> "slider";
+            case TEXT_FIELD, TEXT_BOX -> "textfield";
+            default                   -> "";
+        };
+    }
+
+    /**
+     * Asks the layout for the size a widget's content and style call for: a label's width plus
+     * padding, a slider's width, so many lines of text. Done when a widget is made and again
+     * when a theme is applied.
+     */
+    private void fitToContent(int node) {
+        AegisStyle style = styleOf(node);
+        float line = aegis.lineHeight();
+        switch (kind[node]) {
+            case BUTTON -> layout.setSize(node,
+                (float) Math.ceil(aegis.measure(label[node])) + style.buttonPaddingX * 2.0f,
+                line + style.buttonPaddingY * 2.0f);
+            case CHECKBOX -> layout.setSize(node,
+                style.checkboxSize + style.checkboxGap + (float) Math.ceil(aegis.measure(label[node])),
+                Math.max(style.checkboxSize, line) + style.checkboxPaddingY * 2.0f);
+            case SLIDER -> layout.setSize(node, style.sliderWidth,
+                Math.max(style.sliderThumbSize, line) + style.sliderPaddingY * 2.0f);
+            case TEXT_FIELD, TEXT_BOX -> layout.setSize(node, style.textFieldWidth,
+                line * Math.max(1, visibleLines[node]) + style.textFieldPaddingY * 2.0f);
+            default -> { }
+        }
+    }
 
     /**
      * The window whose system clipboard text fields copy to and paste from. Until it is set,
@@ -234,15 +338,13 @@ public final class AegisWidgets {
      */
     public int button(int parent, String text) {
         int node = layout.box(parent);
-        layout.setSize(node,
-            (float) Math.ceil(aegis.measure(text)) + style.buttonPaddingX * 2.0f,
-            aegis.lineHeight() + style.buttonPaddingY * 2.0f);
-
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
-        kind[node]  = BUTTON;
-        label[node] = text;
+        kind[node]    = BUTTON;
+        label[node]   = text;
+        styleOf[node] = null;
+        fitToContent(node);
         return node;
     }
 
@@ -258,16 +360,14 @@ public final class AegisWidgets {
      */
     public int checkbox(int parent, String text) {
         int node = layout.box(parent);
-        layout.setSize(node,
-            style.checkboxSize + style.checkboxGap + (float) Math.ceil(aegis.measure(text)),
-            Math.max(style.checkboxSize, aegis.lineHeight()) + style.checkboxPaddingY * 2.0f);
-
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
         kind[node]    = CHECKBOX;
         label[node]   = text;
         checked[node] = false;
+        styleOf[node] = null;
+        fitToContent(node);
         return node;
     }
 
@@ -297,9 +397,6 @@ public final class AegisWidgets {
      */
     public int slider(int parent, float min, float max, float value) {
         int node = layout.box(parent);
-        layout.setSize(node, style.sliderWidth,
-            Math.max(style.sliderThumbSize, aegis.lineHeight()) + style.sliderPaddingY * 2.0f);
-
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
@@ -308,6 +405,8 @@ public final class AegisWidgets {
         sliderMax[node]   = max;
         sliderStep[node]  = (max - min) / 100.0f;
         sliderValue[node] = clamp(value, min, max);
+        styleOf[node]     = null;
+        fitToContent(node);
         return node;
     }
 
@@ -388,18 +487,18 @@ public final class AegisWidgets {
     /** What every text field and text box form does: its kind, its height in lines, a limit, and the room the buffer starts with. */
     private int textWidget(int parent, byte textKind, int visibleLines, int maxLength, int startCapacity) {
         int node = layout.box(parent);
-        layout.setSize(node, style.textFieldWidth,
-            aegis.lineHeight() * Math.max(1, visibleLines) + style.textFieldPaddingY * 2.0f);
-
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
-        kind[node]           = textKind;
-        fieldText[node]      = new StringBuilder(startCapacity);
-        fieldMaxLength[node] = maxLength;
-        caret[node]          = 0;
-        anchor[node]         = 0;
-        fieldScroll[node]    = 0.0f;
+        kind[node]              = textKind;
+        fieldText[node]         = new StringBuilder(startCapacity);
+        fieldMaxLength[node]    = maxLength;
+        caret[node]             = 0;
+        anchor[node]            = 0;
+        fieldScroll[node]       = 0.0f;
+        this.visibleLines[node] = visibleLines;
+        styleOf[node]           = null;
+        fitToContent(node);
         return node;
     }
 
@@ -1079,28 +1178,28 @@ public final class AegisWidgets {
      * the value text begins.
      */
     private float sliderTrackLeft(int node) {
-        return layout.x(node) + style.sliderThumbSize * 0.5f;
+        return layout.x(node) + styleOf(node).sliderThumbSize * 0.5f;
     }
 
     /** Where the thumb's centre sits at the maximum. */
     private float sliderTrackRight(int node) {
         return layout.x(node) + layout.width(node)
-             - style.sliderValueWidth - style.sliderGap - style.sliderThumbSize * 0.5f;
+             - styleOf(node).sliderValueWidth - styleOf(node).sliderGap - styleOf(node).sliderThumbSize * 0.5f;
     }
 
     /** Where a text field's text starts, before scrolling: inside its left padding. */
     private float fieldTextLeft(int node) {
-        return layout.x(node) + style.textFieldPaddingX;
+        return layout.x(node) + styleOf(node).textFieldPaddingX;
     }
 
     /** How wide the part of a text field that shows text is. */
     private float fieldTextWidth(int node) {
-        return Math.max(0.0f, layout.width(node) - style.textFieldPaddingX * 2.0f);
+        return Math.max(0.0f, layout.width(node) - styleOf(node).textFieldPaddingX * 2.0f);
     }
 
     /** How tall the part of a text box that shows text is. */
     private float fieldTextHeight(int node) {
-        return Math.max(0.0f, layout.height(node) - style.textFieldPaddingY * 2.0f);
+        return Math.max(0.0f, layout.height(node) - styleOf(node).textFieldPaddingY * 2.0f);
     }
 
     /** A text field's caret offset, from the start of its one line. */
@@ -1135,7 +1234,7 @@ public final class AegisWidgets {
         }
 
         layoutLines(node);
-        float localY = pointerY - (layout.y(node) + style.textFieldPaddingY) + fieldScroll[node];
+        float localY = pointerY - (layout.y(node) + styleOf(node).textFieldPaddingY) + fieldScroll[node];
         int line = (int) Math.floor(localY / aegis.lineHeight());
         line = Math.max(0, Math.min(lineCount - 1, line));
         return indexInLine(text, lineStarts[line], lineEnds[line], localX);
@@ -1165,7 +1264,7 @@ public final class AegisWidgets {
      * while text is hidden at the left: deleting from the end of a long text pulls it back in.
      */
     private void scrollField(int node, boolean reveal) {
-        float visible = fieldTextWidth(node) - style.textFieldCaretWidth;
+        float visible = fieldTextWidth(node) - styleOf(node).textFieldCaretWidth;
         float textW   = aegis.measure(fieldText[node]);
 
         float scroll = fieldScroll[node];
@@ -1207,7 +1306,7 @@ public final class AegisWidgets {
      */
     private void layoutLines(int node) {
         StringBuilder text = fieldText[node];
-        float width = fieldTextWidth(node) - style.textFieldCaretWidth;
+        float width = fieldTextWidth(node) - styleOf(node).textFieldCaretWidth;
         AegisFont font = aegis.font();
 
         lineCount = font.wrap(text, width, lineStarts, lineEnds);
@@ -1350,6 +1449,7 @@ public final class AegisWidgets {
      * resting, showing that letting go now would not activate it.</p>
      */
     private void drawButton(int node) {
+        AegisStyle style = styleOf(node);
         float x = layout.x(node), y = layout.y(node);
         float w = layout.width(node), h = layout.height(node);
 
@@ -1371,7 +1471,7 @@ public final class AegisWidgets {
         aegis.addTextTop(textX, textY, text, ink[0], ink[1], ink[2], ink[3]);
         aegis.popClipRect();
 
-        if (tree.isFocused(node)) drawFocusRing(x, y, w, h, style.buttonRadius);
+        if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.buttonRadius);
     }
 
     /**
@@ -1383,6 +1483,7 @@ public final class AegisWidgets {
      * drawing one from strokes would need a primitive the draw list does not have.</p>
      */
     private void drawCheckbox(int node) {
+        AegisStyle style = styleOf(node);
         float x = layout.x(node), y = layout.y(node);
         float w = layout.width(node), h = layout.height(node);
 
@@ -1410,7 +1511,7 @@ public final class AegisWidgets {
         aegis.addTextTop(textX, textY, label[node], ink[0], ink[1], ink[2], ink[3]);
         aegis.popClipRect();
 
-        if (tree.isFocused(node)) drawFocusRing(x, y, w, h, style.checkboxRadius);
+        if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.checkboxRadius);
     }
 
     /**
@@ -1419,6 +1520,7 @@ public final class AegisWidgets {
      * rounded to a whole number; and the focus ring around the whole widget.
      */
     private void drawSlider(int node) {
+        AegisStyle style = styleOf(node);
         float x = layout.x(node), y = layout.y(node);
         float w = layout.width(node), h = layout.height(node);
 
@@ -1457,7 +1559,7 @@ public final class AegisWidgets {
         aegis.addTextTop(x + w - textW, y + (h - aegis.lineHeight()) * 0.5f, valueText,
             ink[0], ink[1], ink[2], ink[3]);
 
-        if (tree.isFocused(node)) drawFocusRing(x, y, w, h, size * 0.5f);
+        if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, size * 0.5f);
     }
 
     /**
@@ -1467,6 +1569,7 @@ public final class AegisWidgets {
      * is empty; and, while focused, the blinking caret.
      */
     private void drawTextField(int node) {
+        AegisStyle style = styleOf(node);
         float x = layout.x(node), y = layout.y(node);
         float w = layout.width(node), h = layout.height(node);
         boolean focused = tree.isFocused(node);
@@ -1525,6 +1628,7 @@ public final class AegisWidgets {
      * line break or the space the line broke at, so selecting an empty line shows.
      */
     private void drawTextBox(int node) {
+        AegisStyle style = styleOf(node);
         float x = layout.x(node), y = layout.y(node);
         float w = layout.width(node), h = layout.height(node);
         boolean focused = tree.isFocused(node);
@@ -1593,7 +1697,7 @@ public final class AegisWidgets {
     }
 
     /** The focus ring, standing {@code focusRingGap} off a widget's edge. Shared by every kind. */
-    private void drawFocusRing(float x, float y, float w, float h, float radius) {
+    private void drawFocusRing(AegisStyle style, float x, float y, float w, float h, float radius) {
         float out = style.focusRingGap + style.focusRingWidth;
         float[] ring = style.focusRing;
         aegis.addRoundedRect(x - out, y - out, w + out * 2.0f, h + out * 2.0f, radius + out,
