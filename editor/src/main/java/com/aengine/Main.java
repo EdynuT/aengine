@@ -105,6 +105,7 @@ public class Main extends Engine {
     private int layoutFieldA;
     private int nameField;          // step 3e-6: a text field, from the one ae.textField() method
     private int notesField;         // step 3e-7: a text field with no length limit
+    private int descriptionBox;     // step 3e-9: a text box, from the one ae.textBox() method
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
 
@@ -129,6 +130,9 @@ public class Main extends Engine {
     private int                 nameEdits;
     private int                 nameConfirms;
     private final StringBuilder nameConfirmed = new StringBuilder(64);
+
+    // SCAFFOLDING — step 3e-9: how many times Ctrl+Enter confirmed the text box.
+    private int descriptionConfirms;
 
     // SCAFFOLDING — step 3e-5: how many frames the user moved the slider on.
     private int sliderChanges;
@@ -709,7 +713,10 @@ public class Main extends Engine {
                         if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);
                     }
                     case KEY_RELEASE -> keyReleases++;
-                    case SCROLL      -> wheelTotal += Input.eventScrollY(i);
+                    case SCROLL      -> {
+                        wheelTotal += Input.eventScrollY(i);
+                        ae.scroll(Input.eventScrollY(i));   // scrolls a text box under the pointer
+                    }
                     default          -> { }   // mouse buttons: the tree already handles them
                 }
             }
@@ -741,6 +748,9 @@ public class Main extends Engine {
             nameConfirmed.setLength(0);
             nameConfirmed.append(ae.text(nameField));
         }
+
+        // A text box reports the same way; wasActivated() comes from Ctrl+Enter.
+        if (ae.wasActivated(descriptionBox)) descriptionConfirms++;
 
         // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
         // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
@@ -869,14 +879,14 @@ public class Main extends Engine {
         aegis.addTextTop(textX, textY + line * 2, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         // Step 3d-2: the tree's answer, which only ever names an interactive node — the toolbar's
-        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14), the name and notes
-        // fields (17, 18) and the two checkboxes (19, 20) — or -1. Over a pane, or over ImGui,
-        // it stays -1 while the hit-test line above still names what is there.
+        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14), the text box (15),
+        // the name and notes fields (18, 19) and the two checkboxes (20, 21) — or -1. Over a
+        // pane, or over ImGui, it stays -1 while the hit-test line above still names what is there.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - hovered: ").append(tree.hovered());
         aegis.addTextTop(textX, textY + line * 3, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
-        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 10 12 13 14 16 17 18 19 20 and wraps,
+        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 10 12 13 14 15 17 18 19 20 21 and wraps,
         // Shift+Tab walks it backwards, and a press on a pane clears it to -1.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - focused: ").append(tree.focused());
@@ -948,6 +958,16 @@ public class Main extends Engine {
                .append("   confirmed ").append(nameConfirms)
                .append(": \"").append(nameConfirmed).append('"');
         aegis.addTextTop(textX, textY + line * 11, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // Step 3e-9, the visible check: the text box's length, caret and selection, and how
+        // many times Ctrl+Enter confirmed it. Its text is on screen in the box itself.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("text box - length ").append(ae.text(descriptionBox).length())
+               .append("   caret ").append(ae.caret(descriptionBox))
+               .append("   selection ").append(ae.selectionStart(descriptionBox))
+               .append('-').append(ae.selectionEnd(descriptionBox))
+               .append("   confirmed ").append(descriptionConfirms);
+        aegis.addTextTop(textX, textY + line * 12, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }
@@ -1061,6 +1081,17 @@ public class Main extends Engine {
         playButton = ae.button(layoutViewport, "Play");
         pauseButton = ae.button(layoutViewport, "Pause");
         stopButton  = ae.button(layoutViewport, "Stop");
+
+        // Step 3e-9: a text box beside them, four lines tall, with no length limit. Lines wrap
+        // at its width; Enter breaks a line and Ctrl+Enter confirms. setText() fills it with
+        // enough text to scroll — the "\n" in it are line breaks the box shows as such.
+        descriptionBox = ae.textBox(layoutViewport, 4);
+        ae.setText(descriptionBox,
+            "A text box wraps long lines at its own width, so this sentence carries on below.\n"
+            + "Enter starts a new line; Ctrl+Enter confirms.\n"
+            + "Up and Down keep the caret's place across lines.\n"
+            + "The wheel scrolls it too.");
+        ae.setPlaceholder(descriptionBox, "Description");
 
         // Inspector: a fixed-width pane. STRETCH on X makes every field as wide as the pane, so
         // the fields ask only for a height.

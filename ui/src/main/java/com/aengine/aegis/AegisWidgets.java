@@ -61,6 +61,7 @@ public final class AegisWidgets {
     private static final byte CHECKBOX     = 2;
     private static final byte SLIDER       = 3;
     private static final byte TEXT_FIELD   = 4;
+    private static final byte TEXT_BOX     = 5;   // a text field of several lines: shares all of its state
 
     /** Shift + arrow moves a slider this many steps at once. */
     private static final int LARGE_STEP = 10;
@@ -87,12 +88,12 @@ public final class AegisWidgets {
     /** Where a slider's value is written as text each frame, reused rather than rebuilt. */
     private final StringBuilder valueText = new StringBuilder(16);
 
-    // Text fields: the text, in a builder sized to the field's limit when the field is made, so
-    // typing never grows it (a field with no limit starts smaller and grows); the limit; where the caret is, as a character index (0 is before
-    // the first character, length is after the last); the anchor, the other end of the
-    // selection — the selection is the text between anchor and caret, and there is none when
-    // they are equal; and how far the text is scrolled left, in pixels, when it is wider than
-    // the field.
+    // Text fields and text boxes: the text, in a builder sized to the limit when the widget is
+    // made, so typing never grows it (one with no limit starts smaller and grows); the limit;
+    // where the caret is, as a character index (0 is before the first character, length is
+    // after the last); the anchor, the other end of the selection — the selection is the text
+    // between anchor and caret, and there is none when they are equal; and how far the text is
+    // scrolled, in pixels — left in a field, up in a box.
     private final StringBuilder[] fieldText;
     private final int[]           fieldMaxLength;
     private final int[]           caret;
@@ -111,6 +112,28 @@ public final class AegisWidgets {
     /** The node pressed at the last update(), to tell a fresh press from a held one. */
     private int lastPressed = AegisLayout.NONE;
 
+    // A text box's lines as wrapped to its width — line i is [lineStarts[i], lineEnds[i]) of
+    // its text. Worked out when a box is drawn or a key needs them, never kept between: one
+    // pair of arrays serves every box. They grow, doubling, only for a text with more lines
+    // than they hold, which is the rare allocation a box with no limit accepts.
+    private int[] lineStarts = new int[256];
+    private int[] lineEnds   = new int[256];
+    private int   lineCount;
+
+    /**
+     * Where Up and Down aim, across the line, while they are pressed one after another: the
+     * caret's x when the first of them was pressed. Passing through a short line and back into
+     * a long one returns the caret to where it was. Below zero when no vertical run is going on.
+     */
+    private float caretGoalX = -1.0f;
+
+    /**
+     * Whether the caret moved since the focused widget was last drawn, so it should be
+     * scrolled into view. Only then: a text box scrolled with the wheel must stay where it was
+     * put, even though its caret is out of sight.
+     */
+    private boolean revealCaret;
+
     // Undo history for the text field being edited — one history, not one per field: it
     // belongs to the field with focus and is dropped when focus leaves, after which undoing is
     // the engine's business, not the field's. Each block is one replacement: at hPos, the text
@@ -128,6 +151,7 @@ public final class AegisWidgets {
     private static final byte BLOCK_DELETE    = 3;   // Deletes one after another
     private static final byte BLOCK_SINGLE    = 4;   // a paste, a cut, a selection deleted: never continued
     private static final byte BLOCK_SPACE     = 5;   // spaces typed one after another
+    private static final byte BLOCK_NEWLINE   = 6;   // line breaks typed one after another, in a text box
 
     private final byte[] hKind         = new byte[HISTORY_BLOCKS];
     private final int[]  hPos          = new int[HISTORY_BLOCKS];
@@ -310,7 +334,7 @@ public final class AegisWidgets {
      * @return its handle
      */
     public int textField(int parent) {
-        return textField(parent, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
+        return textWidget(parent, TEXT_FIELD, 1, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
     }
 
     /**
@@ -328,19 +352,49 @@ public final class AegisWidgets {
      * @return its handle
      */
     public int textField(int parent, int maxLength) {
-        return textField(parent, maxLength, maxLength);
+        return textWidget(parent, TEXT_FIELD, 1, maxLength, maxLength);
     }
 
-    /** What both public forms do: a limit, and the room the buffer starts with. */
-    private int textField(int parent, int maxLength, int startCapacity) {
+    /**
+     * A text box — text of several lines — showing {@code visibleLines} lines, with no limit on
+     * its length, added to {@code parent}. Starts empty.
+     *
+     * <p>Everything a {@linkplain #textField(int) text field} does, with these differences:
+     * lines wrap at the box's width instead of scrolling sideways, and text taller than the box
+     * scrolls up and down, by the caret or by the mouse wheel ({@link #scroll}). Enter breaks
+     * the line, so <strong>Ctrl+Enter</strong> is what confirms — {@link #wasActivated}. Up and
+     * Down move between lines keeping the caret's place across them; Home and End go to the
+     * ends of the line, Ctrl+Home and Ctrl+End to the ends of the text. Pasted line breaks are
+     * kept. Tab still moves focus, so the interface stays usable from the keyboard.</p>
+     *
+     * <p>Asks for {@code textFieldWidth} and that many lines' height plus padding.</p>
+     *
+     * @return its handle
+     */
+    public int textBox(int parent, int visibleLines) {
+        return textWidget(parent, TEXT_BOX, visibleLines, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
+    }
+
+    /**
+     * A text box showing {@code visibleLines} lines and holding at most {@code maxLength}
+     * characters, line breaks included. See {@link #textBox(int, int)}.
+     *
+     * @return its handle
+     */
+    public int textBox(int parent, int visibleLines, int maxLength) {
+        return textWidget(parent, TEXT_BOX, visibleLines, maxLength, maxLength);
+    }
+
+    /** What every text field and text box form does: its kind, its height in lines, a limit, and the room the buffer starts with. */
+    private int textWidget(int parent, byte textKind, int visibleLines, int maxLength, int startCapacity) {
         int node = layout.box(parent);
         layout.setSize(node, style.textFieldWidth,
-            aegis.lineHeight() + style.textFieldPaddingY * 2.0f);
+            aegis.lineHeight() * Math.max(1, visibleLines) + style.textFieldPaddingY * 2.0f);
 
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
-        kind[node]           = TEXT_FIELD;
+        kind[node]           = textKind;
         fieldText[node]      = new StringBuilder(startCapacity);
         fieldMaxLength[node] = maxLength;
         caret[node]          = 0;
@@ -424,8 +478,7 @@ public final class AegisWidgets {
      */
     public void key(int key, int mods, boolean repeat) {
         int focused = tree.focused();
-        if (focused != AegisLayout.NONE && kind[focused] == TEXT_FIELD
-                && editKey(focused, key, mods, repeat)) {
+        if (isText(focused) && editKey(focused, key, mods, repeat)) {
             return;
         }
 
@@ -463,7 +516,7 @@ public final class AegisWidgets {
      */
     public void character(int codepoint) {
         int focused = tree.focused();
-        if (focused != AegisLayout.NONE && kind[focused] == TEXT_FIELD) {
+        if (isText(focused)) {
             insert(focused, codepoint);
             return;
         }
@@ -491,6 +544,10 @@ public final class AegisWidgets {
      *   <li>Esc takes focus away from the field.</li>
      * </ul>
      *
+     * A text box adds: Enter breaks the line (Ctrl+Enter is left to confirm, like Enter in a
+     * field); Up and Down move a line, keeping the caret's place across; Home and End go to the
+     * ends of the line, and Ctrl+Home and Ctrl+End to the ends of the text.
+     *
      * All but Esc repeat while held.
      */
     private boolean editKey(int node, int key, int mods, boolean repeat) {
@@ -499,8 +556,19 @@ public final class AegisWidgets {
         boolean shift     = (mods & Keys.MOD_SHIFT) != 0;
         boolean ctrl      = (mods & Keys.MOD_CONTROL) != 0;
         boolean selection = anchor[node] != at;
+        boolean box       = kind[node] == TEXT_BOX;
 
-        if (key == Keys.BACKSPACE) {
+        if (box && key == Keys.ENTER && !ctrl) {
+            insertChar(node, '\n');
+        } else if (box && (key == Keys.UP || key == Keys.DOWN)) {
+            hOpen = false;
+            moveVertically(node, key == Keys.UP ? -1 : +1, shift);
+        } else if (box && !ctrl && (key == Keys.HOME || key == Keys.END)) {
+            hOpen = false;
+            layoutLines(node);
+            int line = lineOf(at);
+            moveCaret(node, key == Keys.HOME ? lineStarts[line] : lineEnds[line], shift);
+        } else if (key == Keys.BACKSPACE) {
             if (selection) {
                 deleteSelection(node);
             } else if (at > 0) {
@@ -572,6 +640,15 @@ public final class AegisWidgets {
      */
     private void insert(int node, int codepoint) {
         if (!isAllowed(codepoint)) return;
+        insertChar(node, (char) codepoint);
+    }
+
+    /**
+     * Puts one character at the caret, over the selection if there is one — a typed one that
+     * passed the filter, or a text box's line break, which the filter would refuse as a control
+     * character and Enter puts here on purpose.
+     */
+    private void insertChar(int node, char c) {
         StringBuilder text = fieldText[node];
         int start = selectionStart(node), end = selectionEnd(node);
         if (start == end && text.length() >= fieldMaxLength[node]) return;
@@ -579,14 +656,20 @@ public final class AegisWidgets {
         // Typing continues the block being typed; over a selection it starts a new one, which
         // holds the selection as its removed text, so one undo brings the selection back. A
         // space is its own kind of block, so a run of them groups together but typing a word
-        // before or after one does not: the kind changing is what ends the block.
-        byte blockKind = codepoint == ' ' ? BLOCK_SPACE : BLOCK_TYPING;
+        // before or after one does not: the kind changing is what ends the block. Line breaks
+        // are a kind of their own the same way.
+        byte blockKind = c == ' ' ? BLOCK_SPACE : c == '\n' ? BLOCK_NEWLINE : BLOCK_TYPING;
         if (start != end || !continues(node, blockKind)) beginBlock(node, blockKind, start, end);
         text.delete(start, end);
-        text.insert(start, (char) codepoint);
-        appendChar((char) codepoint, false);
+        text.insert(start, c);
+        appendChar(c, false);
         moveCaret(node, start + 1, false);
         finishEdit(node);
+    }
+
+    /** Whether a node is a text field or a text box — whether it takes typing. */
+    private boolean isText(int node) {
+        return node != AegisLayout.NONE && (kind[node] == TEXT_FIELD || kind[node] == TEXT_BOX);
     }
 
     /**
@@ -627,6 +710,8 @@ public final class AegisWidgets {
         caret[node] = to;
         if (!extend) anchor[node] = to;
         caretShownAt = System.nanoTime();
+        caretGoalX   = -1.0f;   // any move but Up or Down ends a vertical run; those set it again after
+        revealCaret  = true;
     }
 
     /** Removes a text field's selected text, leaving the caret where it began. A block of its own. */
@@ -657,18 +742,27 @@ public final class AegisWidgets {
      *
      * <p>The clipboard is outside text and is filtered the way typing is, character by
      * character: a field is one line, so line breaks and tabs become spaces — a Windows
-     * {@code \r\n} one space, not two — and whatever {@link #isAllowed} refuses is dropped.
-     * What is left is cut to the room the field has.</p>
+     * {@code \r\n} one space, not two — and whatever {@link #isAllowed} refuses is dropped. A
+     * text box keeps the line breaks instead, each of them one {@code \n}. What is left is cut
+     * to the room the field has.</p>
      */
     private void paste(int node) {
         if (clipboard == null) return;
         String pasted = clipboard.clipboard();   // the one allocation: GLFW hands back a String
 
+        // A text box keeps line breaks, all made '\n'; a field, being one line, turns them into
+        // spaces. Tabs become spaces in both: Tab moves focus, so no tab can be typed either.
+        boolean box = kind[node] == TEXT_BOX;
         clipboardScratch.setLength(0);
         for (int i = 0; i < pasted.length(); i++) {
             char c = pasted.charAt(i);
             if (c == '\r' && i + 1 < pasted.length() && pasted.charAt(i + 1) == '\n') continue;
-            if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+            if (c == '\r') c = '\n';
+            if (c == '\n' && box) {
+                clipboardScratch.append('\n');
+                continue;
+            }
+            if (c == '\n' || c == '\t') c = ' ';
             if (isAllowed(c)) clipboardScratch.append(c);
         }
         if (clipboardScratch.length() == 0) return;
@@ -801,6 +895,7 @@ public final class AegisWidgets {
         text.insert(hPos[b], hChars, hStart[b], hRemoved[b]);
         caret[node]  = hCaretBefore[b];
         anchor[node] = hAnchorBefore[b];
+        revealCaret  = true;
         caretShownAt = System.nanoTime();
         edited = node;
     }
@@ -815,6 +910,7 @@ public final class AegisWidgets {
         text.insert(hPos[b], hChars, hStart[b] + hRemoved[b], hInserted[b]);
         caret[node]  = hCaretAfter[b];
         anchor[node] = hAnchorAfter[b];
+        revealCaret  = true;
         caretShownAt = System.nanoTime();
         edited = node;
     }
@@ -922,10 +1018,11 @@ public final class AegisWidgets {
         // A text field being pressed puts its caret between the two characters nearest the
         // pointer. The first frame of the press drops the anchor there too; every later frame
         // moves only the caret, so dragging selects from where the press began. Dragging past
-        // the field's edge keeps selecting, and the text scrolls to follow the caret.
-        if (pressed != AegisLayout.NONE && kind[pressed] == TEXT_FIELD) {
+        // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
+        // picks the line under the pointer first, and dragging selects across lines.
+        if (isText(pressed)) {
             boolean freshPress = pressed != lastPressed;
-            int at = caretAt(pressed, tree.pointerX());
+            int at = caretAt(pressed, tree.pointerX(), tree.pointerY());
             if (freshPress || at != caret[pressed]) {
                 hOpen = false;   // the caret moved: the block being typed is over
                 moveCaret(pressed, at, !freshPress);
@@ -1001,59 +1098,177 @@ public final class AegisWidgets {
         return Math.max(0.0f, layout.width(node) - style.textFieldPaddingX * 2.0f);
     }
 
+    /** How tall the part of a text box that shows text is. */
+    private float fieldTextHeight(int node) {
+        return Math.max(0.0f, layout.height(node) - style.textFieldPaddingY * 2.0f);
+    }
+
+    /** A text field's caret offset, from the start of its one line. */
+    private float caretOffset(int node, int index) {
+        StringBuilder text = fieldText[node];
+        return offsetInLine(text, 0, text.length(), index);
+    }
+
     /**
-     * How far from the start of the text the caret sits when it is before character
-     * {@code index} — exactly where that character is drawn.
+     * How far from the start of the line {@code [from, to)} the caret sits when it is before
+     * character {@code index} — exactly where that character is drawn.
      *
      * <p>A measured range kerns only inside itself, but the drawn character {@code index} is
      * also moved by its kerning against the one before it; that pair is added, so the caret sits
      * against the glyph and not a kerning's width away from it.</p>
      */
-    private float caretOffset(int node, int index) {
-        StringBuilder text = fieldText[node];
+    private float offsetInLine(CharSequence text, int from, int to, int index) {
         AegisFont font = aegis.font();
-        float offset = font.measure(text, 0, index);
-        if (index > 0 && index < text.length()) {
+        float offset = font.measure(text, from, index);
+        if (index > from && index < to) {
             offset += font.kerning(text.charAt(index - 1), text.charAt(index));
         }
         return offset;
     }
 
-    /**
-     * The caret position nearest a pointer's x: the boundary between the two characters the
-     * pointer falls between, going to whichever side of a character's middle it is on.
-     * Walks the text once, adding advances and kerning the way drawing does.
-     */
-    private int caretAt(int node, float pointerX) {
+    /** The caret position nearest a pointer: in a field by x alone, in a box by the line under y first. */
+    private int caretAt(int node, float pointerX, float pointerY) {
         StringBuilder text = fieldText[node];
-        AegisFont font = aegis.font();
-        float local = pointerX - fieldTextLeft(node) + fieldScroll[node];
-
-        float pen = 0.0f;
-        for (int i = 0; i < text.length(); i++) {
-            float start   = pen + (i > 0 ? font.kerning(text.charAt(i - 1), text.charAt(i)) : 0.0f);
-            float advance = font.measure(text, i, i + 1);
-            if (local < start + advance * 0.5f) return i;
-            pen = start + advance;
+        float localX = pointerX - fieldTextLeft(node);
+        if (kind[node] != TEXT_BOX) {
+            return indexInLine(text, 0, text.length(), localX + fieldScroll[node]);
         }
-        return text.length();
+
+        layoutLines(node);
+        float localY = pointerY - (layout.y(node) + style.textFieldPaddingY) + fieldScroll[node];
+        int line = (int) Math.floor(localY / aegis.lineHeight());
+        line = Math.max(0, Math.min(lineCount - 1, line));
+        return indexInLine(text, lineStarts[line], lineEnds[line], localX);
     }
 
     /**
-     * Scrolls a text field so its caret is in view, and so no empty space is left at the
-     * right while text is hidden at the left — deleting from the end of a long text pulls it
-     * back into the field.
+     * The caret position in the line {@code [from, to)} nearest an x measured from the line's
+     * start: the boundary between the two characters it falls between, going to whichever side
+     * of a character's middle it is on. Walks the line once, adding advances and kerning the
+     * way drawing does.
      */
-    private void keepCaretInView(int node) {
+    private int indexInLine(CharSequence text, int from, int to, float x) {
+        AegisFont font = aegis.font();
+        float pen = 0.0f;
+        for (int i = from; i < to; i++) {
+            float start   = pen + (i > from ? font.kerning(text.charAt(i - 1), text.charAt(i)) : 0.0f);
+            float advance = font.measure(text, i, i + 1);
+            if (x < start + advance * 0.5f) return i;
+            pen = start + advance;
+        }
+        return to;
+    }
+
+    /**
+     * Scrolls a text field so its caret is in view — only when the caret has moved, so as not
+     * to undo a scroll the user made — and always so that no empty space is left at the right
+     * while text is hidden at the left: deleting from the end of a long text pulls it back in.
+     */
+    private void scrollField(int node, boolean reveal) {
         float visible = fieldTextWidth(node) - style.textFieldCaretWidth;
-        float caretX  = caretOffset(node, caret[node]);
         float textW   = aegis.measure(fieldText[node]);
 
         float scroll = fieldScroll[node];
-        if (caretX - scroll > visible) scroll = caretX - visible;
-        if (caretX - scroll < 0.0f)    scroll = caretX;
+        if (reveal) {
+            float caretX = caretOffset(node, caret[node]);
+            if (caretX - scroll > visible) scroll = caretX - visible;
+            if (caretX - scroll < 0.0f)    scroll = caretX;
+        }
         scroll = Math.min(scroll, Math.max(0.0f, textW - visible));
         fieldScroll[node] = Math.max(0.0f, scroll);
+    }
+
+    /**
+     * The same for a text box, up and down: the caret's line brought into view when it has
+     * moved, and the scroll kept between the top and the last line resting on the bottom.
+     * Expects {@link #layoutLines} to have been called for this box.
+     */
+    private void scrollBox(int node, boolean reveal) {
+        float lh      = aegis.lineHeight();
+        float visible = fieldTextHeight(node);
+
+        float scroll = fieldScroll[node];
+        if (reveal) {
+            float caretY = lineOf(caret[node]) * lh;
+            if (caretY + lh - scroll > visible) scroll = caretY + lh - visible;
+            if (caretY - scroll < 0.0f)         scroll = caretY;
+        }
+        scroll = Math.min(scroll, Math.max(0.0f, lineCount * lh - visible));
+        fieldScroll[node] = Math.max(0.0f, scroll);
+    }
+
+    /**
+     * Wraps a text box's text to its width into {@link #lineStarts} and {@link #lineEnds}.
+     *
+     * <p>Two things are added to what {@link AegisFont#wrap} gives. The arrays double and it
+     * wraps again if they filled — the text may have more lines. And an empty last line is
+     * added where the caret can stand but the wrap reports nothing: in an empty box, after a
+     * line break at the very end, or after a space the last line broke at.</p>
+     */
+    private void layoutLines(int node) {
+        StringBuilder text = fieldText[node];
+        float width = fieldTextWidth(node) - style.textFieldCaretWidth;
+        AegisFont font = aegis.font();
+
+        lineCount = font.wrap(text, width, lineStarts, lineEnds);
+        while (lineCount >= lineStarts.length - 1) {
+            lineStarts = new int[lineStarts.length * 2];
+            lineEnds   = new int[lineEnds.length * 2];
+            lineCount  = font.wrap(text, width, lineStarts, lineEnds);
+        }
+
+        int length = text.length();
+        if (lineCount == 0 || lineEnds[lineCount - 1] < length) {
+            lineStarts[lineCount] = length;
+            lineEnds[lineCount]   = length;
+            lineCount++;
+        }
+    }
+
+    /**
+     * Which of the lines last laid out holds a caret position: the last line starting at or
+     * before it. A position where one line ends and the next begins — a word broken in the
+     * middle — belongs to the next line, where the character after it is drawn.
+     */
+    private int lineOf(int index) {
+        int line = 0;
+        while (line + 1 < lineCount && lineStarts[line + 1] <= index) line++;
+        return line;
+    }
+
+    /**
+     * Up and Down in a text box: the caret goes to the line above or below, as near as it can
+     * to the same place across. The first press of a run remembers that place; later ones aim
+     * at it again, so a short line on the way does not pull the caret left for good. Up on the
+     * first line goes to the start of the text, Down on the last to its end.
+     */
+    private void moveVertically(int node, int direction, boolean extend) {
+        StringBuilder text = fieldText[node];
+        layoutLines(node);
+        int line = lineOf(caret[node]);
+        float goal = caretGoalX >= 0.0f
+            ? caretGoalX
+            : offsetInLine(text, lineStarts[line], lineEnds[line], caret[node]);
+
+        int target = line + direction;
+        int to;
+        if (target < 0)               to = 0;
+        else if (target >= lineCount) to = text.length();
+        else                          to = indexInLine(text, lineStarts[target], lineEnds[target], goal);
+
+        moveCaret(node, to, extend);
+        caretGoalX = goal;   // after moveCaret, which clears it
+    }
+
+    /**
+     * Scrolls the text box under the pointer by the mouse wheel — {@code dy} as the wheel
+     * reports it, positive away from the user, which scrolls up. Three lines a notch. Handed in
+     * by whoever owns input, like {@link #key}; a wheel over anything else does nothing here.
+     */
+    public void scroll(float dy) {
+        int node = tree.hovered();
+        if (node == AegisLayout.NONE || kind[node] != TEXT_BOX) return;
+        fieldScroll[node] -= dy * aegis.lineHeight() * 3.0f;   // kept in range when drawn
     }
 
     private static float clamp(float value, float min, float max) {
@@ -1062,7 +1277,8 @@ public final class AegisWidgets {
 
     /**
      * What activating a widget means for its kind: a button fires, a checkbox flips, a text
-     * field is confirmed — by Enter only, since a click on a field is for placing the caret.
+     * field is confirmed — by Enter only, since a click on a field is for placing the caret —
+     * and so is a text box, by Ctrl+Enter, the only Enter it does not take as a line break.
      */
     private void act(int node, boolean byKeyboard) {
         switch (kind[node]) {
@@ -1074,7 +1290,7 @@ public final class AegisWidgets {
                 checked[node] = !checked[node];
                 changed = node;
             }
-            case TEXT_FIELD -> {
+            case TEXT_FIELD, TEXT_BOX -> {
                 if (byKeyboard) {
                     activated = node;
                     activatedByKeyboard = true;
@@ -1115,6 +1331,7 @@ public final class AegisWidgets {
         if (kind[root] == CHECKBOX) drawCheckbox(root);
         if (kind[root] == SLIDER)   drawSlider(root);
         if (kind[root] == TEXT_FIELD) drawTextField(root);
+        if (kind[root] == TEXT_BOX)   drawTextBox(root);
         for (int child = layout.firstChild(root); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
             draw(child);
@@ -1260,7 +1477,8 @@ public final class AegisWidgets {
             fill[0], fill[1], fill[2], fill[3],
             border[0], border[1], border[2], border[3], style.textFieldBorderWidth);
 
-        keepCaretInView(node);
+        scrollField(node, focused && revealCaret);
+        if (focused) revealCaret = false;
 
         float left  = fieldTextLeft(node);
         float textX = Math.round(left - fieldScroll[node]);   // whole pixels keep glyphs crisp
@@ -1300,6 +1518,79 @@ public final class AegisWidgets {
         aegis.popClipRect();
     }
 
+    /**
+     * A text box: drawn as a text field is, line by line. The text is wrapped to the box's
+     * width, scrolled up and down, and clipped to the space inside the padding; the selection
+     * is a band on each line it covers, reaching a little past a line's end when it takes the
+     * line break or the space the line broke at, so selecting an empty line shows.
+     */
+    private void drawTextBox(int node) {
+        float x = layout.x(node), y = layout.y(node);
+        float w = layout.width(node), h = layout.height(node);
+        boolean focused = tree.isFocused(node);
+
+        float[] fill   = tree.isHovered(node) ? style.textFieldHover : style.textFieldFill;
+        float[] border = focused ? style.textFieldBorderFocused : style.textFieldBorder;
+        aegis.addRoundedRect(x, y, w, h, style.textFieldRadius,
+            fill[0], fill[1], fill[2], fill[3],
+            border[0], border[1], border[2], border[3], style.textFieldBorderWidth);
+
+        layoutLines(node);
+        scrollBox(node, focused && revealCaret);
+        if (focused) revealCaret = false;
+
+        float left = fieldTextLeft(node);
+        float top  = y + style.textFieldPaddingY;
+        float lh   = aegis.lineHeight();
+        float firstY = Math.round(top - fieldScroll[node]);   // whole pixels keep glyphs crisp
+        StringBuilder text = fieldText[node];
+        AegisFont font = aegis.font();
+
+        aegis.pushClipRect(left, top, fieldTextWidth(node), fieldTextHeight(node));
+
+        if (text.length() == 0 && label[node] != null) {
+            float[] hint = style.textFieldPlaceholder;
+            aegis.addTextTop(left, top, label[node], hint[0], hint[1], hint[2], hint[3]);
+        }
+
+        int selStart = selectionStart(node), selEnd = selectionEnd(node);
+        boolean showSelection = focused && selStart != selEnd;
+        float[] sel = style.textFieldSelection;
+        float[] ink = style.textFieldText;
+        float   pastEnd = style.textFieldCaretWidth * 3.0f;
+
+        int caretLine = lineOf(caret[node]);
+        for (int line = 0; line < lineCount; line++) {
+            float lineY = firstY + line * lh;
+            if (lineY + lh < top || lineY > top + fieldTextHeight(node)) continue;   // out of view
+            int from = lineStarts[line], to = lineEnds[line];
+
+            if (showSelection && selStart <= to && selEnd > from) {
+                int a = Math.max(selStart, from), b = Math.min(selEnd, to);
+                float sx = Math.round(left + offsetInLine(text, from, to, a));
+                float ex = Math.round(left + offsetInLine(text, from, to, b));
+                if (selEnd > to && line + 1 < lineCount) ex += pastEnd;   // takes the break
+                if (ex > sx) {
+                    aegis.addRoundedRect(sx, lineY, ex - sx, lh, 0.0f, sel[0], sel[1], sel[2], sel[3]);
+                }
+            }
+
+            if (to > from) {
+                aegis.drawList().addText(font, left, font.baselineForTop(lineY), text, from, to,
+                    ink[0], ink[1], ink[2], ink[3]);
+            }
+        }
+
+        boolean caretOn = ((System.nanoTime() - caretShownAt) / CARET_BLINK_NANOS) % 2 == 0;
+        if (focused && caretOn) {
+            float[] c = style.textFieldCaret;
+            int from = lineStarts[caretLine], to = lineEnds[caretLine];
+            aegis.addRoundedRect(Math.round(left + offsetInLine(text, from, to, caret[node])),
+                firstY + caretLine * lh, style.textFieldCaretWidth, lh, 0.0f,
+                c[0], c[1], c[2], c[3]);
+        }
+        aegis.popClipRect();
+    }
 
     /** The focus ring, standing {@code focusRingGap} off a widget's edge. Shared by every kind. */
     private void drawFocusRing(float x, float y, float w, float h, float radius) {

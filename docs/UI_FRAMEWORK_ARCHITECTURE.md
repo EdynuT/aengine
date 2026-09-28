@@ -39,6 +39,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3e-6 | Text field: typing, Backspace/Delete, arrows, Home/End, click to place the caret, scrolling, placeholder, Enter confirms |
 | Step 3e-7 | Selection by Shift+keys and dragging, word jumps, Ctrl+A/C/X/V through the system clipboard; typed and pasted text filtered alike |
 | Step 3e-8 | Undo and redo in the field being edited, in blocks: a word, a run of spaces, of Backspaces or of Deletes, a paste |
+| Step 3e-9 | Text box: several lines wrapped to its width, Enter breaks and Ctrl+Enter confirms, Up/Down keep the column, scrolled by caret or wheel |
 
 ### The plan ahead
 
@@ -79,7 +80,7 @@ against the existing one — is not part of 3d. It earns its complexity once rea
 exist, so it is decided with them.
 
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
-Nine parts, in order — **we stopped after part 8**:
+Nine parts, in order — **all nine done**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
@@ -91,7 +92,7 @@ Nine parts, in order — **we stopped after part 8**:
 | 6 ✅ | Text field: editing | Caret, typing, Backspace/Delete, arrows, Home/End, click to place the caret, long text scrolling inside the field; a placeholder while empty; Enter confirms, Esc leaves | Typing and editing in a field |
 | 7 ✅ | Text field: selection and clipboard | Shift+arrows and mouse-drag selection; Ctrl+arrows by word; Ctrl+A; copy, cut, paste through clipboard access in `Window` (§10); `textField(parent)` with no length limit | Selecting, copying and pasting text from outside |
 | 8 ✅ | Text field: undo | Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z, in blocks: typed characters up to a space, a run of spaces, of Backspaces, of Deletes, a paste or cut; a second's pause ends a block; up to 100 blocks | Undoing a sentence a word at a time |
-| 9 | Text box | `ae.textBox(...)`: several lines, sharing the field's text, caret, selection, clipboard and undo; Up/Down keeping the column; Enter breaks the line and Ctrl+Enter confirms; vertical scrolling | Writing and editing a paragraph |
+| 9 ✅ | Text box | `ae.textBox(parent, lines)`: several lines wrapped at its width, sharing the field's text, caret, selection, clipboard and undo; Up/Down keeping the column; Home/End per line, with Ctrl per text; Enter breaks the line and Ctrl+Enter confirms; scrolled by the caret and by the wheel through `ae.scroll` | Writing and editing a paragraph |
 
 The undo in part 8 belongs to the field being edited and is dropped when focus leaves it.
 Undoing what was done to the scene — a renamed entity, a moved object — is the engine's own
@@ -764,6 +765,14 @@ Ctrl+V.
 inserted — so undoing and redoing allocate nothing. The history is dropped when focus leaves
 the field or code calls `setText`.
 
+**A text box is a text field with lines.** It shares the field's state — text, caret,
+anchor, scroll, now vertical — and its editing; what it adds is where lines are. They are
+not stored: `AegisFont.wrap` breaks the text into ranges when the box is drawn or a key
+needs them, into one pair of arrays reused by every box, and a line is drawn as a range of
+the text, never a substring. The caret follows the text into view only when it moves, so a
+box scrolled with the wheel stays where it was put. Up and Down aim at the place across the
+line where a run of them began, so a short line on the way does not drag the caret left.
+
 **Text from the user is data, never instructions.** Nothing in Aegis executes what a field
 holds. What the field itself guards against is characters that act on whatever displays the
 text: typed and pasted text pass the same filter, which refuses control characters — among
@@ -1329,7 +1338,7 @@ nobody can review.
 | **3b** ✅ | Latin-1, metrics, kerning, measuring, wrapping and a layout cache | L2 |
 | **3c** ✅ | Rows and columns nest and lay themselves out with grow, gap, padding and alignment | L3 |
 | **3d** ✅ | A retained tree survives frames; hit-testing and focus order work | L4 |
-| **3e** | Button, checkbox, slider and text field behave correctly | L4 |
+| **3e** ✅ | Button, checkbox, slider, text field and text box behave correctly | L4 |
 | **3f** | `theme.json` drives the colours, a broken file stops startup with a precise error, and — with the development option on — saving it reloads live | §7 |
 | **3g** | Editor text comes from locale files, following the system language by default | §8 |
 
@@ -1348,7 +1357,7 @@ through the same backend. Panels move one at a time. Order: stats and physics de
 
 **The viewport owns the camera controls.** Today the fly camera reads the keyboard by
 polling and acts wherever the pointer is, so Space and Ctrl typed into an Aegis widget also
-raise and lower it. When the viewport is native, the camera takes input only once the
+raise and lower it, and the wheel over a text box also zooms it. When the viewport is native, the camera takes input only once the
 viewport has been clicked — has focus — and a click anywhere else, or focus in any widget,
 takes the camera's keys away. Until then it is left as it is.
 
