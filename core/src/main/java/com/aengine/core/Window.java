@@ -130,8 +130,25 @@ public class Window {
         glfwSwapBuffers(handle); 
     }
     
-    public boolean shouldClose() { 
-        return glfwWindowShouldClose(handle); 
+    public boolean shouldClose() {
+        return glfwWindowShouldClose(handle);
+    }
+
+    /**
+     * The text on the system clipboard, or an empty string when it holds no text.
+     *
+     * <p>Allocates the {@code String} GLFW hands back, so it belongs on a paste, not in every
+     * frame. Whatever is returned came from outside the engine: it is untrusted text, to be
+     * filtered by whoever takes it in.</p>
+     */
+    public String clipboard() {
+        String text = glfwGetClipboardString(handle);
+        return text != null ? text : "";
+    }
+
+    /** Puts text on the system clipboard — what copy and cut do. */
+    public void setClipboard(CharSequence text) {
+        glfwSetClipboardString(handle, text);
     }
 
     public void cleanup() {

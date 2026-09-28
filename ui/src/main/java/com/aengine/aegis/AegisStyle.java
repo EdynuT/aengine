@@ -90,6 +90,8 @@ public final class AegisStyle {
     /** The hint shown while the field is empty. */
     public final float[] textFieldPlaceholder   = { 0.50f, 0.54f, 0.62f, 1.0f };
     public final float[] textFieldCaret         = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** Behind selected text; translucent, so the text reads through it. */
+    public final float[] textFieldSelection     = { 0.36f, 0.62f, 0.94f, 0.40f };
     /** Width a text field asks for; a stretching parent may give it more. */
     public float         textFieldWidth         = 200.0f;
     public float         textFieldRadius        = 4.0f;

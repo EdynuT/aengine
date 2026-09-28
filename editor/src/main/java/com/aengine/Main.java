@@ -104,6 +104,7 @@ public class Main extends Engine {
     private int layoutInspector;
     private int layoutFieldA;
     private int nameField;          // step 3e-6: a text field, from the one ae.textField() method
+    private int notesField;         // step 3e-7: a text field with no length limit
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
 
@@ -868,14 +869,14 @@ public class Main extends Engine {
         aegis.addTextTop(textX, textY + line * 2, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         // Step 3d-2: the tree's answer, which only ever names an interactive node — the toolbar's
-        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14), the name field
-        // (17) and the two checkboxes (18, 19) — or -1. Over a pane, or over ImGui, it stays -1
-        // while the hit-test line above still names what is there.
+        // four boxes (2 to 5), the slider (10), the three buttons (12 to 14), the name and notes
+        // fields (17, 18) and the two checkboxes (19, 20) — or -1. Over a pane, or over ImGui,
+        // it stays -1 while the hit-test line above still names what is there.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - hovered: ").append(tree.hovered());
         aegis.addTextTop(textX, textY + line * 3, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
-        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 10 12 13 14 16 17 18 19 and wraps,
+        // Step 3d-3: the focused handle — Tab walks 2 3 4 5 8 9 10 12 13 14 16 17 18 19 20 and wraps,
         // Shift+Tab walks it backwards, and a press on a pane clears it to -1.
         UI_TEXT.setLength(0);
         UI_TEXT.append("tree - focused: ").append(tree.focused());
@@ -922,18 +923,31 @@ public class Main extends Engine {
                .append("   changes ").append(sliderChanges);
         aegis.addTextTop(textX, textY + line * 9, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
-        // Step 3e-6, the visible check: the field's text as text() reports it, with a bar where
-        // caret() says the caret is; how many frames it was edited on; and what Enter last
-        // confirmed.
+        // Step 3e-6 and 3e-7, the visible check: the field's text as text() reports it. With
+        // nothing selected, a bar marks where caret() says the caret is; with a selection,
+        // brackets mark selectionStart() and selectionEnd().
         CharSequence name = ae.text(nameField);
         int nameCaret = ae.caret(nameField);
+        int selStart  = ae.selectionStart(nameField);
+        int selEnd    = ae.selectionEnd(nameField);
         UI_TEXT.setLength(0);
-        UI_TEXT.append("text field - \"").append(name, 0, nameCaret).append('|')
-               .append(name, nameCaret, name.length()).append("\"   caret ").append(nameCaret)
-               .append("   edits ").append(nameEdits)
+        UI_TEXT.append("text field - \"");
+        if (selStart == selEnd) {
+            UI_TEXT.append(name, 0, nameCaret).append('|').append(name, nameCaret, name.length());
+        } else {
+            UI_TEXT.append(name, 0, selStart).append('[').append(name, selStart, selEnd)
+                   .append(']').append(name, selEnd, name.length());
+        }
+        UI_TEXT.append("\"   caret ").append(nameCaret)
+               .append("   selection ").append(selStart).append('-').append(selEnd);
+        aegis.addTextTop(textX, textY + line * 10, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
+        // How many frames it was edited on, and what Enter last confirmed.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("text field - edits ").append(nameEdits)
                .append("   confirmed ").append(nameConfirms)
                .append(": \"").append(nameConfirmed).append('"');
-        aegis.addTextTop(textX, textY + line * 10, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+        aegis.addTextTop(textX, textY + line * 11, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         aegis.end();   // closes the draw list and presents it
     }
@@ -1067,6 +1081,16 @@ public class Main extends Engine {
         // which fills it from code without counting as an edit.
         nameField = ae.textField(layoutInspector, 64);
         ae.setPlaceholder(nameField, "Typing text here");
+
+        // Step 3e-7: a second field, made with the form that takes no limit — its buffer grows
+        // as needed. Start it with a sentence long enough to scroll, to have something to
+        // select, copy and paste between the two fields.
+        notesField = ae.textField(layoutInspector);
+        ae.setText(notesField, "No limit here: select with Shift+arrows or by dragging, then Ctrl+C, Ctrl+X, Ctrl+V");
+
+        // Step 3e-7: copy, cut and paste use the system clipboard, through the window. Handed in
+        // once, like the pointer and the keys every frame: the interface uses only what it is given.
+        ae.setClipboard(getWindow());
 
         // Step 3e-4: two checkboxes, the way an inspector lists settings. The pane's STRETCH on
         // X makes each as wide as the pane, so a click anywhere along its row ticks it — the

@@ -1,9 +1,9 @@
 package com.aengine.aegis;
 
 import com.aengine.core.Keys;
+import com.aengine.core.Window;
 
 import java.util.Arrays;
-
 /**
  * The widgets — layer L4's controls, built on the layout and the tree.
  *
@@ -88,13 +88,63 @@ public final class AegisWidgets {
     private final StringBuilder valueText = new StringBuilder(16);
 
     // Text fields: the text, in a builder sized to the field's limit when the field is made, so
-    // typing never grows it; the limit; where the caret is, as a character index (0 is before
-    // the first character, length is after the last); and how far the text is scrolled left, in
-    // pixels, when it is wider than the field.
+    // typing never grows it (a field with no limit starts smaller and grows); the limit; where the caret is, as a character index (0 is before
+    // the first character, length is after the last); the anchor, the other end of the
+    // selection — the selection is the text between anchor and caret, and there is none when
+    // they are equal; and how far the text is scrolled left, in pixels, when it is wider than
+    // the field.
     private final StringBuilder[] fieldText;
     private final int[]           fieldMaxLength;
     private final int[]           caret;
+    private final int[]           anchor;
     private final float[]         fieldScroll;
+
+    /** A field with no limit starts with room for this many characters, and grows past it. */
+    private static final int UNLIMITED_START_CAPACITY = 64;
+
+    /** Where copy gathers the selection and paste filters the clipboard, reused. Grows once to the largest seen. */
+    private final StringBuilder clipboardScratch = new StringBuilder(64);
+
+    /** The window whose clipboard copy, cut and paste use. {@code null} until set: they then do nothing. */
+    private Window clipboard;
+
+    /** The node pressed at the last update(), to tell a fresh press from a held one. */
+    private int lastPressed = AegisLayout.NONE;
+
+    // Undo history for the text field being edited — one history, not one per field: it
+    // belongs to the field with focus and is dropped when focus leaves, after which undoing is
+    // the engine's business, not the field's. Each block is one replacement: at hPos, the text
+    // hRemoved long was replaced by text hInserted long. Both are kept in hChars, removed then
+    // inserted, from hStart; blocks lie one after another there in order. Undo puts the removed
+    // text back; redo puts the inserted text back. Everything is made here, once.
+    private static final int  HISTORY_BLOCKS      = 100;
+    private static final int  HISTORY_CHARS       = 16 * 1024;
+    /** A block still being typed into is closed after this long without an edit. */
+    private static final long HISTORY_PAUSE_NANOS = 1_000_000_000L;
+
+    // What a block is, so the next edit knows whether it continues it.
+    private static final byte BLOCK_TYPING    = 1;   // characters typed one after another
+    private static final byte BLOCK_BACKSPACE = 2;   // Backspaces one after another
+    private static final byte BLOCK_DELETE    = 3;   // Deletes one after another
+    private static final byte BLOCK_SINGLE    = 4;   // a paste, a cut, a selection deleted: never continued
+    private static final byte BLOCK_SPACE     = 5;   // spaces typed one after another
+
+    private final byte[] hKind         = new byte[HISTORY_BLOCKS];
+    private final int[]  hPos          = new int[HISTORY_BLOCKS];
+    private final int[]  hStart        = new int[HISTORY_BLOCKS];
+    private final int[]  hRemoved      = new int[HISTORY_BLOCKS];
+    private final int[]  hInserted     = new int[HISTORY_BLOCKS];
+    private final int[]  hCaretBefore  = new int[HISTORY_BLOCKS];
+    private final int[]  hAnchorBefore = new int[HISTORY_BLOCKS];
+    private final int[]  hCaretAfter   = new int[HISTORY_BLOCKS];
+    private final int[]  hAnchorAfter  = new int[HISTORY_BLOCKS];
+    private final char[] hChars        = new char[HISTORY_CHARS];
+
+    private int     hField   = AegisLayout.NONE;   // whose history this is
+    private int     hCount;                        // blocks recorded, undone ones included
+    private int     hApplied;                      // blocks in effect; those past it can be redone
+    private boolean hOpen;                         // whether the last block may still grow
+    private long    hLastEdit;                     // when it last grew, for the pause
 
     /** The text field edited by this frame's key() and character() calls, reported by update(). */
     private int  edited = AegisLayout.NONE;
@@ -131,11 +181,19 @@ public final class AegisWidgets {
         this.fieldText      = new StringBuilder[capacity];
         this.fieldMaxLength = new int[capacity];
         this.caret          = new int[capacity];
+        this.anchor         = new int[capacity];
         this.fieldScroll    = new float[capacity];
     }
 
     /** The colours and sizes every widget draws with. See {@link AegisStyle}. */
     public AegisStyle style() { return style; }
+
+    /**
+     * The window whose system clipboard text fields copy to and paste from. Until it is set,
+     * Ctrl+C, Ctrl+X and Ctrl+V do nothing. Handed in rather than looked up, like the pointer
+     * and the keys: whoever owns the window decides the interface may use its clipboard.
+     */
+    public void setClipboard(Window window) { this.clipboard = window; }
 
     // -----------------------------------------------------------------------------------
     // Building
@@ -241,6 +299,21 @@ public final class AegisWidgets {
     public void setSliderStep(int node, float step) { sliderStep[node] = step; }
 
     /**
+     * A single-line text field with no limit on its length, added to {@code parent}. Starts
+     * empty.
+     *
+     * <p>Its buffer starts with room for {@value #UNLIMITED_START_CAPACITY} characters and
+     * grows when the text outgrows it — an allocation now and then while typing past that, never
+     * one per frame. Use {@link #textField(int, int)} where a limit makes sense, and editing
+     * then allocates nothing at all.</p>
+     *
+     * @return its handle
+     */
+    public int textField(int parent) {
+        return textField(parent, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
+    }
+
+    /**
      * A single-line text field holding at most {@code maxLength} characters, added to
      * {@code parent}. Starts empty.
      *
@@ -255,6 +328,11 @@ public final class AegisWidgets {
      * @return its handle
      */
     public int textField(int parent, int maxLength) {
+        return textField(parent, maxLength, maxLength);
+    }
+
+    /** What both public forms do: a limit, and the room the buffer starts with. */
+    private int textField(int parent, int maxLength, int startCapacity) {
         int node = layout.box(parent);
         layout.setSize(node, style.textFieldWidth,
             aegis.lineHeight() + style.textFieldPaddingY * 2.0f);
@@ -263,9 +341,10 @@ public final class AegisWidgets {
         tree.setFocusable(node, true);
 
         kind[node]           = TEXT_FIELD;
-        fieldText[node]      = new StringBuilder(maxLength);
+        fieldText[node]      = new StringBuilder(startCapacity);
         fieldMaxLength[node] = maxLength;
         caret[node]          = 0;
+        anchor[node]         = 0;
         fieldScroll[node]    = 0.0f;
         return node;
     }
@@ -286,7 +365,9 @@ public final class AegisWidgets {
         buffer.setLength(0);
         buffer.append(text, 0, Math.min(text.length(), fieldMaxLength[node]));
         caret[node]       = buffer.length();
+        anchor[node]      = caret[node];
         fieldScroll[node] = 0.0f;
+        if (hField == node) resetHistory();   // what code put there is not the user's to undo
     }
 
     /** The hint a text field shows, dimmed, while it is empty. {@code null} for none. */
@@ -294,6 +375,12 @@ public final class AegisWidgets {
 
     /** Where a text field's caret is: 0 before the first character, the length after the last. */
     public int caret(int node) { return caret[node]; }
+
+    /** Where a text field's selection begins — equal to {@link #selectionEnd} when nothing is selected. */
+    public int selectionStart(int node) { return Math.min(anchor[node], caret[node]); }
+
+    /** Where a text field's selection ends, exclusive. */
+    public int selectionEnd(int node) { return Math.max(anchor[node], caret[node]); }
 
     /** Whether a node was made by this class — a button, a checkbox, a slider, a text field. */
     public boolean isWidget(int node) { return kind[node] != NOT_A_WIDGET; }
@@ -310,6 +397,8 @@ public final class AegisWidgets {
         activated = AegisLayout.NONE;
         changed   = AegisLayout.NONE;
         edited    = AegisLayout.NONE;
+        lastPressed = AegisLayout.NONE;
+        resetHistory();
     }
 
     // -----------------------------------------------------------------------------------
@@ -336,7 +425,7 @@ public final class AegisWidgets {
     public void key(int key, int mods, boolean repeat) {
         int focused = tree.focused();
         if (focused != AegisLayout.NONE && kind[focused] == TEXT_FIELD
-                && editKey(focused, key, repeat)) {
+                && editKey(focused, key, mods, repeat)) {
             return;
         }
 
@@ -388,8 +477,15 @@ public final class AegisWidgets {
      * does not use — Tab, Enter, anything else — goes on to be handled like any other.
      *
      * <ul>
-     *   <li>Backspace and Delete remove the character before and after the caret.</li>
-     *   <li>Left and Right move the caret one character; Home and End to the ends.</li>
+     *   <li>Backspace and Delete remove the selection, or with none the character before and
+     *       after the caret.</li>
+     *   <li>Left and Right move the caret one character, Ctrl+Left and Ctrl+Right one word;
+     *       Home and End to the ends. With Shift they extend the selection instead. Without
+     *       Shift, Left and Right on a selection drop it and leave the caret at that side.</li>
+     *   <li>Ctrl+A selects everything; Ctrl+C copies the selection, Ctrl+X cuts it, Ctrl+V
+     *       pastes over it.</li>
+     *   <li>Ctrl+Z undoes the last block of editing; Ctrl+Y and Ctrl+Shift+Z redo it. See
+     *       {@link #beginBlock} for what a block is.</li>
      *   <li>Space is used and does nothing here: it types a space through {@link #character},
      *       and must not also act on the field the way it acts on a button.</li>
      *   <li>Esc takes focus away from the field.</li>
@@ -397,29 +493,66 @@ public final class AegisWidgets {
      *
      * All but Esc repeat while held.
      */
-    private boolean editKey(int node, int key, boolean repeat) {
+    private boolean editKey(int node, int key, int mods, boolean repeat) {
         StringBuilder text = fieldText[node];
         int at = caret[node];
+        boolean shift     = (mods & Keys.MOD_SHIFT) != 0;
+        boolean ctrl      = (mods & Keys.MOD_CONTROL) != 0;
+        boolean selection = anchor[node] != at;
 
         if (key == Keys.BACKSPACE) {
-            if (at > 0) {
+            if (selection) {
+                deleteSelection(node);
+            } else if (at > 0) {
+                // Backspaces one after another grow one block backwards: its removed text gains
+                // each character at the front, and its position steps back with the caret.
+                if (!continues(node, BLOCK_BACKSPACE)) beginBlock(node, BLOCK_BACKSPACE, at, at);
+                prependRemoved(text.charAt(at - 1));
                 text.deleteCharAt(at - 1);
-                caret[node] = at - 1;
-                edited = node;
+                moveCaret(node, at - 1, false);
+                finishEdit(node);
             }
         } else if (key == Keys.DELETE) {
-            if (at < text.length()) {
+            if (selection) {
+                deleteSelection(node);
+            } else if (at < text.length()) {
+                if (!continues(node, BLOCK_DELETE)) beginBlock(node, BLOCK_DELETE, at, at);
+                appendChar(text.charAt(at), true);
                 text.deleteCharAt(at);
-                edited = node;
+                finishEdit(node);
             }
+        } else if (ctrl && key == Keys.Z) {
+            if (shift) redo(node); else undo(node);
+        } else if (ctrl && key == Keys.Y) {
+            redo(node);
         } else if (key == Keys.LEFT) {
-            caret[node] = Math.max(0, at - 1);
+            int to = ctrl                  ? wordLeft(text, at)
+                   : selection && !shift   ? selectionStart(node)
+                   :                         Math.max(0, at - 1);
+            hOpen = false;   // moving the caret ends the block being typed
+            moveCaret(node, to, shift);
         } else if (key == Keys.RIGHT) {
-            caret[node] = Math.min(text.length(), at + 1);
+            int to = ctrl                  ? wordRight(text, at)
+                   : selection && !shift   ? selectionEnd(node)
+                   :                         Math.min(text.length(), at + 1);
+            hOpen = false;
+            moveCaret(node, to, shift);
         } else if (key == Keys.HOME) {
-            caret[node] = 0;
+            hOpen = false;
+            moveCaret(node, 0, shift);
         } else if (key == Keys.END) {
-            caret[node] = text.length();
+            hOpen = false;
+            moveCaret(node, text.length(), shift);
+        } else if (ctrl && key == Keys.A) {
+            hOpen = false;
+            anchor[node] = 0;
+            caret[node]  = text.length();
+        } else if (ctrl && key == Keys.C) {
+            copySelection(node);
+        } else if (ctrl && key == Keys.X) {
+            if (copySelection(node)) deleteSelection(node);
+        } else if (ctrl && key == Keys.V) {
+            paste(node);
         } else if (key == Keys.SPACE) {
             return true;
         } else if (key == Keys.ESCAPE) {
@@ -434,20 +567,320 @@ public final class AegisWidgets {
     }
 
     /**
-     * Types one character into a text field at its caret. Control characters are not text, and
-     * characters beyond the 16-bit range would need two {@code char}s and a caret that steps
-     * over pairs — nothing the atlas can draw today — so both are refused, as is anything past
-     * the field's limit.
+     * Types one character into a text field at its caret, replacing the selection if there is
+     * one. Refused if it is not {@linkplain #isAllowed allowed}, or the field is full.
      */
     private void insert(int node, int codepoint) {
+        if (!isAllowed(codepoint)) return;
         StringBuilder text = fieldText[node];
-        if (codepoint < 0x20 || (codepoint >= 0x7F && codepoint < 0xA0) || codepoint > 0xFFFF) return;
-        if (text.length() >= fieldMaxLength[node]) return;
+        int start = selectionStart(node), end = selectionEnd(node);
+        if (start == end && text.length() >= fieldMaxLength[node]) return;
 
-        text.insert(caret[node], (char) codepoint);
-        caret[node]++;
-        edited = node;
+        // Typing continues the block being typed; over a selection it starts a new one, which
+        // holds the selection as its removed text, so one undo brings the selection back. A
+        // space is its own kind of block, so a run of them groups together but typing a word
+        // before or after one does not: the kind changing is what ends the block.
+        byte blockKind = codepoint == ' ' ? BLOCK_SPACE : BLOCK_TYPING;
+        if (start != end || !continues(node, blockKind)) beginBlock(node, blockKind, start, end);
+        text.delete(start, end);
+        text.insert(start, (char) codepoint);
+        appendChar((char) codepoint, false);
+        moveCaret(node, start + 1, false);
+        finishEdit(node);
+    }
+
+    /**
+     * Whether a character may go into a text field — typed or pasted, the same test.
+     *
+     * <ul>
+     *   <li>Control characters are refused: they are not text, and among them are ESC
+     *       ({@code 0x1B}) and CSI ({@code 0x9B}), which begin the escape sequences a terminal
+     *       obeys. Text that reaches the log must not be able to clear the screen, hide lines
+     *       or retitle the window.</li>
+     *   <li>The bidirectional controls are refused — the embeddings and overrides
+     *       {@code U+202A}–{@code U+202E}, the isolates {@code U+2066}–{@code U+2069} and the
+     *       marks {@code U+200E}, {@code U+200F}. They are invisible and reorder what is shown,
+     *       which is how {@code file\u202Etxt.exe} is made to read as {@code fileexe.txt}.</li>
+     *   <li>Anything beyond 16 bits is refused, and so is half of a surrogate pair: such a
+     *       character takes two {@code char}s and a caret that steps over pairs, and the atlas
+     *       can draw none today.</li>
+     * </ul>
+     *
+     * This keeps the field's own text clean; it does not make text safe to use. What the text
+     * is used for — a file name, a command's argument — is checked where it is used.
+     */
+    private static boolean isAllowed(int codepoint) {
+        if (codepoint < 0x20 || (codepoint >= 0x7F && codepoint < 0xA0)) return false;
+        if (codepoint == 0x200E || codepoint == 0x200F)                  return false;
+        if (codepoint >= 0x202A && codepoint <= 0x202E)                  return false;
+        if (codepoint >= 0x2066 && codepoint <= 0x2069)                  return false;
+        if (codepoint >= 0xD800 && codepoint <= 0xDFFF)                  return false;
+        return codepoint <= 0xFFFF;
+    }
+
+    /**
+     * Moves a text field's caret. With {@code extend}, the anchor stays where it is and the
+     * selection grows or shrinks to the new caret; without, the anchor follows and nothing is
+     * selected. Either way the caret shows at once rather than mid-blink.
+     */
+    private void moveCaret(int node, int to, boolean extend) {
+        caret[node] = to;
+        if (!extend) anchor[node] = to;
         caretShownAt = System.nanoTime();
+    }
+
+    /** Removes a text field's selected text, leaving the caret where it began. A block of its own. */
+    private void deleteSelection(int node) {
+        int start = selectionStart(node), end = selectionEnd(node);
+        beginBlock(node, BLOCK_SINGLE, start, end);
+        fieldText[node].delete(start, end);
+        moveCaret(node, start, false);
+        finishEdit(node);
+    }
+
+    /**
+     * Puts a text field's selected text on the clipboard. Returns whether there was anything
+     * to copy — cut deletes only then. Gathered in a reused builder rather than with
+     * {@code substring}, so copying allocates nothing.
+     */
+    private boolean copySelection(int node) {
+        int start = selectionStart(node), end = selectionEnd(node);
+        if (start == end || clipboard == null) return false;
+        clipboardScratch.setLength(0);
+        clipboardScratch.append(fieldText[node], start, end);
+        clipboard.setClipboard(clipboardScratch);
+        return true;
+    }
+
+    /**
+     * Inserts the clipboard's text at the caret, over the selection if there is one.
+     *
+     * <p>The clipboard is outside text and is filtered the way typing is, character by
+     * character: a field is one line, so line breaks and tabs become spaces — a Windows
+     * {@code \r\n} one space, not two — and whatever {@link #isAllowed} refuses is dropped.
+     * What is left is cut to the room the field has.</p>
+     */
+    private void paste(int node) {
+        if (clipboard == null) return;
+        String pasted = clipboard.clipboard();   // the one allocation: GLFW hands back a String
+
+        clipboardScratch.setLength(0);
+        for (int i = 0; i < pasted.length(); i++) {
+            char c = pasted.charAt(i);
+            if (c == '\r' && i + 1 < pasted.length() && pasted.charAt(i + 1) == '\n') continue;
+            if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+            if (isAllowed(c)) clipboardScratch.append(c);
+        }
+        if (clipboardScratch.length() == 0) return;
+
+        StringBuilder text = fieldText[node];
+        int start = selectionStart(node), end = selectionEnd(node);
+        int room  = fieldMaxLength[node] - (text.length() - (end - start));
+        int count = Math.min(room, clipboardScratch.length());
+        if (count <= 0) return;
+
+        // One block for the whole paste, selection replaced included: one undo takes it all back.
+        beginBlock(node, BLOCK_SINGLE, start, end);
+        text.delete(start, end);
+        text.insert(start, clipboardScratch, 0, count);
+        for (int i = 0; i < count; i++) appendChar(clipboardScratch.charAt(i), false);
+        moveCaret(node, start + count, false);
+        finishEdit(node);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Undo history
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * Whether the next edit of this kind continues the last block rather than starting one:
+     * the block is still open, of the same kind, in this field, and not undone.
+     */
+    private boolean continues(int node, byte blockKind) {
+        return hOpen && hField == node && hApplied == hCount && hApplied > 0
+            && hKind[hApplied - 1] == blockKind;
+    }
+
+    /**
+     * Starts a block of editing in a text field's history, recording the text between
+     * {@code start} and {@code end} that the edit is about to remove — nothing, for typing
+     * with no selection. Called before the text changes.
+     *
+     * <p>A block is what one Ctrl+Z undoes. Typing one character after another is one block,
+     * and a run of spaces is a block of its own — one ends the other, as does any other kind
+     * of edit, moving the caret, or a pause of a second; Backspaces one after another are one
+     * block, and so are Deletes. A paste, a cut and a selection deleted are a block each, never
+     * continued.</p>
+     *
+     * <p>Starting a block drops whatever could have been redone, as in any editor. At
+     * {@value #HISTORY_BLOCKS} blocks, or when the characters no longer fit, the oldest are
+     * dropped to make room. An edit too large for the whole buffer is not recorded, and the
+     * history is emptied rather than left inconsistent: that edit cannot be undone.</p>
+     */
+    private void beginBlock(int node, byte blockKind, int start, int end) {
+        if (hField != node) {
+            resetHistory();
+            hField = node;
+        }
+        hCount = hApplied;             // a new edit drops what could have been redone
+        hOpen  = false;
+
+        int removed = end - start;
+        if (!makeRoom(removed)) {
+            resetHistory();
+            return;
+        }
+        if (hCount == HISTORY_BLOCKS) dropOldestBlock();
+
+        int b = hCount;
+        hKind[b]         = blockKind;
+        hPos[b]          = start;
+        hStart[b]        = historyEnd();
+        hRemoved[b]      = removed;
+        hInserted[b]     = 0;
+        hCaretBefore[b]  = caret[node];
+        hAnchorBefore[b] = anchor[node];
+        fieldText[node].getChars(start, end, hChars, hStart[b]);
+
+        hCount   = b + 1;
+        hApplied = hCount;
+        hOpen    = blockKind != BLOCK_SINGLE;
+    }
+
+    /**
+     * Adds a character to the last block — to its inserted text, or with {@code removed} to
+     * its removed text, for a Delete. Either is the last run of characters in the buffer (a
+     * block that grows has nothing inserted after what it removes), so this is an append.
+     */
+    private void appendChar(char c, boolean removed) {
+        if (hApplied == 0 || hField == AegisLayout.NONE) return;   // not being recorded
+        if (!makeRoom(1)) {
+            resetHistory();
+            return;
+        }
+        int b = hApplied - 1;
+        hChars[historyEnd()] = c;
+        if (removed) hRemoved[b]++; else hInserted[b]++;
+    }
+
+    /**
+     * Adds a character to the front of the last block's removed text, for a Backspace: what
+     * it removes lies before what it removed already. The block's characters shift up by one,
+     * and its position steps back.
+     */
+    private void prependRemoved(char c) {
+        if (hApplied == 0 || hField == AegisLayout.NONE) return;
+        if (!makeRoom(1)) {
+            resetHistory();
+            return;
+        }
+        int b = hApplied - 1;
+        System.arraycopy(hChars, hStart[b], hChars, hStart[b] + 1, hRemoved[b]);
+        hChars[hStart[b]] = c;
+        hRemoved[b]++;
+        hPos[b]--;
+    }
+
+    /** After an edit: records where it left caret and selection — what redo restores — and reports it. */
+    private void finishEdit(int node) {
+        if (hField == node && hApplied > 0) {
+            hCaretAfter[hApplied - 1]  = caret[node];
+            hAnchorAfter[hApplied - 1] = anchor[node];
+        }
+        hLastEdit = System.nanoTime();
+        edited = node;
+    }
+
+    /** Ctrl+Z: puts back what the last block removed, and the caret and selection from before it. */
+    private void undo(int node) {
+        hOpen = false;
+        if (hField != node || hApplied == 0) return;
+        int b = --hApplied;
+        StringBuilder text = fieldText[node];
+        text.delete(hPos[b], hPos[b] + hInserted[b]);
+        text.insert(hPos[b], hChars, hStart[b], hRemoved[b]);
+        caret[node]  = hCaretBefore[b];
+        anchor[node] = hAnchorBefore[b];
+        caretShownAt = System.nanoTime();
+        edited = node;
+    }
+
+    /** Ctrl+Y or Ctrl+Shift+Z: does the last undone block again. */
+    private void redo(int node) {
+        hOpen = false;
+        if (hField != node || hApplied == hCount) return;
+        int b = hApplied++;
+        StringBuilder text = fieldText[node];
+        text.delete(hPos[b], hPos[b] + hRemoved[b]);
+        text.insert(hPos[b], hChars, hStart[b] + hRemoved[b], hInserted[b]);
+        caret[node]  = hCaretAfter[b];
+        anchor[node] = hAnchorAfter[b];
+        caretShownAt = System.nanoTime();
+        edited = node;
+    }
+
+    /** Where the next character goes in the buffer: just past the last recorded block's. */
+    private int historyEnd() {
+        if (hCount == 0) return 0;
+        int last = hCount - 1;
+        return hStart[last] + hRemoved[last] + hInserted[last];
+    }
+
+    /**
+     * Drops the oldest blocks until {@code chars} more fit, keeping at least the last block
+     * (the one that may be growing). Returns whether they fit.
+     */
+    private boolean makeRoom(int chars) {
+        while (historyEnd() + chars > HISTORY_CHARS && hCount > 1) dropOldestBlock();
+        return historyEnd() + chars <= HISTORY_CHARS;
+    }
+
+    /** Forgets the oldest block, sliding the others and their characters down. Allocates nothing. */
+    private void dropOldestBlock() {
+        int shift = hRemoved[0] + hInserted[0];
+        int end   = historyEnd();
+        System.arraycopy(hChars, shift, hChars, 0, end - shift);
+
+        int n = hCount - 1;
+        System.arraycopy(hKind,         1, hKind,         0, n);
+        System.arraycopy(hPos,          1, hPos,          0, n);
+        System.arraycopy(hStart,        1, hStart,        0, n);
+        System.arraycopy(hRemoved,      1, hRemoved,      0, n);
+        System.arraycopy(hInserted,     1, hInserted,     0, n);
+        System.arraycopy(hCaretBefore,  1, hCaretBefore,  0, n);
+        System.arraycopy(hAnchorBefore, 1, hAnchorBefore, 0, n);
+        System.arraycopy(hCaretAfter,   1, hCaretAfter,   0, n);
+        System.arraycopy(hAnchorAfter,  1, hAnchorAfter,  0, n);
+        for (int i = 0; i < n; i++) hStart[i] -= shift;
+
+        hCount = n;
+        hApplied = Math.max(0, hApplied - 1);
+    }
+
+    /** Empties the history: focus left the field, code replaced its text, or it could not keep up. */
+    private void resetHistory() {
+        hField   = AegisLayout.NONE;
+        hCount   = 0;
+        hApplied = 0;
+        hOpen    = false;
+    }
+
+    /**
+     * Where Ctrl+Left goes: back over any spaces, then to the start of the word before them.
+     * A word is a run of anything but whitespace.
+     */
+    private static int wordLeft(CharSequence text, int at) {
+        while (at > 0 && Character.isWhitespace(text.charAt(at - 1)))  at--;
+        while (at > 0 && !Character.isWhitespace(text.charAt(at - 1))) at--;
+        return at;
+    }
+
+    /** Where Ctrl+Right goes: past the rest of this word, then past the spaces after it. */
+    private static int wordRight(CharSequence text, int at) {
+        int end = text.length();
+        while (at < end && !Character.isWhitespace(text.charAt(at))) at++;
+        while (at < end && Character.isWhitespace(text.charAt(at)))  at++;
+        return at;
     }
 
     /**
@@ -487,20 +920,29 @@ public final class AegisWidgets {
         }
 
         // A text field being pressed puts its caret between the two characters nearest the
-        // pointer — every frame of the press, which is what dragging will select from in part 7.
+        // pointer. The first frame of the press drops the anchor there too; every later frame
+        // moves only the caret, so dragging selects from where the press began. Dragging past
+        // the field's edge keeps selecting, and the text scrolls to follow the caret.
         if (pressed != AegisLayout.NONE && kind[pressed] == TEXT_FIELD) {
+            boolean freshPress = pressed != lastPressed;
             int at = caretAt(pressed, tree.pointerX());
-            if (at != caret[pressed]) {
-                caret[pressed] = at;
-                caretShownAt = System.nanoTime();
+            if (freshPress || at != caret[pressed]) {
+                hOpen = false;   // the caret moved: the block being typed is over
+                moveCaret(pressed, at, !freshPress);
             }
         }
+        lastPressed = pressed;
 
         // A field that has just gained focus shows its caret at once rather than mid-blink.
         if (focused != lastFocused) {
             caretShownAt = System.nanoTime();
             lastFocused  = focused;
         }
+
+        // The undo history belongs to the field with focus: once focus is elsewhere it is gone.
+        // A second without an edit ends the block being typed, so the next word is its own undo.
+        if (hField != AegisLayout.NONE && hField != focused) resetHistory();
+        if (hOpen && System.nanoTime() - hLastEdit > HISTORY_PAUSE_NANOS) hOpen = false;
 
         // A focused slider takes the arrows, + and -, Home and End.
         if (focused != AegisLayout.NONE && kind[focused] == SLIDER) {
@@ -826,6 +1268,18 @@ public final class AegisWidgets {
         StringBuilder text = fieldText[node];
 
         aegis.pushClipRect(left, y, fieldTextWidth(node), h);
+
+        // The selection, behind the text, only while the field has focus: an unfocused field
+        // keeps its selection for when focus returns, but does not show it.
+        int selStart = selectionStart(node), selEnd = selectionEnd(node);
+        if (focused && selStart != selEnd) {
+            float from = Math.round(textX + caretOffset(node, selStart));
+            float to   = Math.round(textX + caretOffset(node, selEnd));
+            float[] sel = style.textFieldSelection;
+            aegis.addRoundedRect(from, textY, to - from, aegis.lineHeight(), 0.0f,
+                sel[0], sel[1], sel[2], sel[3]);
+        }
+
         if (text.length() == 0 && label[node] != null) {
             float[] hint = style.textFieldPlaceholder;
             aegis.addTextTop(left, textY, label[node], hint[0], hint[1], hint[2], hint[3]);

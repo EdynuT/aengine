@@ -37,6 +37,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3e-4 | Checkbox: toggled by click, Enter or Space |
 | Step 3e-5 | Slider: dragged with capture; arrows, Shift+arrows, Home/End and `+`/`-` when focused; value shown as a whole number |
 | Step 3e-6 | Text field: typing, Backspace/Delete, arrows, Home/End, click to place the caret, scrolling, placeholder, Enter confirms |
+| Step 3e-7 | Selection by Shift+keys and dragging, word jumps, Ctrl+A/C/X/V through the system clipboard; typed and pasted text filtered alike |
+| Step 3e-8 | Undo and redo in the field being edited, in blocks: a word, a run of spaces, of Backspaces or of Deletes, a paste |
 
 ### The plan ahead
 
@@ -77,7 +79,7 @@ against the existing one — is not part of 3d. It earns its complexity once rea
 exist, so it is decided with them.
 
 **Step 3e — first widgets.** Button, checkbox, slider, text field, with real behaviour.
-Seven parts, in order — **we stopped after part 6**:
+Nine parts, in order — **we stopped after part 8**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
@@ -87,9 +89,19 @@ Seven parts, in order — **we stopped after part 6**:
 | 4 ✅ | Checkbox | Toggles on click, Enter or Space | Boxes that tick and untick |
 | 5 ✅ | Slider | Drag with capture; arrows (Shift for ten steps), Home/End, `+`/`-` when focused; the value is a float, shown as a whole number | A value following the drag |
 | 6 ✅ | Text field: editing | Caret, typing, Backspace/Delete, arrows, Home/End, click to place the caret, long text scrolling inside the field; a placeholder while empty; Enter confirms, Esc leaves | Typing and editing in a field |
-| 7 | Text field: selection and clipboard | Shift+arrows and mouse-drag selection; copy, cut, paste — needs clipboard access in `Window` (§10) | Selecting, copying and pasting text from outside |
+| 7 ✅ | Text field: selection and clipboard | Shift+arrows and mouse-drag selection; Ctrl+arrows by word; Ctrl+A; copy, cut, paste through clipboard access in `Window` (§10); `textField(parent)` with no length limit | Selecting, copying and pasting text from outside |
+| 8 ✅ | Text field: undo | Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z, in blocks: typed characters up to a space, a run of spaces, of Backspaces, of Deletes, a paste or cut; a second's pause ends a block; up to 100 blocks | Undoing a sentence a word at a time |
+| 9 | Text box | `ae.textBox(...)`: several lines, sharing the field's text, caret, selection, clipboard and undo; Up/Down keeping the column; Enter breaks the line and Ctrl+Enter confirms; vertical scrolling | Writing and editing a paragraph |
 
-Undo and redo in the text field are not part of 3e; they are a step of their own later.
+The undo in part 8 belongs to the field being edited and is dropped when focus leaves it.
+Undoing what was done to the scene — a renamed entity, a moved object — is the engine's own
+undo, through its command system; that remains a step of its own later, and is what Ctrl+Z
+reaches once no field has focus.
+
+The text box is a method of its own rather than a flag on `textField`, as Swing has
+`JTextField` and `JTextArea`: a `true` at the call site does not say what it means, and Enter
+changes meaning — it breaks the line instead of confirming — which the name should make
+plain.
 
 **Naming convention for the examples and scaffolding.** The long form,
 `aegis.widgets().button(...)`, is always right. When the widgets object is kept in a short
@@ -740,6 +752,33 @@ order. Its text lives in a `StringBuilder` sized to the field's limit when the f
 made, so editing allocates nothing, and `text()` hands that buffer out as a `CharSequence`
 for reading. The caret is placed by walking advances and kerning exactly as drawing does, so
 a click lands between the characters it looks like it lands between.
+
+**Selection is an anchor and the caret**, one more `int` per field; there is a selection when
+they differ. The clipboard is reached through `Window`, handed to the widgets once with
+`ae.setClipboard(window)` like the pointer and keys are handed in. Copying gathers the
+selection in a reused builder; pasting allocates only the `String` GLFW returns, once per
+Ctrl+V.
+
+**Undo is one history, for the field with focus.** Blocks are kept in arrays and one
+`char[]` made once — each block a replacement: at a position, this text removed, that text
+inserted — so undoing and redoing allocate nothing. The history is dropped when focus leaves
+the field or code calls `setText`.
+
+**Text from the user is data, never instructions.** Nothing in Aegis executes what a field
+holds. What the field itself guards against is characters that act on whatever displays the
+text: typed and pasted text pass the same filter, which refuses control characters — among
+them ESC and CSI, which start the escape sequences a terminal obeys, so text reaching the
+log cannot clear it, hide lines or retitle the window — and the bidirectional controls, which
+make `file\u202Etxt.exe` display as `fileexe.txt`. Keeping the text clean does not make it safe to
+*use*; that is checked where it is used:
+
+- **Never build a shell command by joining strings.** Run processes with `ProcessBuilder` and
+  a list of arguments, so no shell ever parses the text and `; rm -rf ~` is one literal
+  argument, not a second command.
+- **Normalise and check paths** before touching the file system: an asset named
+  `../../.bashrc` must not reach outside the project.
+- **Write text into files as data**: the scene serializer escapes quotes and backslashes, so
+  a name cannot break the JSON around it.
 
 **Colours and sizes live only in `AegisStyle`**, a class of public fields no drawing code
 bypasses. It is what 3f turns into the theme's property catalogue, which is why the theme
