@@ -178,10 +178,16 @@ public final class AegisFont {
     private final AegisTextCache layoutCache = new AegisTextCache();
 
     /**
+     * Reads a TrueType font from the classpath, rasterises its glyphs into an atlas, reads its
+     * metrics and kerning, and uploads the atlas to the GPU. All native memory used on the way
+     * is freed before this returns.
+     *
      * @param resourcePath classpath path of the .ttf, e.g. {@code /fonts/DejaVuSans/DejaVuSans.ttf}
      * @param pixelHeight  size the glyphs are rasterised at, in pixels
      * @param atlasWidth   atlas width in pixels
      * @param atlasHeight  atlas height in pixels; baking fails loudly if the glyphs do not fit
+     * @throws IllegalStateException if the resource is missing, is not a font stb_truetype can
+     *                               read, or its glyphs do not fit the atlas
      */
     public AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight) {
         this.pixelHeight = pixelHeight;
@@ -422,6 +428,9 @@ public final class AegisFont {
      *
      * <p>Takes a {@link CharSequence} so a reused {@code StringBuilder} can be measured
      * without building a {@code String}, and allocates nothing.</p>
+     *
+     * @param text the characters to measure
+     * @return the width in pixels, kerning included
      */
     public float measure(CharSequence text) {
         return measure(text, 0, text.length());
@@ -436,6 +445,11 @@ public final class AegisFont {
      *
      * <p>Kerning is measured <em>inside</em> the range only: the character before
      * {@code from} is not a neighbour, because a wrapped line does not sit beside it.</p>
+     *
+     * @param text the characters
+     * @param from first index measured, inclusive
+     * @param to   last index measured, exclusive
+     * @return the width in pixels, kerning included
      */
     public float measure(CharSequence text, int from, int to) {
         float width = 0.0f;
@@ -469,6 +483,8 @@ public final class AegisFont {
      * overflow would put text outside the panel it was asked to fit. Proper hyphenation is
      * not in this stage and may never be.</p>
      *
+     * @param text       the paragraph
+     * @param maxWidth   widest a line may be, in pixels
      * @param lineStarts filled with the first index of each line
      * @param lineEnds   filled with one past the last index of each line; a paragraph needing
      *                   more lines than the arrays hold is truncated rather than growing
@@ -569,6 +585,10 @@ public final class AegisFont {
      * <p>Public because sizing comes before drawing: a panel has to know how tall its text
      * will be in order to be drawn around it, and asking must not cost a second walk over the
      * paragraph. Layout in step 3c needs exactly this question answered cheaply.</p>
+     *
+     * @param text     the paragraph
+     * @param maxWidth widest a line may be, in pixels
+     * @return the number of lines; at most 256 for text too long for the cache
      */
     public int wrappedLineCount(CharSequence text, float maxWidth) {
         int slot = cachedLayout(text, maxWidth);
@@ -592,10 +612,16 @@ public final class AegisFont {
      * <p>The cache's only observable effect, since a working cache changes nothing on screen.
      * It climbs while text or widths are new and stops climbing once they are not; a
      * steady-state frame that still increments it is a cache that is not working.</p>
+     *
+     * @return the count since the font was baked
      */
     public int layoutRecomputes() { return layoutCache.recomputes(); }
 
-    /** How many paragraph layouts have been served from memory. */
+    /**
+     * How many paragraph layouts have been served from memory.
+     *
+     * @return the count since the font was baked
+     */
     public int layoutHits() { return layoutCache.hits(); }
 
     /**
@@ -607,6 +633,8 @@ public final class AegisFont {
      * drawn width disagree.</p>
      *
      * @param prev the character before, or {@code 0} at the start of a run
+     * @param c    the character being placed
+     * @return the correction in pixels, usually 0
      */
     public float kerning(char prev, char c) {
         if (!kerningEnabled) return 0.0f;
@@ -615,10 +643,19 @@ public final class AegisFont {
         return kerning[(prev - FIRST_CHAR) * CHAR_COUNT + (c - FIRST_CHAR)];
     }
 
-    /** @see #kerningEnabled */
+    /**
+     * Switches kerning on or off, for comparing kerned and unkerned text. On by default; not a
+     * styling option. Cached layouts are kept per setting, so toggling costs nothing.
+     *
+     * @param enabled {@code true} to apply the font's pair corrections
+     */
     public void setKerningEnabled(boolean enabled) { kerningEnabled = enabled; }
 
-    /** @see #kerningEnabled */
+    /**
+     * Whether kerning is applied.
+     *
+     * @return {@code true} unless it was switched off
+     */
     public boolean isKerningEnabled() { return kerningEnabled; }
 
     /**
@@ -627,37 +664,73 @@ public final class AegisFont {
      * <p>Text is placed by its top almost everywhere — a label centred in a button, a row in
      * a list — while glyphs hang from a baseline, and this is the one conversion between the
      * two. Rounded, so that every line stacked from here starts on a whole pixel.</p>
+     *
+     * @param top y of the top of the line box
+     * @return y of the baseline, a whole pixel
      */
     public float baselineForTop(float top) {
         return Math.round(top + ascent);
     }
 
-    /** Height above the baseline, pixels. */
+    /**
+     * Height above the baseline, pixels.
+     *
+     * @return the ascent, positive
+     */
     public float ascent()  { return ascent; }
 
-    /** Depth below the baseline, positive downwards, pixels. */
+    /**
+     * Depth below the baseline, positive downwards, pixels.
+     *
+     * @return the descent, positive
+     */
     public float descent() { return descent; }
 
-    /** Extra leading the font asks for between lines, pixels; often zero. */
+    /**
+     * Extra leading the font asks for between lines, pixels; often zero.
+     *
+     * @return the line gap
+     */
     public float lineGap() { return lineGap; }
 
     /**
      * Distance from one line's top to the next, in whole pixels. Adding this repeatedly is
      * how lines stack; see the field for why it is not fractional.
+     *
+     * @return the line height
      */
     public int lineHeight() { return lineHeight; }
 
-    /** Backend texture handle of the atlas. */
+    /**
+     * Backend texture handle of the atlas.
+     *
+     * @return the handle, for {@link AegisDrawList#addTexturedQuad} or a renderer
+     */
     public int   atlasHandle() { return atlas.getID(); }
+
+    /**
+     * Width of the glyph atlas.
+     *
+     * @return width in pixels, as asked for at construction
+     */
     public int   atlasWidth()  { return atlasWidth; }
+
+    /**
+     * Height of the glyph atlas.
+     *
+     * @return height in pixels, as asked for at construction
+     */
     public int   atlasHeight() { return atlasHeight; }
 
     /**
      * The size the glyphs were rasterised at. Not a line height and not an ascent — use
      * {@link #lineHeight()} and {@link #baselineForTop(float)} to position text.
+     *
+     * @return the rasterisation size in pixels
      */
     public float pixelHeight() { return pixelHeight; }
 
+    /** Deletes the atlas texture. The font must not be drawn with afterwards. */
     public void cleanup() {
         atlas.cleanup();
     }

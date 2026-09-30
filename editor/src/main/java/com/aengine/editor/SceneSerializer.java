@@ -41,6 +41,14 @@ public final class SceneSerializer {
 
     /**
      * Serializes the ECS state directly into a memory JSON Object. Used for RAM backups.
+     *
+     * <p>Each entity is written inline with its transform, sprite, collider, script and
+     * rigidbody (without velocity). Note that {@code SceneLoader} does not read the sprite
+     * back yet — see {@code docs/KNOWN_ISSUES.md}, item 1.</p>
+     *
+     * @param registry  the world to write
+     * @param sceneName the value of the scene's {@code "name"}
+     * @return the scene as a JSON object, in the format {@code SceneLoader} reads
      */
     public static JsonObject serializeScene(Registry registry, String sceneName) {
         JsonObject root = new JsonObject();

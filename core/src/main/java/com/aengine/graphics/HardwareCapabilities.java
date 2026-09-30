@@ -6,7 +6,16 @@ import org.lwjgl.opengl.GL20;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+/**
+ * Reads the GPU's limits and the CPU's name once, logs them, and keeps them for the
+ * renderers to query.
+ *
+ * <p>Call {@link #initialize()} on the GL thread after the context exists; the 2D renderer
+ * does this itself. Before that the getters return 0, 1 or {@code "Unknown"}.</p>
+ */
 public final class HardwareCapabilities {
+
+    private HardwareCapabilities() {}
 
     // GPU Telemetry Parameters
     private static int maxTextureSlots;
@@ -25,6 +34,13 @@ public final class HardwareCapabilities {
     // Sourced from GL30 core specification to prevent compilation breakdown in GL20 scopes
     private static final int GL_MAX_RENDERBUFFER_SIZE = 0x84E8;
 
+    /**
+     * Queries the GPU through OpenGL and the CPU through the operating system, then logs a
+     * summary. Runs only once; later calls return immediately.
+     *
+     * <p>The CPU name comes from {@code /proc/cpuinfo} on Linux and from {@code wmic} on
+     * Windows. If that fails it stays {@code "Unknown CPU"}, with a warning in the log.</p>
+     */
     public static void initialize() {
         if (initialized) return;
 
@@ -122,12 +138,60 @@ public final class HardwareCapabilities {
         }
     }
 
+    /**
+     * Returns how many textures a fragment shader can sample at once, which is also how
+     * many textures one 2D batch can hold.
+     *
+     * @return {@code GL_MAX_TEXTURE_IMAGE_UNITS}; 0 before {@link #initialize()}
+     */
     public static int getMaxTextureSlots() { return maxTextureSlots; }
+
+    /**
+     * Returns the largest texture width or height the GPU accepts.
+     *
+     * @return {@code GL_MAX_TEXTURE_SIZE} in pixels; 0 before {@link #initialize()}
+     */
     public static int getMaxTextureSize() { return maxTextureSize; }
+
+    /**
+     * Returns the largest render buffer width or height, which bounds a {@link FrameBuffer}.
+     *
+     * @return {@code GL_MAX_RENDERBUFFER_SIZE} in pixels; 0 before {@link #initialize()}
+     */
     public static int getMaxRenderBufferSize() { return maxRenderBufferSize; }
+
+    /**
+     * Returns the GPU vendor as reported by the driver.
+     *
+     * @return {@code GL_VENDOR}, e.g. "AMD"; "Unknown" before {@link #initialize()}
+     */
     public static String getGpuVendor() { return gpuVendor; }
+
+    /**
+     * Returns the GPU model as reported by the driver.
+     *
+     * @return {@code GL_RENDERER}; "Unknown" before {@link #initialize()}
+     */
     public static String getGpuHardware() { return gpuHardware; }
+
+    /**
+     * Returns the OpenGL version string, which usually includes the driver version.
+     *
+     * @return {@code GL_VERSION}; "Unknown" before {@link #initialize()}
+     */
     public static String getGlVersion() { return glVersion; }
+
+    /**
+     * Returns the CPU's marketing name.
+     *
+     * @return the name, or "Unknown CPU" if it could not be read
+     */
     public static String getCpuModel() { return cpuModel; }
+
+    /**
+     * Returns how many hardware threads the JVM can use.
+     *
+     * @return the logical core count; 1 before {@link #initialize()}
+     */
     public static int getCpuLogicalCores() { return cpuLogicalCores; }
 }

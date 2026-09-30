@@ -20,7 +20,9 @@ import java.util.Arrays;
  * int play = ae.button(toolbar, "Play");
  *
  * // every frame, after the layout's solve and the tree's update
- * for (each input event) ae.key(code, mods, isRepeat);
+ * for (each key event)       ae.key(code, mods, isRepeat);
+ * for (each character event) ae.character(codepoint);
+ * for (each wheel event)     ae.scroll(dy);
  * ae.update(root);
  * if (ae.wasActivated(play)) start();
  *
@@ -49,8 +51,8 @@ import java.util.Arrays;
  * of text: sizing to content is the widget's job, done when the content is known, not on
  * every solve.</p>
  *
- * <p><strong>Colours come from {@link AegisStyle} only</strong>, the one place the theme will
- * replace. Nothing in this class names a colour.</p>
+ * <p><strong>Colours come from {@link AegisStyle} only</strong>, which the theme fills — see
+ * {@link #applyTheme}. Nothing in this class names a colour.</p>
  *
  * <p>Allocates nothing per frame. Not thread-safe, and not meant to be.</p>
  */
@@ -232,6 +234,8 @@ public final class AegisWidgets {
      * The colours and sizes widgets draw with when the theme gives them none of their own. See
      * {@link AegisStyle}. A new object each time a theme is applied, so hold on to it no longer
      * than the current theme.
+     *
+     * @return the shared style
      */
     public AegisStyle style() { return globalStyle; }
 
@@ -252,6 +256,11 @@ public final class AegisWidgets {
      *
      * <p>A widget's size is worked out again from its content and the theme, which replaces a
      * size set on it by hand with {@link AegisLayout#setSize}.</p>
+     *
+     * <p>Rules that reach no widget are reported in the log once this is done.</p>
+     *
+     * @param theme the theme to apply
+     * @param root  the top of the tree to dress; ids are read from here down
      */
     public void applyTheme(AegisTheme theme, int root) {
         globalStyle = theme.globalStyle();
@@ -320,6 +329,8 @@ public final class AegisWidgets {
      * The window whose system clipboard text fields copy to and paste from. Until it is set,
      * Ctrl+C, Ctrl+X and Ctrl+V do nothing. Handed in rather than looked up, like the pointer
      * and the keys: whoever owns the window decides the interface may use its clipboard.
+     *
+     * @param window the window, or {@code null} to turn clipboard keys off again
      */
     public void setClipboard(Window window) { this.clipboard = window; }
 
@@ -334,6 +345,8 @@ public final class AegisWidgets {
      * the line height plus {@code buttonPaddingY} above and below. Interactive and focusable.
      * A font must already be loaded, since the label is measured here.</p>
      *
+     * @param parent the row or column to add it to
+     * @param text   the label; kept, so pass a string that does not change
      * @return its handle — a layout node, usable with the layout and the tree like any other
      */
     public int button(int parent, String text) {
@@ -356,6 +369,8 @@ public final class AegisWidgets {
      * as in every desktop toolkit. Sized to the label: the square, a gap, the label's width;
      * the line height plus {@code checkboxPaddingY} above and below. Interactive and focusable.</p>
      *
+     * @param parent the row or column to add it to
+     * @param text   the label; kept, so pass a string that does not change
      * @return its handle
      */
     public int checkbox(int parent, String text) {
@@ -371,12 +386,20 @@ public final class AegisWidgets {
         return node;
     }
 
-    /** Whether a checkbox is ticked. */
+    /**
+     * Whether a checkbox is ticked.
+     *
+     * @param node the checkbox
+     * @return {@code true} when ticked
+     */
     public boolean isChecked(int node) { return checked[node]; }
 
     /**
      * Ticks or unticks a checkbox from code — to show a setting's current value, say. Does not
      * count as a change: {@link #wasChanged} reports only what the user did.
+     *
+     * @param node the checkbox
+     * @param on   {@code true} to tick it
      */
     public void setChecked(int node, boolean on) { checked[node] = on; }
 
@@ -393,6 +416,10 @@ public final class AegisWidgets {
      * {@code -} — is a hundredth of the range until {@link #setSliderStep} says otherwise;
      * Shift + arrow moves {@value #LARGE_STEP} steps, Home and End go to the ends.</p>
      *
+     * @param parent the row or column to add it to
+     * @param min    the value at the left end
+     * @param max    the value at the right end
+     * @param value  the starting value, clamped to the range
      * @return its handle
      */
     public int slider(int parent, float min, float max, float value) {
@@ -410,15 +437,30 @@ public final class AegisWidgets {
         return node;
     }
 
-    /** A slider's current value, between its minimum and maximum, unrounded. */
+    /**
+     * A slider's current value, between its minimum and maximum, unrounded.
+     *
+     * @param node the slider
+     * @return the value
+     */
     public float sliderValue(int node) { return sliderValue[node]; }
 
-    /** Sets a slider's value from code, clamped to its range. Not reported by {@link #wasChanged}. */
+    /**
+     * Sets a slider's value from code, clamped to its range. Not reported by {@link #wasChanged}.
+     *
+     * @param node  the slider
+     * @param value the new value
+     */
     public void setSliderValue(int node, float value) {
         sliderValue[node] = clamp(value, sliderMin[node], sliderMax[node]);
     }
 
-    /** How far one small step — an arrow key, {@code +} or {@code -} — moves a slider. */
+    /**
+     * How far one small step — an arrow key, {@code +} or {@code -} — moves a slider.
+     *
+     * @param node the slider
+     * @param step the step, in the slider's own units; a hundredth of the range by default
+     */
     public void setSliderStep(int node, float step) { sliderStep[node] = step; }
 
     /**
@@ -430,6 +472,7 @@ public final class AegisWidgets {
      * one per frame. Use {@link #textField(int, int)} where a limit makes sense, and editing
      * then allocates nothing at all.</p>
      *
+     * @param parent the row or column to add it to
      * @return its handle
      */
     public int textField(int parent) {
@@ -448,6 +491,8 @@ public final class AegisWidgets {
      * parent may make it wider. Text wider than the field scrolls inside it, keeping the caret
      * in view. Interactive and focusable.</p>
      *
+     * @param parent    the row or column to add it to
+     * @param maxLength the most characters it will hold
      * @return its handle
      */
     public int textField(int parent, int maxLength) {
@@ -468,6 +513,8 @@ public final class AegisWidgets {
      *
      * <p>Asks for {@code textFieldWidth} and that many lines' height plus padding.</p>
      *
+     * @param parent       the row or column to add it to
+     * @param visibleLines how many lines tall it is
      * @return its handle
      */
     public int textBox(int parent, int visibleLines) {
@@ -478,6 +525,9 @@ public final class AegisWidgets {
      * A text box showing {@code visibleLines} lines and holding at most {@code maxLength}
      * characters, line breaks included. See {@link #textBox(int, int)}.
      *
+     * @param parent       the row or column to add it to
+     * @param visibleLines how many lines tall it is
+     * @param maxLength    the most characters it will hold
      * @return its handle
      */
     public int textBox(int parent, int visibleLines, int maxLength) {
@@ -506,12 +556,19 @@ public final class AegisWidgets {
      * A text field's text. The field's own buffer, handed out for reading — measure it, draw
      * it, compare it, copy it with {@code toString()} when a {@code String} is really needed.
      * Change it only through {@link #setText}.
+     *
+     * @param node a text field or text box
+     * @return the live text, not a copy
      */
     public CharSequence text(int node) { return fieldText[node]; }
 
     /**
      * Replaces a text field's text from code — to show an entity's current name, say — cut to
      * the field's limit, with the caret at the end. Not reported by {@link #wasChanged}.
+     * Clears the field's undo history if it is the one being edited.
+     *
+     * @param node a text field or text box
+     * @param text the new text; copied, not kept
      */
     public void setText(int node, CharSequence text) {
         StringBuilder buffer = fieldText[node];
@@ -523,19 +580,44 @@ public final class AegisWidgets {
         if (hField == node) resetHistory();   // what code put there is not the user's to undo
     }
 
-    /** The hint a text field shows, dimmed, while it is empty. {@code null} for none. */
+    /**
+     * The hint a text field shows, dimmed, while it is empty. {@code null} for none.
+     *
+     * @param node a text field or text box
+     * @param text the hint; kept, so pass a string that does not change
+     */
     public void setPlaceholder(int node, String text) { label[node] = text; }
 
-    /** Where a text field's caret is: 0 before the first character, the length after the last. */
+    /**
+     * Where a text field's caret is: 0 before the first character, the length after the last.
+     *
+     * @param node a text field or text box
+     * @return the caret index
+     */
     public int caret(int node) { return caret[node]; }
 
-    /** Where a text field's selection begins — equal to {@link #selectionEnd} when nothing is selected. */
+    /**
+     * Where a text field's selection begins — equal to {@link #selectionEnd} when nothing is selected.
+     *
+     * @param node a text field or text box
+     * @return the index of the first selected character
+     */
     public int selectionStart(int node) { return Math.min(anchor[node], caret[node]); }
 
-    /** Where a text field's selection ends, exclusive. */
+    /**
+     * Where a text field's selection ends, exclusive.
+     *
+     * @param node a text field or text box
+     * @return the index after the last selected character
+     */
     public int selectionEnd(int node) { return Math.max(anchor[node], caret[node]); }
 
-    /** Whether a node was made by this class — a button, a checkbox, a slider, a text field. */
+    /**
+     * Whether a node was made by this class — a button, a checkbox, a slider, a text field or box.
+     *
+     * @param node any layout handle
+     * @return {@code true} for a widget, {@code false} for a plain layout node
+     */
     public boolean isWidget(int node) { return kind[node] != NOT_A_WIDGET; }
 
     /**
@@ -612,6 +694,8 @@ public final class AegisWidgets {
      * <p>A focused text field takes every character instead — {@code +}, {@code -} and space
      * included — inserting it at the caret at once, so that typing, deleting and typing again
      * in one frame come out in the order they were done.</p>
+     *
+     * @param codepoint the Unicode code point typed, as from {@link com.aengine.core.Input#eventCode}
      */
     public void character(int codepoint) {
         int focused = tree.focused();
@@ -1081,6 +1165,11 @@ public final class AegisWidgets {
     /**
      * Applies this frame's pointer and keys to the widgets under {@code root}. Call it once a
      * frame, after {@link AegisTree#update} and after the frame's {@link #key} calls.
+     *
+     * <p>This is where this frame's results are settled, so read {@link #wasActivated} and
+     * {@link #wasChanged} after it. Only one widget is reported as changed per frame.</p>
+     *
+     * @param root the tree whose widgets receive this frame's input; Tab moves focus within it
      */
     public void update(int root) {
         activated = AegisLayout.NONE;
@@ -1363,6 +1452,8 @@ public final class AegisWidgets {
      * Scrolls the text box under the pointer by the mouse wheel — {@code dy} as the wheel
      * reports it, positive away from the user, which scrolls up. Three lines a notch. Handed in
      * by whoever owns input, like {@link #key}; a wheel over anything else does nothing here.
+     *
+     * @param dy the wheel's vertical offset, as from {@link com.aengine.core.Input#eventScrollY}
      */
     public void scroll(float dy) {
         int node = tree.hovered();
@@ -1401,7 +1492,10 @@ public final class AegisWidgets {
 
     /**
      * Whether this widget was activated this frame — a button by a click, Enter or Space; a
-     * text field by Enter, the user confirming what they typed.
+     * text field by Enter, the user confirming what they typed; a text box by Ctrl+Enter.
+     *
+     * @param node the widget
+     * @return {@code true} in the frame it was activated
      */
     public boolean wasActivated(int node) { return activated == node; }
 
@@ -1410,12 +1504,17 @@ public final class AegisWidgets {
      * by a click, Enter or Space; for a slider, moved it by dragging or by a key; for a text
      * field, typed or deleted in it. Changes made from code, with {@link #setChecked},
      * {@link #setSliderValue} or {@link #setText}, do not count.
+     *
+     * @param node the widget
+     * @return {@code true} in the frame the user changed it
      */
     public boolean wasChanged(int node) { return changed == node; }
 
     /**
      * Whether this frame's activation came from the keyboard rather than the pointer. For
      * showing it, as the scaffolding does; code acting on a button should not need to care.
+     *
+     * @return {@code true} if Enter or Space caused this frame's activation
      */
     public boolean activatedByKeyboard() { return activatedByKeyboard; }
 
@@ -1424,6 +1523,8 @@ public final class AegisWidgets {
      *
      * <p>Only widgets: panes and other plain nodes are the caller's to draw, first, so the
      * widgets sit on top of them.</p>
+     *
+     * @param root the top of the tree to draw
      */
     public void draw(int root) {
         if (kind[root] == BUTTON)   drawButton(root);

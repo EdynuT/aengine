@@ -27,7 +27,9 @@ public interface DynamicMeshAPI {
      *
      * <p>Implementations must write into storage reserved at creation rather than
      * reallocating — this runs every frame, and the UI framework's budget forbids
-     * allocating on that path.</p>
+     * allocating on that path. The counts must therefore fit the capacities given to
+     * {@link RenderContext#createDynamicMesh}; exceeding them is an error, not a resize.
+     * With {@code indexCount == 0} the call does nothing and the previous contents stay.</p>
      *
      * @param vertexWords     source vertex data
      * @param vertexWordCount how many words of {@code vertexWords} are live

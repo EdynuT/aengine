@@ -25,18 +25,38 @@ import java.util.concurrent.atomic.AtomicInteger;
  * HARDWARE CONTEXT: MULTI-THREADED OFFLINE ASSET PIPELINE
  * Compiles compressed source images into contiguous, zero-decode binary payloads (.atex).
  * Utilizes NIO FileChannels for direct native-to-disk blitting, bypassing Java Heap allocations.
+ *
+ * <p>Two formats are produced, both a 20-byte header of five native-order ints followed by
+ * raw data the engine can hand to the driver without decoding:</p>
+ * <ul>
+ *   <li>{@code .atex} — magic, version, width, height, channels (always 4); then RGBA8
+ *       pixels, bottom row first. Made from PNG and JPG.</li>
+ *   <li>{@code .aaud} — magic, format (0 = PCM), channels, sample rate, payload size; then
+ *       16-bit signed PCM samples. Made from OGG and WAV.</li>
+ * </ul>
+ *
+ * <p>Output mirrors the source folder tree, with the extension replaced.</p>
  */
 public final class AssetBaker {
 
-    // "ATEX" encoded in ASCII Hex
-    public static final int MAGIC_NUMBER = 0x41544558; 
-    public static final int MAGIC_NUMBER_AUDIO = 0x41415544; 
+    /** "ATEX" encoded in ASCII Hex: the first int of every {@code .atex} file. */
+    public static final int MAGIC_NUMBER = 0x41544558;
+    /** "AAUD" encoded in ASCII Hex: the first int of every {@code .aaud} file. */
+    public static final int MAGIC_NUMBER_AUDIO = 0x41415544;
+    /** Version written into {@code .atex} headers. Not checked when loading. */
     public static final int VERSION = 1;
 
     private AssetBaker() {}
 
     /**
      * Recursively scans a source directory and bakes all valid formats into the target VFS directory.
+     *
+     * <p>Files are baked in parallel, one thread per CPU core, and the call blocks until
+     * all are done or 60 seconds pass. Every file is re-baked, changed or not. Failures are
+     * logged and counted, not thrown.</p>
+     *
+     * @param sourceDirPath folder with source images and sounds
+     * @param targetDirPath folder to write {@code .atex} and {@code .aaud} files into
      */
     public static void bakeDirectory(String sourceDirPath, String targetDirPath) {
         File sourceDir = new File(sourceDirPath);
@@ -93,6 +113,16 @@ public final class AssetBaker {
         }
     }
 
+    /**
+     * Bakes one image into an {@code .atex} file. Any format stb_image reads works; the
+     * pixels are converted to RGBA and flipped so the bottom row comes first, as OpenGL
+     * expects.
+     *
+     * @param sourceFile    the image to bake
+     * @param rootSourceDir the source root; the image's path below it is kept in the output
+     * @param rootTargetDir the output root
+     * @return {@code true} if the file was written; {@code false} on failure (logged)
+     */
     public static boolean compileTexture(File sourceFile, File rootSourceDir, File rootTargetDir) {
         // Replicate internal folder hierarchy in the target VFS
         String relativePath = sourceFile.getAbsolutePath().substring(rootSourceDir.getAbsolutePath().length());
@@ -147,6 +177,17 @@ public final class AssetBaker {
         }
     }
 
+    /**
+     * Bakes one OGG or WAV file into an {@code .aaud} file of 16-bit PCM. WAV files in
+     * other sample formats are converted when Java's sound API can; otherwise they are
+     * skipped.
+     *
+     * @param sourceFile    the sound to bake ({@code .ogg} or {@code .wav})
+     * @param rootSourceDir the source root; the sound's path below it is kept in the output
+     * @param rootTargetDir the output root
+     * @return {@code true} if the file was written; {@code false} on failure or an
+     *         unsupported format (logged)
+     */
     public static boolean compileAudio(File sourceFile, File rootSourceDir, File rootTargetDir) {
         String relativePath = sourceFile.getAbsolutePath().substring(rootSourceDir.getAbsolutePath().length());
         String targetExtensionPath = relativePath.substring(0, relativePath.lastIndexOf('.')) + ".aaud";

@@ -29,6 +29,14 @@ public final class OpenGLMemoryTexture implements TextureAPI {
     private final int width;
     private final int height;
 
+    /**
+     * Creates the texture and uploads the pixels. Leaves no texture bound.
+     *
+     * @param width  width in pixels
+     * @param height height in pixels
+     * @param format how the bytes in {@code pixels} are laid out
+     * @param pixels {@code width * height * format.bytesPerPixel} bytes, rows with no padding
+     */
     public OpenGLMemoryTexture(int width, int height, TextureFormat format, ByteBuffer pixels) {
         this.width  = width;
         this.height = height;

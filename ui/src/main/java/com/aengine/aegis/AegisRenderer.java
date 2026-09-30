@@ -29,6 +29,12 @@ public final class AegisRenderer {
     /** Reused across frames: submitting a uniform must not allocate. */
     private final Vector2f viewportSize = new Vector2f();
 
+    /**
+     * Compiles the interface shader and reserves the GPU mesh. Must be called on the GL thread.
+     *
+     * @param maxQuads shapes per frame; must match the {@link AegisDrawList} this renderer
+     *                 will draw, since the mesh is sized from it
+     */
     public AegisRenderer(int maxQuads) {
         this.renderer = RenderContext.createRenderer();
 
@@ -93,6 +99,7 @@ public final class AegisRenderer {
         renderer.setDepthTest(true);
     }
 
+    /** Releases the mesh and the shader. The renderer must not be used afterwards. */
     public void cleanup() {
         mesh.cleanup();
         shader.cleanup();

@@ -40,8 +40,8 @@ import java.util.Arrays;
  * Releasing over it is a click; releasing elsewhere is not, which is how a user backs out of a
  * press they did not mean. Press and release are found by comparing this frame's button with
  * the last frame's, which is enough for a mouse button. Typed characters and key repeat are not
- * — those need the event queue §10 of the design document adds to the engine's input, before
- * the text field in 3e.</p>
+ * — those come from the event queue in the engine's input (§10 of the design document), which
+ * the widgets read directly.</p>
  *
  * <p><strong>Focus follows the tree.</strong> Nodes marked {@linkplain #setFocusable focusable}
  * take the keyboard's attention one at a time. {@link #focusNext} and {@link #focusPrevious}
@@ -79,6 +79,8 @@ public final class AegisTree {
     private float pointerY;
 
     /**
+     * Creates the state for a layout, with nothing marked and nothing focused.
+     *
      * @param layout   the layout whose nodes this adds state to
      * @param capacity the layout's capacity, so every handle it can give out has a slot here
      */
@@ -95,12 +97,18 @@ public final class AegisTree {
     /**
      * Whether a node reacts to the pointer. Off by default: panes, spacers and labels let the
      * pointer through to whatever interactive node contains them.
+     *
+     * @param node the layout handle
+     * @param on   {@code true} to make it react
      */
     public void setInteractive(int node, boolean on) { interactive[node] = on; }
 
     /**
      * Whether a node can take focus — be reached with Tab, and be focused by a press. Off by
      * default. Independent of {@link #setInteractive}.
+     *
+     * @param node the layout handle
+     * @param on   {@code true} to let it take focus
      */
     public void setFocusable(int node, boolean on) { focusable[node] = on; }
 
@@ -168,48 +176,92 @@ public final class AegisTree {
         }
     }
 
-    /** Whether the pointer is over this node, and nothing else holds the capture. */
+    /**
+     * Whether the pointer is over this node, and nothing else holds the capture.
+     *
+     * @param node the layout handle
+     * @return {@code true} if it is the hovered node
+     */
     public boolean isHovered(int node) { return hovered == node; }
 
     /**
      * Whether a press began on this node and the button is still down — true even while the
      * pointer has wandered off it. Draw it pressed when it is also {@linkplain #isHovered
      * hovered}, so the user can see that releasing here now would not click.
+     *
+     * @param node the layout handle
+     * @return {@code true} if it holds the capture
      */
     public boolean isPressed(int node) { return pressed == node; }
 
-    /** Whether this node was clicked this frame. True for exactly one frame per click. */
+    /**
+     * Whether this node was clicked this frame. True for exactly one frame per click.
+     *
+     * @param node the layout handle
+     * @return {@code true} in the frame the click completed
+     */
     public boolean wasClicked(int node) { return clicked == node; }
 
-    /** The hovered node, or {@link AegisLayout#NONE}. */
+    /**
+     * The hovered node, or {@link AegisLayout#NONE}.
+     *
+     * @return the handle
+     */
     public int hovered() { return hovered; }
 
-    /** The node clicked this frame, or {@link AegisLayout#NONE}. */
+    /**
+     * The node clicked this frame, or {@link AegisLayout#NONE}.
+     *
+     * @return the handle
+     */
     public int clicked() { return clicked; }
 
-    /** The node holding the pointer's capture — pressed and not yet released — or {@link AegisLayout#NONE}. */
+    /**
+     * The node holding the pointer's capture — pressed and not yet released — or {@link AegisLayout#NONE}.
+     *
+     * @return the handle
+     */
     public int pressed() { return pressed; }
 
-    /** The pointer's x as last handed to {@link #update} — what a drag follows. */
+    /**
+     * The pointer's x as last handed to {@link #update} — what a drag follows.
+     *
+     * @return the x, in layout pixels
+     */
     public float pointerX() { return pointerX; }
 
-    /** The pointer's y as last handed to {@link #update}. */
+    /**
+     * The pointer's y as last handed to {@link #update}.
+     *
+     * @return the y, in layout pixels
+     */
     public float pointerY() { return pointerY; }
 
     // -----------------------------------------------------------------------------------
     // Focus
     // -----------------------------------------------------------------------------------
 
-    /** Whether this node has focus. */
+    /**
+     * Whether this node has focus.
+     *
+     * @param node the layout handle
+     * @return {@code true} if it is the focused node
+     */
     public boolean isFocused(int node) { return focused == node; }
 
-    /** The focused node, or {@link AegisLayout#NONE}. */
+    /**
+     * The focused node, or {@link AegisLayout#NONE}.
+     *
+     * @return the handle
+     */
     public int focused() { return focused; }
 
     /**
      * Gives focus to a node, or with {@link AegisLayout#NONE} takes it from everything — what
      * Esc does in a text field. The node is not checked for being focusable: the caller is
      * code, not the user, and is trusted to name one.
+     *
+     * @param node the layout handle, or {@link AegisLayout#NONE}
      */
     public void focus(int node) { focused = node; }
 
@@ -217,6 +269,8 @@ public final class AegisTree {
      * Moves focus to the next focusable node under {@code root}, in tree order — what Tab
      * does. Past the last it wraps to the first; with nothing focused it starts at the first.
      * If no node under {@code root} is focusable, focus is left as it is.
+     *
+     * @param root the tree to step through; focus held outside it counts as none
      */
     public void focusNext(int root) {
         int start = isUnder(root, focused) ? focused : root;
@@ -233,7 +287,9 @@ public final class AegisTree {
     /**
      * Moves focus to the previous focusable node under {@code root}, in tree order — what
      * Shift+Tab does. Before the first it wraps to the last; with nothing focused it starts at
-     * the last.
+     * the last. If no node under {@code root} is focusable, focus is left as it is.
+     *
+     * @param root the tree to step through; focus held outside it counts as none
      */
     public void focusPrevious(int root) {
         int start = isUnder(root, focused) ? focused : root;

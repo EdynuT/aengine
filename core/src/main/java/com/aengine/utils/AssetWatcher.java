@@ -9,9 +9,23 @@ import static java.nio.file.StandardWatchEventKinds.*;
 /**
  * HARDWARE CONTEXT: KERNEL-LEVEL DIRECTORY MONITOR
  * Hooks into the OS (inotify/ReadDirectoryChanges) to trigger zero-downtime VRAM injections.
+ *
+ * <p>Watches the project's {@code assets/src/textures} folder. When a PNG or JPG there is
+ * created or saved, it is re-baked to {@code .atex} and the cached texture is reloaded, so
+ * the change shows in the running editor without a restart. Sub-folders are not watched,
+ * and audio is not watched.</p>
  */
 public class AssetWatcher {
 
+    private AssetWatcher() {}
+
+    /**
+     * Starts watching on a background daemon thread and returns at once. If the textures
+     * folder does not exist, the thread ends quietly. Call once per project; each call
+     * starts another thread.
+     *
+     * @param projectRoot absolute path of the game project
+     */
     public static void start(String projectRoot) {
         Thread watcherThread = new Thread(() -> {
             try (WatchService watchService = FileSystems.getDefault().newWatchService()) {

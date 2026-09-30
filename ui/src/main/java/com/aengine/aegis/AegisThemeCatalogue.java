@@ -35,9 +35,10 @@ import java.util.Map;
  * <h2>Format</h2>
  *
  * <p>Every entry records the {@link #FORMAT} it arrived in. A theme declares the format it was
- * written against, and entries newer than that are what the loader reports as unset — how an
- * engine update tells a theme author what is new (§7, <em>How a custom theme survives an
- * engine update</em>).</p>
+ * written against, and entries newer than that are what the loader is to report as unset — how
+ * an engine update tells a theme author what is new (§7, <em>How a custom theme survives an
+ * engine update</em>). The report is not written yet: {@link AegisTheme} reads the declared
+ * format but does not compare it with the entries.</p>
  *
  * <p>Built once, when the class loads; read at theme load, never in the frame loop.</p>
  */
@@ -56,11 +57,27 @@ public final class AegisThemeCatalogue {
 
     /** Where a resolved colour goes: the style's array for it, which the loader copies into. */
     @FunctionalInterface
-    public interface ColourField { float[] of(AegisStyle style); }
+    public interface ColourField {
+        /**
+         * Picks the colour field out of a style.
+         *
+         * @param style the style being written
+         * @return the style's own {@code float[4]}, which the loader overwrites in place
+         */
+        float[] of(AegisStyle style);
+    }
 
     /** Where a resolved size goes. */
     @FunctionalInterface
-    public interface SizeField { void set(AegisStyle style, float value); }
+    public interface SizeField {
+        /**
+         * Writes the size into its field of a style.
+         *
+         * @param style the style being written
+         * @param value the resolved size in pixels
+         */
+        void set(AegisStyle style, float value);
+    }
 
     /**
      * One themeable property.
@@ -76,10 +93,19 @@ public final class AegisThemeCatalogue {
     public record Entry(String name, Type type, String defaultValue, int since,
                         ColourField colourField, SizeField sizeField) {
 
-        /** Whether this is a palette colour: one no widget reads, there for others to point at. */
+        /**
+         * Whether this is a palette colour: one no widget reads, there for others to point at.
+         *
+         * @return {@code true} for a palette entry
+         */
         public boolean isPalette() { return type == Type.COLOUR && colourField == null; }
 
-        /** The kind of widget it dresses — the part before the first dot. Empty for the palette. */
+        /**
+         * The kind of widget it dresses — the part before the first dot. Empty for the palette.
+         *
+         * @return {@code button}, {@code checkbox}, {@code slider}, {@code textfield},
+         *         {@code focus}, or empty
+         */
         public String widgetKind() {
             if (isPalette()) return "";
             int dot = name.indexOf('.');
@@ -161,10 +187,19 @@ public final class AegisThemeCatalogue {
 
     private AegisThemeCatalogue() { }
 
-    /** Every entry, in the order declared: the palette, then each widget's. */
+    /**
+     * Every entry, in the order declared: the palette, then each widget's.
+     *
+     * @return a read-only view of the catalogue
+     */
     public static List<Entry> entries() { return Collections.unmodifiableList(ENTRIES); }
 
-    /** The entry with this name, or {@code null} if nothing by that name is themeable. */
+    /**
+     * The entry with this name, or {@code null} if nothing by that name is themeable.
+     *
+     * @param name the full name as a theme writes it, e.g. {@code "button.fill.hover"}
+     * @return the entry, or {@code null}
+     */
     public static Entry find(String name) { return BY_NAME.get(name); }
 
     // -----------------------------------------------------------------------------------

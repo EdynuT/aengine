@@ -45,9 +45,23 @@ import com.aengine.utils.Logger;
 import com.aengine.utils.ProjectWizard;
 
 
+/**
+ * The editor application: starts the engine with the Dear ImGui interface, mounts a game
+ * project, and runs the edit and play loop.
+ *
+ * <p>Command line: an optional project path, plus {@code --2d} or {@code --3d} for the render
+ * mode (3D by default). Without a path it uses {@code ~/AeternumSandbox}, creating it if
+ * needed. F5 switches between editing and playing.</p>
+ */
 public class Main extends Engine {
 
-    public enum EngineState { EDITOR, PLAY }
+    /** Whether the scene is being edited or simulated. Separate from {@link Engine.EngineState}. */
+    public enum EngineState {
+        /** Editing: physics paused, the inspector usable. */
+        EDITOR,
+        /** Playing: physics running; the scene is restored from a snapshot on return to EDITOR. */
+        PLAY
+    }
     private static EngineState currentState = EngineState.EDITOR;
     private com.google.gson.JsonObject sceneMemoryBackup = null;
 
@@ -188,6 +202,7 @@ public class Main extends Engine {
     // Shared execution state capturing target path sent from external process host
     private static String activeProjectPath;
 
+    /** Creates the editor and installs its Dear ImGui interface. The window opens in {@link #run()}. */
     public Main() {
         super("AEngine - ECS Fly-Camera Runtime");
         this.imguiLayer = new com.aengine.editor.ImGuiUILayer();
@@ -1548,8 +1563,18 @@ public class Main extends Engine {
         SceneSerializer.save(registry, scenePath, "Edited Scene");
     }
 
+    /**
+     * Returns the render mode chosen at startup.
+     *
+     * @return the same as {@link RenderMode#active()}
+     */
     public static RenderMode getActiveRenderMode() { return RenderMode.active(); }
 
+    /**
+     * Starts the editor.
+     *
+     * @param args an optional project path, and {@code --2d} or {@code --3d}
+     */
     public static void main(String[] args) {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("--2d")) {

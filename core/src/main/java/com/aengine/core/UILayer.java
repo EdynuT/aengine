@@ -37,10 +37,16 @@ public interface UILayer {
     /**
      * Width in pixels of the region the scene should render into, or {@code 0} when the
      * interface has no opinion. The engine resizes its FrameBuffer to match.
+     *
+     * @return the viewport width in pixels, or 0
      */
     default float viewportWidth() { return 0.0f; }
 
-    /** Height counterpart to {@link #viewportWidth()}. */
+    /**
+     * Height counterpart to {@link #viewportWidth()}.
+     *
+     * @return the viewport height in pixels, or 0
+     */
     default float viewportHeight() { return 0.0f; }
 
     /**

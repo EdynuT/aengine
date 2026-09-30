@@ -104,6 +104,8 @@ public final class AegisTheme {
      * The factory theme: nothing set, every property at the catalogue's default. What the
      * editor wears when no theme file is found, and the last resort behind any value that
      * fails to resolve.
+     *
+     * @return a new factory theme
      */
     public static AegisTheme factory() {
         AegisTheme theme = new AegisTheme("factory", "Factory", "The defaults built into the engine.",
@@ -113,8 +115,11 @@ public final class AegisTheme {
     }
 
     /**
-     * Reads a theme file.
+     * Reads a theme file. Problems with single properties are logged, not thrown; see the
+     * class comment.
      *
+     * @param file the theme file, UTF-8 JSON
+     * @return the theme, resolved and ready to apply
      * @throws IOException if the file cannot be read — missing, or not readable
      * @throws Unusable    if it is not JSON, or not a JSON object: nothing can be built from it
      */
@@ -124,7 +129,15 @@ public final class AegisTheme {
         }
     }
 
-    /** Reads a theme from any reader; {@code source} names it in warnings. */
+    /**
+     * Reads a theme from any reader; {@code source} names it in warnings. JSON comments are
+     * tolerated. The reader is not closed.
+     *
+     * @param reader the JSON text
+     * @param source what to call it in warnings, e.g. a file path
+     * @return the theme, resolved and ready to apply
+     * @throws Unusable if it is not JSON, or not a JSON object
+     */
     public static AegisTheme parse(Reader reader, String source) throws Unusable {
         JsonElement root;
         try {
@@ -197,16 +210,32 @@ public final class AegisTheme {
     // What it says
     // -----------------------------------------------------------------------------------
 
-    /** The name a theme list shows. */
+    /**
+     * The name a theme list shows.
+     *
+     * @return the {@code name} the file declares, or its source if it declares none
+     */
     public String name() { return name; }
 
-    /** What the theme's author wrote about it. */
+    /**
+     * What the theme's author wrote about it.
+     *
+     * @return the {@code description}, or empty
+     */
     public String description() { return description; }
 
-    /** The catalogue format the theme was written against. */
+    /**
+     * The catalogue format the theme was written against.
+     *
+     * @return the declared {@code format}, or 1 if the file declares none
+     */
     public int format() { return format; }
 
-    /** Where it came from: a file path, or {@code "factory"}. */
+    /**
+     * Where it came from: a file path, or {@code "factory"}.
+     *
+     * @return the source, as used in warnings
+     */
     public String source() { return source; }
 
     /** The style every widget draws with unless a scoped rule gives it its own. Made once. */

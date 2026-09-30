@@ -27,7 +27,11 @@ public final class ShellFiles {
 
     private ShellFiles() { }
 
-    /** {@code <install>/ui/}: the shipped defaults. {@code aengine.home} if set, else the working directory. */
+    /**
+     * {@code <install>/ui/}: the shipped defaults. {@code aengine.home} if set, else the working directory.
+     *
+     * @return the absolute path; it may not exist
+     */
     public static Path installDir() {
         String home = System.getProperty("aengine.home");
         return (home != null ? Path.of(home) : Path.of("")).toAbsolutePath().resolve("ui");
@@ -37,6 +41,8 @@ public final class ShellFiles {
      * The user's {@code AEngine/ui/}: {@code aengine.userdata} if set; on Windows
      * {@code AEngine/ui} under {@code %LOCALAPPDATA%}; elsewhere {@code $XDG_DATA_HOME/AEngine/ui}, which
      * defaults to {@code ~/.local/share/AEngine/ui}.
+     *
+     * @return the absolute path; it may not exist
      */
     public static Path userDir() {
         String override = System.getProperty("aengine.userdata");
@@ -58,6 +64,9 @@ public final class ShellFiles {
      * installation's, else the factory theme. A file that is missing is passed over quietly —
      * the user normally has none — and one that cannot be read or used is passed over with a
      * warning saying why.
+     *
+     * @param name the theme's file name without {@code .json}, e.g. {@code "dark"}
+     * @return the first usable theme found, or the factory theme; never {@code null}
      */
     public static AegisTheme loadTheme(String name) {
         String file = name + ".json";

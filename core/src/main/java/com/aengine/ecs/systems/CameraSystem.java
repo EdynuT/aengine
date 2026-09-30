@@ -12,7 +12,30 @@ import com.aengine.graphics.Camera;
 import org.joml.Vector3f;
 import static org.lwjgl.glfw.GLFW.*;
 
+/**
+ * The editor's fly camera: moves the primary camera from mouse and keyboard input
+ * and keeps its {@link Camera} in step with its {@link TransformComponent}.
+ *
+ * <p>Controls, all while the window has focus:</p>
+ * <ul>
+ *   <li><b>Right mouse button + drag</b> — in 3D, looks around (yaw and pitch, with pitch
+ *       held between -89.9 and 89.9 degrees); in 2D, pans the view.</li>
+ *   <li><b>Shift + right mouse button + drag</b> — in 3D, slides sideways and forwards
+ *       instead of turning.</li>
+ *   <li><b>Space / Ctrl</b> — moves straight up / down at 6 units per second, in 2D and 3D.</li>
+ * </ul>
+ *
+ * <p>The cursor is hidden and captured while the right button is held and moving, and
+ * released when the button is let go. The 2D/3D choice comes from
+ * {@link RenderMode#is2D()}.</p>
+ *
+ * <p>Yaw and pitch are kept in this system, not in the entity, so they are shared by
+ * whichever camera is primary and are not saved with the scene.</p>
+ */
 public final class CameraSystem extends System {
+
+    /** Creates the system looking down the -Z axis (yaw -90, pitch 0). */
+    public CameraSystem() {}
 
     private final Vector3f movementDelta = new Vector3f();
     private final Vector3f forwardDirection = new Vector3f();

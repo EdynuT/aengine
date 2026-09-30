@@ -13,23 +13,35 @@ package com.aengine.core;
  */
 public enum RenderMode {
 
+    /** Flat rendering: entities are drawn as quads through an orthographic camera. */
     MODE_2D,
+    /** Volumetric rendering: entities are drawn as meshes through a perspective camera. */
     MODE_3D;
 
     /** Volatile: written once on the main thread at startup, read by the physics thread. */
     private static volatile RenderMode active = MODE_3D;
 
-    /** The pipeline currently in effect. Defaults to {@link #MODE_3D}. */
+    /**
+     * The pipeline currently in effect. Defaults to {@link #MODE_3D}.
+     *
+     * @return the active mode; never {@code null}
+     */
     public static RenderMode active() { return active; }
 
     /**
      * Selects the pipeline. Call before the engine loop starts — systems read this every
      * frame and do not expect it to change underneath them.
+     *
+     * @param mode the pipeline to use; {@code null} is ignored
      */
     public static void setActive(RenderMode mode) {
         if (mode != null) active = mode;
     }
 
-    /** Convenience for the common branch. */
+    /**
+     * Convenience for the common branch.
+     *
+     * @return {@code true} when the active mode is {@link #MODE_2D}
+     */
     public static boolean is2D() { return active == MODE_2D; }
 }

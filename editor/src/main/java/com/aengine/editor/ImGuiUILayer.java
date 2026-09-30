@@ -20,6 +20,14 @@ public final class ImGuiUILayer implements UILayer {
      */
     private Runnable afterImGui = null;
 
+    /** Creates the layer; ImGui itself starts in {@link #init(long)}. */
+    public ImGuiUILayer() {}
+
+    /**
+     * Sets what runs right after ImGui has drawn each frame — the Aegis scaffolding pass.
+     *
+     * @param hook the code to run, or {@code null} for nothing
+     */
     public void setAfterImGui(Runnable hook) { this.afterImGui = hook; }
 
     @Override public void init(long windowHandle) { DebugOverlay.init(windowHandle); }

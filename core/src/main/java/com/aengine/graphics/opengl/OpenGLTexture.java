@@ -16,6 +16,24 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * OpenGL implementation of {@link TextureAPI} for project image files, loaded in the
+ * background. Obtain one through {@link com.aengine.graphics.AssetManager#getTexture(String)}.
+ *
+ * <p>Loading happens in three stages:</p>
+ * <ol>
+ *   <li>The constructor, on the GL thread, reserves the texture name and queues the file.</li>
+ *   <li>A worker thread reads the file and decodes it to RGBA pixels in native memory:
+ *       {@code .atex} files are used as stored; other formats go through stb_image,
+ *       flipped so the first row is the bottom one.</li>
+ *   <li>The first {@link #bind(int)} after decoding uploads the pixels, builds mipmaps and
+ *       frees the native memory.</li>
+ * </ol>
+ *
+ * <p>Until the upload, {@code bind} does nothing and the size reads as 1x1. A file that is
+ * missing or cannot be decoded is logged and the texture stays in that state. Sampling is
+ * nearest-neighbour (crisp pixels) and the texture repeats outside 0..1.</p>
+ */
 public class OpenGLTexture implements TextureAPI {
 
     /*
@@ -49,6 +67,13 @@ public class OpenGLTexture implements TextureAPI {
     private volatile boolean isNativeAllocation = false;
     private volatile ByteBuffer originalNativeBuffer = null;
 
+    /**
+     * Reserves the texture on the GPU and queues the file for background loading.
+     * Must be called on the GL thread.
+     *
+     * @param virtualPath virtual path of the image, resolved through
+     *                    {@link com.aengine.utils.FileSystem#resolve(String)}
+     */
     public OpenGLTexture(String virtualPath) {
         Logger.debug(Logger.System.ASSET, "Queuing async texture stream: %s", virtualPath);
 
@@ -199,8 +224,13 @@ public class OpenGLTexture implements TextureAPI {
     }
 
     /**
-     * Re-submits the pipeline payload to the Thread Pool. 
+     * Re-submits the pipeline payload to the Thread Pool.
      * The Main Thread will automatically catch the STATE_DECODED flag and overwrite the VRAM block.
+     *
+     * <p>Ignored while a load is already running. Until the new pixels are uploaded, the
+     * texture binds nothing, so it briefly disappears rather than showing the old image.</p>
+     *
+     * @param virtualPath virtual path to load from; normally the one the texture was created with
      */
     public void reload(String virtualPath) {
         if (uploadState.get() == STATE_LOADING) return; // Prevent race conditions from duplicate saves in the image editor

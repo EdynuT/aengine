@@ -10,6 +10,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.lwjgl.system.MemoryUtil;
 
+/**
+ * The engine's virtual file system: turns project-relative "virtual paths" into files,
+ * and refuses anything outside the mounted project.
+ *
+ * <p>A virtual path is either {@code "assets://..."}, resolved under the project's
+ * {@code assets} folder, or a plain relative path, resolved under the project root. Both
+ * are normalised, and a path that would escape the project (through {@code ..} or by being
+ * absolute) throws {@link SecurityException}.</p>
+ *
+ * <p>{@link #mountProject(String)} must run before anything is resolved.</p>
+ */
 public final class FileSystem {
 
     private static Path projectRootPath = null;
@@ -18,7 +29,10 @@ public final class FileSystem {
 
     /**
      * Mounts the absolute game project directory context into the Virtual File System.
+     * Mounting again replaces the previous project.
+     *
      * @param absolutePath The physical root directory of the game project.
+     * @throws IllegalArgumentException if the path is not an existing directory
      */
     public static void mountProject(String absolutePath) {
         File root = new File(absolutePath);
@@ -33,7 +47,12 @@ public final class FileSystem {
 
     /**
      * Resolves an engine virtual path (e.g., "assets://textures/wall.png") into a normalized,
-     * sandboxed java.io.File handle.
+     * sandboxed java.io.File handle. The file is not required to exist.
+     *
+     * @param virtualPath the path to resolve; surrounding spaces are ignored
+     * @return the file inside the project
+     * @throws IllegalStateException if no project is mounted
+     * @throws SecurityException     if the path points outside the project
      */
     public static File resolve(String virtualPath) {
         if (projectRootPath == null) {
@@ -63,7 +82,14 @@ public final class FileSystem {
     /**
      * Reads a virtual file straight into an unmanaged, raw native ByteBuffer.
      * Highly optimized for direct I/O transfers to hardware drivers (LWJGL/OpenGL/Vulkan).
-     * * NOTE: Memory allocated here must be manually freed via MemoryUtil.memFree() once done.
+     *
+     * <p>NOTE: Memory allocated here must be manually freed via {@code MemoryUtil.memFree()}
+     * once done.</p>
+     *
+     * @param virtualPath the file to read
+     * @param bufferSize  ignored; the buffer is always sized to the whole file
+     * @return a native buffer holding the whole file, positioned at 0, in native byte order
+     * @throws IOException if the file is missing or cannot be read
      */
     public static ByteBuffer ioResourceToBuffer(String virtualPath, int bufferSize) throws IOException {
         File file = resolve(virtualPath);
@@ -88,6 +114,11 @@ public final class FileSystem {
 
     /**
      * Returns a standard stream handle for basic sequential text processing (e.g., Shader source parsing).
+     * The caller must close it.
+     *
+     * @param virtualPath the file to open
+     * @return an open stream at the start of the file
+     * @throws IOException if the file is missing or cannot be opened
      */
     public static InputStream openStream(String virtualPath) throws IOException {
         File file = resolve(virtualPath);

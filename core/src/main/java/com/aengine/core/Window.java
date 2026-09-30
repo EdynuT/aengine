@@ -10,6 +10,14 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
+/**
+ * The engine's single native window and its OpenGL context, through GLFW.
+ *
+ * <p>{@link #init()} opens the window maximised on the largest monitor, creates an OpenGL
+ * 3.3 core context, makes it current on the calling thread, which from then on is the GL
+ * thread, and turns on v-sync. The window is resizable; its size is tracked in
+ * framebuffer pixels.</p>
+ */
 public class Window {
 
     private final String title;
@@ -17,10 +25,22 @@ public class Window {
     private int    height;
     private long   handle;
 
+    /**
+     * Creates the window object. Nothing native is opened until {@link #init()}.
+     *
+     * @param title text for the window's title bar
+     */
     public Window(String title) {
         this.title  = title;
     }
 
+    /**
+     * Initialises GLFW, opens the window, creates the OpenGL context and records the GPU's
+     * capabilities. GLFW errors are sent to the log from here on.
+     *
+     * @throws IllegalStateException if GLFW cannot be initialised
+     * @throws RuntimeException      if the window or its context cannot be created
+     */
     public void init() {
         Logger.info(Logger.System.WINDOW, "Redirecting GLFW error pipeline to internal logging engine...");
         glfwSetErrorCallback((errorCode, description) -> 
@@ -119,9 +139,7 @@ public class Window {
         Logger.debug(Logger.System.WINDOW, "Mapping window frame buffer to physical display.");
         glfwShowWindow(handle);
         org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(handle);
-        // DISABLE V-SYNC FOR UNLIMITED FPS RENDERING
-        // 0 = No fps limit
-        // 1 = Locked to monitor's refresh rate
+        // V-SYNC: 0 = no fps limit, 1 = locked to the monitor's refresh rate (current)
         org.lwjgl.glfw.GLFW.glfwSwapInterval(1);
         org.lwjgl.glfw.GLFW.glfwShowWindow(handle);
 
@@ -140,10 +158,16 @@ public class Window {
         Logger.info(Logger.System.WINDOW, "Framebuffer: %dx%d", width, height);
     }
 
+    /** Shows the frame just drawn. With v-sync on, waits for the monitor's next refresh. */
     public void swapBuffers() { 
         glfwSwapBuffers(handle); 
     }
     
+    /**
+     * Tells whether the user asked to close the window, e.g. with its close button.
+     *
+     * @return {@code true} once a close was requested
+     */
     public boolean shouldClose() {
         return glfwWindowShouldClose(handle);
     }
@@ -154,17 +178,27 @@ public class Window {
      * <p>Allocates the {@code String} GLFW hands back, so it belongs on a paste, not in every
      * frame. Whatever is returned came from outside the engine: it is untrusted text, to be
      * filtered by whoever takes it in.</p>
+     *
+     * @return the clipboard text, never {@code null}
      */
     public String clipboard() {
         String text = glfwGetClipboardString(handle);
         return text != null ? text : "";
     }
 
-    /** Puts text on the system clipboard — what copy and cut do. */
+    /**
+     * Puts text on the system clipboard — what copy and cut do.
+     *
+     * @param text the text to copy
+     */
     public void setClipboard(CharSequence text) {
         glfwSetClipboardString(handle, text);
     }
 
+    /**
+     * Destroys the window and shuts GLFW down. Call last, after everything that uses the
+     * OpenGL context has been released.
+     */
     public void cleanup() {
         Logger.info(Logger.System.WINDOW, "Destroying graphics context and releasing native display allocations...");
         if (handle != NULL) {
@@ -175,8 +209,31 @@ public class Window {
         Logger.info(Logger.System.WINDOW, "GLFW lifecycle terminated successfully.");
     }
 
+    /**
+     * Returns the native GLFW handle, for APIs that take one.
+     *
+     * @return the window handle; 0 before {@link #init()}
+     */
     public long   getHandle() { return handle; }
+
+    /**
+     * Returns the width of the drawable area.
+     *
+     * @return width in framebuffer pixels, updated on every resize
+     */
     public int    getWidth()  { return width; }
+
+    /**
+     * Returns the height of the drawable area.
+     *
+     * @return height in framebuffer pixels, updated on every resize
+     */
     public int    getHeight() { return height; }
+
+    /**
+     * Returns the title the window was created with.
+     *
+     * @return the title
+     */
     public String getTitle()  { return title; }
 }

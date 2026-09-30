@@ -9,7 +9,26 @@ import com.aengine.graphics.AssetManager;
 
 import static org.lwjgl.openal.AL10.*;
 
+/**
+ * Drives OpenAL from the ECS once per frame.
+ *
+ * <ol>
+ *   <li>Moves the listener (the "ears") to the position of the first primary camera that
+ *       has a {@link TransformComponent}. Orientation is not sent yet, so left and right
+ *       do not follow the camera's rotation.</li>
+ *   <li>For every entity with a {@link TransformComponent} and an
+ *       {@link AudioSourceComponent}: on the first frame, loads the audio buffer, creates
+ *       the source, applies the acoustic properties and starts it if
+ *       {@code playOnAwake}; on every frame, moves the source to the transform's position.</li>
+ * </ol>
+ *
+ * <p>Requires {@link com.aengine.audio.AudioDevice#init()} to have run, and must be
+ * updated on the thread that owns the OpenAL context.</p>
+ */
 public final class AudioSystem extends System {
+
+    /** Creates the system; it keeps no state between frames. */
+    public AudioSystem() {}
 
     @Override
     public void update(Registry registry, float deltaTime) {

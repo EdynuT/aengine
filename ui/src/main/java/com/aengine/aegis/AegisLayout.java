@@ -137,6 +137,8 @@ public final class AegisLayout {
     private int solveSkips;
 
     /**
+     * Creates an empty layout.
+     *
      * @param capacity the most nodes this layout will ever hold, allocated now so that
      *                 building and solving never allocate
      */
@@ -199,6 +201,10 @@ public final class AegisLayout {
      * The size a node asks for, in pixels.
      *
      * <p>A root does not need one: it takes the rectangle {@link #solve} hands it.</p>
+     *
+     * @param node   the handle
+     * @param width  width asked for
+     * @param height height asked for
      */
     public void setSize(int node, float width, float height) {
         if (requestedWidth[node] == width && requestedHeight[node] == height) return;
@@ -207,14 +213,24 @@ public final class AegisLayout {
         version++;
     }
 
-    /** Space kept clear inside a row or column's edges, on all four sides, in pixels. */
+    /**
+     * Space kept clear inside a row or column's edges, on all four sides, in pixels.
+     *
+     * @param node   the row or column
+     * @param pixels the padding
+     */
     public void setPadding(int node, float pixels) {
         if (padding[node] == pixels) return;
         padding[node] = pixels;
         version++;
     }
 
-    /** Space between one child and the next, in pixels. Not added before the first or after the last. */
+    /**
+     * Space between one child and the next, in pixels. Not added before the first or after the last.
+     *
+     * @param node   the row or column
+     * @param pixels the gap
+     */
     public void setGap(int node, float pixels) {
         if (gap[node] == pixels) return;
         gap[node] = pixels;
@@ -232,6 +248,9 @@ public final class AegisLayout {
      * <p>0, the default, means the node keeps exactly the size it asked for. When the children
      * already need more than the row has, there is no spare space and nothing grows; fixed
      * children then run past the end, since shrinking them is not part of this step.</p>
+     *
+     * @param node   the child
+     * @param factor its share; 0 to keep its own size
      */
     public void setGrow(int node, float factor) {
         if (grow[node] == factor) return;
@@ -250,6 +269,8 @@ public final class AegisLayout {
      * <p>In a <strong>column</strong> each child is placed on its own: against the left, in the
      * middle, against the right, or stretched to the column's full width.</p>
      *
+     * @param node the row or column
+     * @param how  the alignment
      * @throws IllegalArgumentException for {@code STRETCH} on a row
      */
     public void setAlignX(int node, Align how) {
@@ -275,6 +296,8 @@ public final class AegisLayout {
      * middle, against the bottom, or stretched to the row's full height — which is what lets a
      * pane fill a row without knowing how tall the row is.</p>
      *
+     * @param node the row or column
+     * @param how  the alignment
      * @throws IllegalArgumentException for {@code STRETCH} on a column
      */
     public void setAlignY(int node, Align how) {
@@ -299,6 +322,7 @@ public final class AegisLayout {
      * <p>That makes ids part of the contract with theme authors. Renaming one silently drops
      * every theme rule that named it; do it as deliberately as renaming a public method.</p>
      *
+     * @param node the handle
      * @param name letters, digits and underscores, starting with a letter — no dots, since a
      *             dot is what separates the parts of a path
      * @throws IllegalArgumentException for a name that could not appear in a path
@@ -312,10 +336,20 @@ public final class AegisLayout {
         id[node] = name;
     }
 
-    /** A node's id, or {@code null} if it was not given one. */
+    /**
+     * A node's id, or {@code null} if it was not given one.
+     *
+     * @param node the handle
+     * @return the id, or {@code null}
+     */
     public String id(int node) { return id[node]; }
 
-    /** Whether a name is usable as an id: a letter, then letters, digits or underscores. */
+    /**
+     * Whether a name is usable as an id: a letter, then letters, digits or underscores.
+     *
+     * @param name the candidate
+     * @return {@code true} if {@link #setId} would accept it
+     */
     public static boolean isValidId(String name) {
         if (name == null || name.isEmpty() || !Character.isLetter(name.charAt(0))) return false;
         for (int i = 1; i < name.length(); i++) {
@@ -335,19 +369,43 @@ public final class AegisLayout {
         version++;
     }
 
-    /** How many nodes the tree holds. */
+    /**
+     * How many nodes the tree holds.
+     *
+     * @return the count; handles run from 0 to this, exclusive
+     */
     public int nodeCount() { return count; }
 
-    /** The node this one was added to, or {@link #NONE} for a root. */
+    /**
+     * The node this one was added to, or {@link #NONE} for a root.
+     *
+     * @param node the handle
+     * @return the parent's handle
+     */
     public int parent(int node) { return parent[node]; }
 
-    /** A node's first child, or {@link #NONE} if it has none. */
+    /**
+     * A node's first child, or {@link #NONE} if it has none.
+     *
+     * @param node the handle
+     * @return the child's handle
+     */
     public int firstChild(int node) { return firstChild[node]; }
 
-    /** A node's last child, or {@link #NONE} if it has none. */
+    /**
+     * A node's last child, or {@link #NONE} if it has none.
+     *
+     * @param node the handle
+     * @return the child's handle
+     */
     public int lastChild(int node) { return lastChild[node]; }
 
-    /** The child added to the same parent after this one, or {@link #NONE} if it was the last. */
+    /**
+     * The child added to the same parent after this one, or {@link #NONE} if it was the last.
+     *
+     * @param node the handle
+     * @return the sibling's handle
+     */
     public int nextSibling(int node) { return nextSibling[node]; }
 
     // -----------------------------------------------------------------------------------
@@ -369,6 +427,12 @@ public final class AegisLayout {
      * worth its complexity only once widgets change on their own, which is L4's business.</p>
      *
      * <p>It writes into arrays that already exist and allocates nothing.</p>
+     *
+     * @param root   the node to place, usually a root
+     * @param x      left edge of the space it is given
+     * @param y      top edge
+     * @param width  width of the space
+     * @param height height of the space
      */
     public void solve(int root, float x, float y, float width, float height) {
         if (solvedVersion[root] == version
@@ -388,22 +452,48 @@ public final class AegisLayout {
      * <p>The number that makes the cache visible, as in the text layout cache: it climbs while
      * the tree or the window is changing and stops climbing once they are not. A steady-state
      * frame that still increments it is a cache that is not working.</p>
+     *
+     * @return the count since the layout was created
      */
     public int solves() { return solves; }
 
-    /** How many solves were skipped because nothing could have moved. */
+    /**
+     * How many solves were skipped because nothing could have moved.
+     *
+     * @return the count since the layout was created
+     */
     public int solveSkips() { return solveSkips; }
 
-    /** Left edge of a node after the last solve, in pixels. */
+    /**
+     * Left edge of a node after the last solve, in pixels.
+     *
+     * @param node the handle
+     * @return the x
+     */
     public float x(int node)      { return solvedX[node]; }
 
-    /** Top edge of a node after the last solve, in pixels. */
+    /**
+     * Top edge of a node after the last solve, in pixels.
+     *
+     * @param node the handle
+     * @return the y
+     */
     public float y(int node)      { return solvedY[node]; }
 
-    /** Width of a node after the last solve, in pixels. */
+    /**
+     * Width of a node after the last solve, in pixels.
+     *
+     * @param node the handle
+     * @return the width
+     */
     public float width(int node)  { return solvedWidth[node]; }
 
-    /** Height of a node after the last solve, in pixels. */
+    /**
+     * Height of a node after the last solve, in pixels.
+     *
+     * @param node the handle
+     * @return the height
+     */
     public float height(int node) { return solvedHeight[node]; }
 
     // -----------------------------------------------------------------------------------
@@ -425,6 +515,11 @@ public final class AegisLayout {
      * <p>Reads the rectangles, so it answers for the layout as last solved. Called after this
      * frame's solve, that is this frame; called before, it is the previous frame's, which is
      * one frame late and not visible. It allocates nothing.</p>
+     *
+     * @param root the tree to search
+     * @param px   point x, in the pixels the layout was solved in
+     * @param py   point y
+     * @return the deepest node containing the point, or {@link #NONE}
      */
     public int nodeAt(int root, float px, float py) {
         if (!contains(root, px, py)) return NONE;

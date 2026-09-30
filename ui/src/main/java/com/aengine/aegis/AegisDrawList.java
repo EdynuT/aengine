@@ -127,6 +127,12 @@ public final class AegisDrawList {
 
     private static final int MAX_WRAPPED_LINES = 256;
 
+    /**
+     * Reserves storage for one frame's geometry.
+     *
+     * @param maxQuads shapes per frame; one visible character is one shape. Shapes past this
+     *                 are silently dropped, so size it with room to spare
+     */
     public AegisDrawList(int maxQuads) {
         this.maxQuads = maxQuads;
         this.vertices = new int[maxQuads * VERTICES_PER_QUAD * WORDS_PER_VERTEX];
@@ -176,7 +182,13 @@ public final class AegisDrawList {
      * Restricts subsequent shapes to a rectangle, intersected with the clip already in
      * effect — a child panel can never draw outside its parent, however it is positioned.
      *
-     * <p>Coordinates are in pixels, origin top-left.</p>
+     * <p>Coordinates are in pixels, origin top-left. Every push needs a matching
+     * {@link #popClipRect}. Clips nest up to 32 deep; a push beyond that is ignored.</p>
+     *
+     * @param x      left edge
+     * @param y      top edge
+     * @param width  width
+     * @param height height
      */
     public void pushClipRect(float x, float y, float width, float height) {
         if (clipDepth >= MAX_CLIP_DEPTH) return;
@@ -250,7 +262,10 @@ public final class AegisDrawList {
      * @param width   width in pixels
      * @param height  height in pixels
      * @param radius  corner radius in pixels; clamped to half the shorter side
-     * @param r,g,b,a colour, straight alpha, components in 0..1
+     * @param r       red, 0..1
+     * @param g       green, 0..1
+     * @param b       blue, 0..1
+     * @param a       alpha, 0..1, straight (not premultiplied)
      */
     public void addRoundedRect(float x, float y, float width, float height, float radius,
                                float r, float g, float b, float a) {
@@ -266,6 +281,19 @@ public final class AegisDrawList {
      * pixel and stays sharp at any corner radius — it follows the curve analytically rather
      * than being a second, slightly smaller shape drawn behind the first.</p>
      *
+     * @param x           left edge in pixels, origin top-left
+     * @param y           top edge in pixels
+     * @param width       width in pixels
+     * @param height      height in pixels
+     * @param radius      corner radius in pixels; clamped to half the shorter side
+     * @param r           fill red, 0..1
+     * @param g           fill green, 0..1
+     * @param b           fill blue, 0..1
+     * @param a           fill alpha, 0..1
+     * @param br          border red, 0..1
+     * @param bg          border green, 0..1
+     * @param bb          border blue, 0..1
+     * @param ba          border alpha, 0..1
      * @param borderWidth thickness in pixels, measured inward from the edge; 0 disables
      */
     public void addRoundedRect(float x, float y, float width, float height, float radius,
@@ -359,8 +387,20 @@ public final class AegisDrawList {
      * origin at the bottom-left, so presenting one upright means passing {@code v0 = 1} and
      * {@code v1 = 0}.</p>
      *
+     * @param x             left edge in pixels, origin top-left
+     * @param y             top edge in pixels
+     * @param width         width in pixels
+     * @param height        height in pixels
+     * @param u0            texture U at the left edge
+     * @param v0            texture V at the top edge
+     * @param u1            texture U at the right edge
+     * @param v1            texture V at the bottom edge
      * @param textureHandle backend texture handle
-     * @param r,g,b,a       tint multiplied over the sample; use white for the image as-is
+     * @param r             tint red, 0..1 — the tint is multiplied over the sample; use
+     *                      white for the image as-is
+     * @param g             tint green, 0..1
+     * @param b             tint blue, 0..1
+     * @param a             tint alpha, 0..1
      */
     public void addTexturedQuad(float x, float y, float width, float height,
                                 float u0, float v0, float u1, float v1,
@@ -382,6 +422,14 @@ public final class AegisDrawList {
      * a wrapped paragraph all know where the line box starts, not where the baseline falls.
      * The conversion belongs to the font, which is the only thing that knows its ascent.</p>
      *
+     * @param font the font to draw with
+     * @param x    left edge of the first character
+     * @param top  top of the line box
+     * @param text the characters; read, not kept
+     * @param r    red, 0..1
+     * @param g    green, 0..1
+     * @param b    blue, 0..1
+     * @param a    alpha, 0..1
      * @return the pen position after the last character — the right edge of the line
      */
     public float addTextTop(AegisFont font, float x, float top, CharSequence text,
@@ -405,6 +453,14 @@ public final class AegisDrawList {
      * <p>Stage 1 limits: Latin-1 only, no wrapping, the font's single baked size. A character
      * without a glyph is drawn as {@code ?}.</p>
      *
+     * @param font     the font to draw with
+     * @param x        left edge of the first character
+     * @param baseline y of the baseline
+     * @param text     the characters; read, not kept
+     * @param r        red, 0..1
+     * @param g        green, 0..1
+     * @param b        blue, 0..1
+     * @param a        alpha, 0..1
      * @return the pen position after the last character — the right edge of the line
      */
     public float addText(AegisFont font, float x, float baseline, CharSequence text,
@@ -421,6 +477,18 @@ public final class AegisDrawList {
      * per line per frame is the allocation §9 forbids. It pairs with
      * {@link AegisFont#measure(CharSequence, int, int)}, which measures the same range the
      * same way.</p>
+     *
+     * @param font     the font to draw with
+     * @param x        left edge of the first character drawn
+     * @param baseline y of the baseline
+     * @param text     the characters; read, not kept
+     * @param from     first index to draw, inclusive
+     * @param to       last index to draw, exclusive
+     * @param r        red, 0..1
+     * @param g        green, 0..1
+     * @param b        blue, 0..1
+     * @param a        alpha, 0..1
+     * @return the pen position after the last character drawn
      */
     public float addText(AegisFont font, float x, float baseline, CharSequence text,
                          int from, int to,
@@ -469,6 +537,15 @@ public final class AegisDrawList {
      * too many lines — is wrapped straight into this list's own buffers instead, which is why
      * they still exist.</p>
      *
+     * @param font     the font to draw with
+     * @param x        left edge of every line
+     * @param top      top of the first line box
+     * @param maxWidth widest a line may be, in pixels
+     * @param text     the paragraph; read, not kept
+     * @param r        red, 0..1
+     * @param g        green, 0..1
+     * @param b        blue, 0..1
+     * @param a        alpha, 0..1
      * @return the y below the last line — where the next thing can start
      */
     public float addTextWrapped(AegisFont font, float x, float top, float maxWidth,
@@ -528,6 +605,11 @@ public final class AegisDrawList {
     int[] vertices()        { return vertices; }
     int[] indices()         { return indices; }
     int   vertexWords()     { return vertexWordCount; }
+    /**
+     * How many indices the frame has so far; 0 means nothing to draw.
+     *
+     * @return the index count
+     */
     public int indexCount() { return indexCount; }
 
     // Command accessors, read by AegisRenderer while issuing the frame.

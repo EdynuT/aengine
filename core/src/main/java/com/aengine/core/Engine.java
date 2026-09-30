@@ -11,6 +11,24 @@ import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
 import static org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT;
 import static org.lwjgl.opengl.GL11.glClear;
 
+/**
+ * The engine's main loop, for a host application to extend.
+ *
+ * <p>A host subclasses this, fills in the {@code on...} callbacks and calls {@link #run()},
+ * which owns the thread until the window closes. Each frame, in order:</p>
+ * <ol>
+ *   <li>input is collected ({@link Input#poll()}, {@link Input#update()});</li>
+ *   <li>the scene FrameBuffer is resized to the UI's viewport, if the UI reports one;</li>
+ *   <li>{@link #onUpdate(float)} runs;</li>
+ *   <li>{@link #onRender()} draws the scene into the FrameBuffer;</li>
+ *   <li>the window is cleared and the UI frame is built around
+ *       {@link #onDebugRender(int)}, which presents the scene texture;</li>
+ *   <li>the frame is shown.</li>
+ * </ol>
+ *
+ * <p>Steps 3 to 5 run only in {@link EngineState#EDITOR}, the default. Everything runs on
+ * the thread that called {@code run()}, which is the GL thread.</p>
+ */
 public abstract class Engine {
 
     private final Window window;
@@ -26,6 +44,7 @@ public abstract class Engine {
      */
     private final Runnable viewportContextMenu = this::onViewportContextMenu;
 
+    /** The ECS world, created with the engine; also available through {@link #getRegistry()}. */
     protected final Registry registry; 
 
     private Path targetClassPath;
@@ -34,9 +53,20 @@ public abstract class Engine {
     private long lastReloadCheckTime = 0;
     private static final long CHECK_INTERVAL_MS = 1000;
 
-    public enum EngineState { LAUNCHER, EDITOR }
+    /** What the main loop does each frame. */
+    public enum EngineState {
+        /** Only clears the window: no update, no scene, no UI. Not used by the editor today. */
+        LAUNCHER,
+        /** Runs the full frame: update, scene render and UI. The default. */
+        EDITOR
+    }
     private EngineState currentState = EngineState.EDITOR; // Instantiating as EDITOR for standalone fallback execution
 
+    /**
+     * Creates the engine with an empty ECS registry. The window opens later, in {@link #run()}.
+     *
+     * @param title the window title
+     */
     public Engine(String title) {
         this.window = new Window(title);
         this.registry = new Registry(); 
@@ -46,11 +76,23 @@ public abstract class Engine {
      * Installs the interface implementation. Must be called before {@link #run()}, since
      * the layer is initialised during engine startup. Passing {@code null} restores
      * {@link UILayer#NONE}.
+     *
+     * @param layer the interface to drive, or {@code null} for none
      */
     public final void setUILayer(UILayer layer) {
         this.ui = (layer != null) ? layer : UILayer.NONE;
     }
 
+    /**
+     * Points game-code hot reload at a compiled class. The engine then checks the class
+     * file's modification time once a second.
+     *
+     * <p>The reload itself is not implemented yet: a change is detected and logged, and
+     * nothing is reloaded. The editor does not call this.</p>
+     *
+     * @param buildDirectory          directory holding the compiled classes
+     * @param fullyQualifiedClassName the game class to watch, e.g. {@code "game.MyGame"}
+     */
     public final void configureHotReload(String buildDirectory, String fullyQualifiedClassName) {
         this.gameClassName = fullyQualifiedClassName;
         this.targetClassPath = Paths.get(buildDirectory).resolve(fullyQualifiedClassName.replace('.', '/') + ".class");
@@ -67,6 +109,11 @@ public abstract class Engine {
         }
     }
 
+    /**
+     * Opens the window, runs {@link #onInit()}, then loops until the window is closed or
+     * {@link #stop()} is called, and finally releases everything, even when an exception
+     * ends the loop. Blocks the calling thread for the lifetime of the engine.
+     */
     public final void run() {
         try {
             init();
@@ -186,13 +233,49 @@ public abstract class Engine {
         Logger.info(Logger.System.CORE, "Engine lifecycle shutdown complete.");
     }
 
+    /**
+     * Asks the loop to end after the current frame. Safe to call from any thread.
+     */
     public final void stop() { running = false; }
+
+    /**
+     * Returns the engine's window.
+     *
+     * @return the window; opened only once {@link #run()} has started
+     */
     public Window getWindow() { return window; }
+
+    /**
+     * Returns the ECS world the engine was created with.
+     *
+     * @return the registry; the same instance for the engine's lifetime
+     */
     public Registry getRegistry() { return registry; }
+
+    /**
+     * Switches what the loop does from the next frame on.
+     *
+     * @param state the new state
+     */
     public void setEngineState(EngineState state) { this.currentState = state; }
 
+    /**
+     * Called once, after the window, input, UI layer and scene FrameBuffer exist and before
+     * the first frame. Load the scene and start subsystems here.
+     */
     protected abstract void onInit();
+
+    /**
+     * Called once per frame, before rendering, in {@link EngineState#EDITOR}.
+     *
+     * @param deltaTime seconds since the previous frame
+     */
     protected abstract void onUpdate(float deltaTime);
+
+    /**
+     * Called once per frame to draw the scene. The scene FrameBuffer is bound and cleared,
+     * and the viewport covers it.
+     */
     protected abstract void onRender();
 
     /**
@@ -221,5 +304,9 @@ public abstract class Engine {
      */
     protected void onViewportContextMenu() {}
 
+    /**
+     * Called once when the loop ends, before the UI layer, the FrameBuffer and the window
+     * are released. Free what {@link #onInit()} created.
+     */
     protected abstract void onCleanup();
 }

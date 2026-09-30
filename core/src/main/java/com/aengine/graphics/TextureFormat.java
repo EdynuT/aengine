@@ -19,6 +19,7 @@ public enum TextureFormat {
     /** Bytes per pixel. */
     public final int bytesPerPixel;
 
+    /** @param bytesPerPixel bytes one pixel takes in the source buffer */
     TextureFormat(int bytesPerPixel) {
         this.bytesPerPixel = bytesPerPixel;
     }

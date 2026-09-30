@@ -12,7 +12,14 @@ import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL15.*;
 
+/**
+ * OpenGL implementation of {@link RendererAPI}. Obtain it through
+ * {@link com.aengine.graphics.RenderContext#createRenderer()} rather than directly.
+ */
 public class OpenGLRenderer implements RendererAPI {
+
+    /** Creates the renderer; nothing touches the GPU until {@link #init()}. */
+    public OpenGLRenderer() {}
 
     private OpenGLVAO quadVAO;
     private OpenGLVBO quadVBO;

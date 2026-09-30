@@ -28,6 +28,9 @@ public final class OpenGLDynamicMesh implements DynamicMeshAPI {
     private final IntBuffer indexStaging;
 
     /**
+     * Reserves GPU storage and off-heap staging for the given capacities, and declares the
+     * attribute layout. Must be called on the GL thread.
+     *
      * @param maxVertexWords total capacity of the vertex buffer, in 4-byte words
      * @param maxIndices     total index capacity
      * @param layout         the attributes of one vertex, in location order —

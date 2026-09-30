@@ -84,6 +84,14 @@ public class Input {
 
     private Input() {}
 
+    /**
+     * Installs the key, character, mouse-button, scroll and cursor callbacks on the window.
+     * Call once, after the window exists and before any UI layer installs its own callbacks
+     * (see {@link UILayer#init(long)}), since those chain onto these. Also decides whether
+     * key repeat is generated here (Wayland) or taken from the operating system.
+     *
+     * @param windowHandle the GLFW window handle
+     */
     public static void init(long windowHandle) {
         activeWindowHandle = windowHandle;
 
@@ -162,7 +170,8 @@ public class Input {
 
     /**
      * Updates frame-by-frame delta accumulation for smooth mouse look logic.
-     * Must be called exactly once at the beginning of the engine frame updates sequence.
+     * Must be called exactly once at the beginning of the engine frame updates sequence,
+     * after {@link #poll()}, so the delta covers this frame's movement.
      */
     public static void update() {
         if (firstMouseInput) {
@@ -223,39 +232,73 @@ public class Input {
 
     // ── Event queue ──────────────────────────────────────────────────────────
 
-    /** How many events arrived this frame. Read them with indices 0 to this, exclusive. */
+    /**
+     * How many events arrived this frame. Read them with indices 0 to this, exclusive.
+     *
+     * @return the number of events in the queue
+     */
     public static int eventCount() { return eventCount; }
 
-    /** What the event at {@code i} records. */
+    /**
+     * What the event at {@code i} records.
+     *
+     * @param i event index, from 0 to {@link #eventCount()} - 1
+     * @return the event's type
+     */
     public static EventType eventType(int i) { return eventType[i]; }
 
     /**
      * The event's key or mouse button (compare with {@link Keys}), or for {@link EventType#CHAR}
-     * the Unicode code point of the character typed.
+     * the Unicode code point of the character typed. Always 0 for {@link EventType#SCROLL}.
+     *
+     * @param i event index, from 0 to {@link #eventCount()} - 1
+     * @return the key, button or code point
      */
     public static int eventCode(int i) { return eventCode[i]; }
 
     /**
      * Modifiers held when a key or mouse event happened, as bits: test with
      * {@code (eventMods(i) & Keys.MOD_SHIFT) != 0}. Always 0 for characters and scrolling.
+     *
+     * @param i event index, from 0 to {@link #eventCount()} - 1
+     * @return the modifier bits
      */
     public static int eventMods(int i) { return eventMods[i]; }
 
-    /** How far the wheel turned sideways, for {@link EventType#SCROLL}. */
+    /**
+     * How far the wheel turned sideways, for {@link EventType#SCROLL}.
+     *
+     * @param i event index, from 0 to {@link #eventCount()} - 1
+     * @return the horizontal offset in wheel steps; 0 for other event types
+     */
     public static float eventScrollX(int i) { return eventScrollX[i]; }
 
-    /** How far the wheel turned, for {@link EventType#SCROLL}. Positive is away from the user. */
+    /**
+     * How far the wheel turned, for {@link EventType#SCROLL}. Positive is away from the user.
+     *
+     * @param i event index, from 0 to {@link #eventCount()} - 1
+     * @return the vertical offset in wheel steps (a notch is usually 1); 0 for other event types
+     */
     public static float eventScrollY(int i) { return eventScrollY[i]; }
 
     /**
      * Events lost because a frame brought more than {@value #EVENT_CAPACITY}. Zero in normal use;
      * a number that climbs means the capacity is too small, not that input is broken.
+     *
+     * @return the total dropped since startup
      */
     public static int droppedEvents() { return droppedEvents; }
 
     /**
      * Caps mouse rendering context and binds cursor focus to the native window center.
      * Essential tool to avoid window edge collisions when managing 3D First-Person scenes.
+     *
+     * <p>While grabbed, the cursor is hidden and the mouse position keeps counting past the
+     * window edges, so read movement from {@link #getMouseDeltaX()} and
+     * {@link #getMouseDeltaY()}. Not used by the editor, whose camera manages the cursor
+     * itself.</p>
+     *
+     * @param grabbed {@code true} to hide and capture the cursor, {@code false} to release it
      */
     public static void setCursorMode(boolean grabbed) {
         if (grabbed) {
@@ -266,15 +309,56 @@ public class Input {
         }
     }
 
+    /**
+     * Returns the cursor's horizontal position, measured from the left edge of the window's
+     * content area. The units are GLFW screen coordinates, which on a scaled display may
+     * differ from framebuffer pixels.
+     *
+     * @return the cursor X
+     */
     public static double  getMouseX()      { return mouseX; }
+
+    /**
+     * Returns the cursor's vertical position, measured down from the top edge of the
+     * window's content area, in the same units as {@link #getMouseX()}.
+     *
+     * @return the cursor Y
+     */
     public static double  getMouseY()      { return mouseY; }
+
+    /**
+     * Returns how far the cursor moved horizontally between the last two
+     * {@link #update()} calls.
+     *
+     * @return the movement; positive is to the right
+     */
     public static double  getMouseDeltaX() { return mouseDeltaX; }
+
+    /**
+     * Returns how far the cursor moved vertically between the last two {@link #update()} calls.
+     *
+     * @return the movement; positive is downwards
+     */
     public static double  getMouseDeltaY() { return mouseDeltaY; }
 
+    /**
+     * Tells whether a key is held down right now. A key pressed and released between two
+     * frames is never seen here; use the event queue for that.
+     *
+     * @param keyCode a key from {@link Keys}; out-of-range values return {@code false}
+     * @return {@code true} while the key is down
+     */
     public static boolean isKeyPressed(int keyCode) {
         return keyCode >= 0 && keyCode <= GLFW_KEY_LAST && keys[keyCode];
     }
 
+    /**
+     * Tells whether a mouse button is held down right now.
+     *
+     * @param button a button from {@link Keys} ({@code MOUSE_LEFT} and so on); out-of-range
+     *               values return {@code false}
+     * @return {@code true} while the button is down
+     */
     public static boolean isMouseButtonPressed(int button) {
         return button >= 0 && button <= GLFW_MOUSE_BUTTON_LAST && mouseButtons[button];
     }

@@ -23,7 +23,6 @@ import com.aengine.utils.Logger;
  *   <li>{@link #beginFrame()} / widget submissions / {@link #endFrame()} — once per frame</li>
  *   <li>{@link #cleanup()} — before the GLFW window is destroyed</li>
  * </ol>
- * </p>
  *
  * <p>Disable in release/headless builds with: {@code -Dengine.debug=false}</p>
  */
@@ -197,7 +196,13 @@ public final class DebugOverlay {
         ImGui.end();
     }
 
-    /** Backward-compatible overload with no context menu. */
+    /**
+     * Backward-compatible overload with no context menu.
+     *
+     * @param textureID OpenGL texture of the rendered scene
+     * @param winWidth  window width in pixels
+     * @param winHeight window height in pixels
+     */
     public static void renderViewport(int textureID, int winWidth, int winHeight) {
         renderViewport(textureID, winWidth, winHeight, null);
     }
@@ -231,13 +236,25 @@ public final class DebugOverlay {
     // user can close individual panels via the × button.
     // =========================================================================
 
-    /** Returns the open-state handle for the Viewport panel. */
+    /**
+     * Returns the open-state handle for the Viewport panel.
+     *
+     * @return the live flag ImGui toggles when the panel is closed
+     */
     public static ImBoolean showViewport()     { return showViewport;     }
 
-    /** Returns the open-state handle for the Physics Debug panel. */
+    /**
+     * Returns the open-state handle for the Physics Debug panel.
+     *
+     * @return the live flag ImGui toggles when the panel is closed
+     */
     public static ImBoolean showPhysicsPanel() { return showPhysicsPanel; }
 
-    /** Returns the open-state handle for the Engine Stats panel. */
+    /**
+     * Returns the open-state handle for the Engine Stats panel.
+     *
+     * @return the live flag ImGui toggles when the panel is closed
+     */
     public static ImBoolean showEnginePanel()  { return showEnginePanel;  }
 
     // =========================================================================
@@ -246,18 +263,38 @@ public final class DebugOverlay {
     // entity selection via screen-to-world unprojection.
     // =========================================================================
 
-    /** True for exactly one frame when the user left-clicks inside the rendered viewport image. */
+    /**
+     * True for exactly one frame when the user left-clicks inside the rendered viewport image.
+     *
+     * @return whether the viewport was clicked this frame
+     */
     public static boolean wasViewportClicked()  { return viewportLeftClicked; }
 
-    /** NDC X of the last viewport left-click (range −1 … +1). */
+    /**
+     * NDC X of the last viewport left-click (range −1 … +1).
+     *
+     * @return the X in normalised device coordinates, -1 at the left edge
+     */
     public static float getViewportClickNdcX()  { return viewportClickNdcX; }
 
-    /** NDC Y of the last viewport left-click (range −1 … +1). */
+    /**
+     * NDC Y of the last viewport left-click (range −1 … +1).
+     *
+     * @return the Y in normalised device coordinates, -1 at the bottom edge
+     */
     public static float getViewportClickNdcY()  { return viewportClickNdcY; }
 
-    /** Screen-space width  of the rendered viewport image in pixels. */
+    /**
+     * Screen-space width of the rendered viewport image in pixels.
+     *
+     * @return the width, which the engine sizes its scene FrameBuffer to
+     */
     public static float getViewportImageW() { return viewportImageW; }
 
-    /** Screen-space height of the rendered viewport image in pixels. */
+    /**
+     * Screen-space height of the rendered viewport image in pixels.
+     *
+     * @return the height, which the engine sizes its scene FrameBuffer to
+     */
     public static float getViewportImageH() { return viewportImageH; }
 }

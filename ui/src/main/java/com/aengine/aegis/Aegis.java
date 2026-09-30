@@ -61,6 +61,9 @@ public final class Aegis {
     private int viewportHeight;
 
     /**
+     * Creates the renderer, draw list, layout, tree and widgets. No font is loaded yet; call
+     * {@link #loadFont} before drawing text. Must be called on the GL thread.
+     *
      * @param maxQuads shapes per frame, pre-allocated; one visible character is one quad, so
      *                 a screen of text counts for more than it looks
      */
@@ -83,6 +86,7 @@ public final class Aegis {
      * @param pixelHeight  size the glyphs are rasterised at, in pixels
      * @param atlasWidth   atlas width in pixels
      * @param atlasHeight  atlas height in pixels; baking fails loudly if the glyphs do not fit
+     * @return the new font, now the current one
      */
     public AegisFont loadFont(String resourcePath, float pixelHeight,
                               int atlasWidth, int atlasHeight) {
@@ -96,7 +100,12 @@ public final class Aegis {
     // Frame
     // -----------------------------------------------------------------------------------
 
-    /** Starts a frame. Everything submitted after this lands in one draw list. */
+    /**
+     * Starts a frame. Everything submitted after this lands in one draw list.
+     *
+     * @param width  target width in pixels
+     * @param height target height in pixels
+     */
     public void begin(int width, int height) {
         viewportWidth  = width;
         viewportHeight = height;
@@ -119,13 +128,44 @@ public final class Aegis {
     // Shapes
     // -----------------------------------------------------------------------------------
 
-    /** @see AegisDrawList#addRoundedRect(float, float, float, float, float, float, float, float, float) */
+    /**
+     * Draws a rounded rectangle.
+     *
+     * @param x      left edge in pixels, origin top-left
+     * @param y      top edge in pixels
+     * @param width  width in pixels
+     * @param height height in pixels
+     * @param radius corner radius in pixels
+     * @param r      red, 0..1
+     * @param g      green, 0..1
+     * @param b      blue, 0..1
+     * @param a      alpha, 0..1
+     * @see AegisDrawList#addRoundedRect(float, float, float, float, float, float, float, float, float)
+     */
     public void addRoundedRect(float x, float y, float width, float height, float radius,
                                float r, float g, float b, float a) {
         drawList.addRoundedRect(x, y, width, height, radius, r, g, b, a);
     }
 
-    /** @see AegisDrawList#addRoundedRect(float, float, float, float, float, float, float, float, float, float, float, float, float, float) */
+    /**
+     * Draws a rounded rectangle with a border inside its edge.
+     *
+     * @param x           left edge in pixels, origin top-left
+     * @param y           top edge in pixels
+     * @param width       width in pixels
+     * @param height      height in pixels
+     * @param radius      corner radius in pixels
+     * @param r           fill red, 0..1
+     * @param g           fill green, 0..1
+     * @param b           fill blue, 0..1
+     * @param a           fill alpha, 0..1
+     * @param br          border red, 0..1
+     * @param bg          border green, 0..1
+     * @param bb          border blue, 0..1
+     * @param ba          border alpha, 0..1
+     * @param borderWidth border thickness in pixels; 0 for none
+     * @see AegisDrawList#addRoundedRect(float, float, float, float, float, float, float, float, float, float, float, float, float, float)
+     */
     public void addRoundedRect(float x, float y, float width, float height, float radius,
                                float r, float g, float b, float a,
                                float br, float bg, float bb, float ba, float borderWidth) {
@@ -133,7 +173,24 @@ public final class Aegis {
                                 r, g, b, a, br, bg, bb, ba, borderWidth);
     }
 
-    /** @see AegisDrawList#addTexturedQuad */
+    /**
+     * Draws a texture, or part of one.
+     *
+     * @param x             left edge in pixels, origin top-left
+     * @param y             top edge in pixels
+     * @param width         width in pixels
+     * @param height        height in pixels
+     * @param u0            texture U at the left edge
+     * @param v0            texture V at the top edge
+     * @param u1            texture U at the right edge
+     * @param v1            texture V at the bottom edge
+     * @param textureHandle backend texture handle
+     * @param r             tint red, 0..1
+     * @param g             tint green, 0..1
+     * @param b             tint blue, 0..1
+     * @param a             tint alpha, 0..1
+     * @see AegisDrawList#addTexturedQuad
+     */
     public void addTexturedQuad(float x, float y, float width, float height,
                                 float u0, float v0, float u1, float v1,
                                 int textureHandle,
@@ -148,6 +205,13 @@ public final class Aegis {
     /**
      * Draws a line of text in the current font, with the top of its line box at {@code top}.
      *
+     * @param x    left edge of the first character
+     * @param top  top of the line box
+     * @param text the characters; read, not kept
+     * @param r    red, 0..1
+     * @param g    green, 0..1
+     * @param b    blue, 0..1
+     * @param a    alpha, 0..1
      * @return the pen position after the last character — the right edge of the line
      * @see AegisDrawList#addTextTop
      */
@@ -162,6 +226,14 @@ public final class Aegis {
      * <p>{@link #addTextTop} is the usual one; this is for the case where baselines themselves
      * must align, such as two sizes sharing a row.</p>
      *
+     * @param x        left edge of the first character
+     * @param baseline y of the baseline
+     * @param text     the characters; read, not kept
+     * @param r        red, 0..1
+     * @param g        green, 0..1
+     * @param b        blue, 0..1
+     * @param a        alpha, 0..1
+     * @return the pen position after the last character
      * @see AegisDrawList#addText
      */
     public float addText(float x, float baseline, CharSequence text,
@@ -172,6 +244,14 @@ public final class Aegis {
     /**
      * Draws a paragraph broken to fit {@code maxWidth}, in the current font.
      *
+     * @param x        left edge of every line
+     * @param top      top of the first line box
+     * @param maxWidth widest a line may be, in pixels
+     * @param text     the paragraph; read, not kept
+     * @param r        red, 0..1
+     * @param g        green, 0..1
+     * @param b        blue, 0..1
+     * @param a        alpha, 0..1
      * @return the y below the last line — where the next thing can start
      * @see AegisDrawList#addTextWrapped
      */
@@ -185,34 +265,67 @@ public final class Aegis {
      *
      * <p>Answered from the layout cache, so asking in order to size a panel and then drawing
      * the paragraph into it costs one wrap between them, not two.</p>
+     *
+     * @param text     the paragraph
+     * @param maxWidth widest a line may be, in pixels
+     * @return the height of all its lines
      */
     public float wrappedHeight(CharSequence text, float maxWidth) {
         AegisFont f = requireFont();
         return f.wrappedLineCount(text, maxWidth) * f.lineHeight();
     }
 
-    /** How many paragraph layouts have been computed rather than remembered. */
+    /**
+     * How many paragraph layouts have been computed rather than remembered.
+     *
+     * @return the current font's count since it was loaded
+     */
     public int layoutRecomputes() { return requireFont().layoutRecomputes(); }
 
-    /** How many paragraph layouts have been served from memory. */
+    /**
+     * How many paragraph layouts have been served from memory.
+     *
+     * @return the current font's count since it was loaded
+     */
     public int layoutHits() { return requireFont().layoutHits(); }
 
-    /** The width the current font would draw this string at, in pixels. */
+    /**
+     * The width the current font would draw this string at, in pixels.
+     *
+     * @param text the characters to measure
+     * @return the width, kerning included
+     */
     public float measure(CharSequence text) { return requireFont().measure(text); }
 
-    /** Distance from one line's top to the next, in whole pixels, in the current font. */
+    /**
+     * Distance from one line's top to the next, in whole pixels, in the current font.
+     *
+     * @return the line height
+     */
     public int lineHeight() { return requireFont().lineHeight(); }
 
     // -----------------------------------------------------------------------------------
     // Clipping
     // -----------------------------------------------------------------------------------
 
-    /** @see AegisDrawList#pushClipRect */
+    /**
+     * Restricts what is drawn next to a rectangle, inside any clip already in effect.
+     *
+     * @param x      left edge in pixels
+     * @param y      top edge in pixels
+     * @param width  width in pixels
+     * @param height height in pixels
+     * @see AegisDrawList#pushClipRect
+     */
     public void pushClipRect(float x, float y, float width, float height) {
         drawList.pushClipRect(x, y, width, height);
     }
 
-    /** @see AegisDrawList#popClipRect */
+    /**
+     * Restores the clip in effect before the matching {@link #pushClipRect}.
+     *
+     * @see AegisDrawList#popClipRect
+     */
     public void popClipRect() {
         drawList.popClipRect();
     }
@@ -227,6 +340,8 @@ public final class Aegis {
      * <p>Handed out as an object rather than forwarded method by method — the rule in the
      * class comment. Build the tree on it once, solve it each frame, and read each node's
      * rectangle back to draw there.</p>
+     *
+     * @return the layout, the same instance for this object's lifetime
      */
     public AegisLayout layout() { return layout; }
 
@@ -237,11 +352,13 @@ public final class Aegis {
      * <p>Shares the layout's handles — a node is one {@code int} in both — and is handed out
      * as an object for the same reason the layout is. Update it once a frame, after the
      * layout's solve.</p>
+     *
+     * @return the tree, the same instance for this object's lifetime
      */
     public AegisTree tree() { return tree; }
 
     /**
-     * The widgets: buttons now, and the rest of the controls as they arrive.
+     * The widgets: buttons, checkboxes, sliders, text fields and text boxes.
      *
      * <p>Made on the layout's nodes and the tree's state, and handed out as an object like
      * both. Kept in a short variable, it is called {@code ae} — never a generic {@code ui}:</p>
@@ -250,6 +367,8 @@ public final class Aegis {
      * AegisWidgets ae = aegis.widgets();
      * int play = ae.button(toolbar, "Play");
      * }</pre>
+     *
+     * @return the widgets, the same instance for this object's lifetime
      */
     public AegisWidgets widgets() { return widgets; }
 
@@ -257,12 +376,21 @@ public final class Aegis {
     // Escape hatches and lifecycle
     // -----------------------------------------------------------------------------------
 
-    /** The current font, for code that needs its metrics or wants to pass it explicitly. */
+    /**
+     * The current font, for code that needs its metrics or wants to pass it explicitly.
+     *
+     * @return the font, or {@code null} before {@link #loadFont}
+     */
     public AegisFont font() { return font; }
 
-    /** The draw list underneath, for code working at the layer rather than at the front door. */
+    /**
+     * The draw list underneath, for code working at the layer rather than at the front door.
+     *
+     * @return the draw list
+     */
     public AegisDrawList drawList() { return drawList; }
 
+    /** Releases the font and the renderer. Must run on the GL thread, before the context goes. */
     public void cleanup() {
         if (font != null) font.cleanup();
         renderer.cleanup();

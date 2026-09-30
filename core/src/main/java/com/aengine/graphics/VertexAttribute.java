@@ -9,9 +9,13 @@ package com.aengine.graphics;
  */
 public enum VertexAttribute {
 
+    /** One {@code float}, read as {@code float}. */
     FLOAT1(1),
+    /** Two {@code float}s, read as {@code vec2}. */
     FLOAT2(2),
+    /** Three {@code float}s, read as {@code vec3}. */
     FLOAT3(3),
+    /** Four {@code float}s, read as {@code vec4}. */
     FLOAT4(4),
 
     /**
