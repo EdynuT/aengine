@@ -193,7 +193,12 @@ public final class AegisFont {
         STBTTFontinfo info = STBTTFontinfo.malloc();
 
         STBTTPackContext        packer      = STBTTPackContext.malloc();
-        STBTTPackRange.Buffer   ranges      = STBTTPackRange.malloc(2);
+        // calloc, not malloc: a range has fields this code never sets, and stb reads them.
+        // The Latin-1 range leaves array_of_unicode_codepoints alone, meaning "none, count up
+        // from the first code point" - but only if it is zero. malloc hands back whatever the
+        // heap held; on Windows that is often not zero, and stb then read a stray pointer as
+        // the list of characters to bake, filling the atlas with glyphs from nowhere.
+        STBTTPackRange.Buffer   ranges      = STBTTPackRange.calloc(2);
         STBTTPackedchar.Buffer  latinChars  = STBTTPackedchar.malloc(CHAR_COUNT);
         STBTTPackedchar.Buffer  extraChars  = STBTTPackedchar.malloc(EXTRA_CODEPOINTS.length);
         IntBuffer               extraPoints = MemoryUtil.memAllocInt(EXTRA_CODEPOINTS.length);

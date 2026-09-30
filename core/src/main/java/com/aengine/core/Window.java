@@ -124,6 +124,20 @@ public class Window {
         // 1 = Locked to monitor's refresh rate
         org.lwjgl.glfw.GLFW.glfwSwapInterval(1);
         org.lwjgl.glfw.GLFW.glfwShowWindow(handle);
+
+        // The size asked for above is the monitor's, but a maximised window is smaller: the
+        // taskbar and the title bar take their share. On Windows the window is born at that
+        // smaller size, so the resize callback never fires and width/height would keep the
+        // monitor's numbers - everything drawn would be squeezed to fit, while the mouse
+        // reports real pixels. Asking for the framebuffer once it is shown settles it.
+        int[] fbWidth = new int[1], fbHeight = new int[1];
+        glfwGetFramebufferSize(handle, fbWidth, fbHeight);
+        if (fbWidth[0] > 0 && fbHeight[0] > 0) {
+            width  = fbWidth[0];
+            height = fbHeight[0];
+            glViewport(0, 0, width, height);
+        }
+        Logger.info(Logger.System.WINDOW, "Framebuffer: %dx%d", width, height);
     }
 
     public void swapBuffers() { 
