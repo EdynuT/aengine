@@ -8,18 +8,25 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
 
+import com.google.gson.stream.MalformedJsonException;
+
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A theme, read and resolved — step 3f part 2.
@@ -52,8 +59,9 @@ import java.util.Set;
  * {@link Unusable}, and the caller moves to the next theme in line. Everything else is one
  * property wrong — a colour that does not parse, a reference to nothing, a cycle, a name the
  * catalogue does not know, a rule that reaches no widget — and falls back, that property
- * alone, with a warning in the log. Warnings are said once each, however many widgets share
- * the mistake. Step 3f part 3 makes them precise, with line numbers.</p>
+ * alone, with a warning in the log. Every warning names the line the mistake is written on,
+ * and is said once, however many widgets share the mistake. A key written twice is pointed
+ * out too, as information: JSON keeps the last one without a word.</p>
  */
 public final class AegisTheme {
 
@@ -67,7 +75,13 @@ public final class AegisTheme {
         final String key;
         final String value;
         boolean matched;
+        boolean changesSomething;   // for at least one widget, it gives a value the widget would not otherwise have
+        boolean broken;             // already reported as a problem, so never also called redundant
         Rule(String key, String value) { this.key = key; this.value = value; }
+    }
+
+    /** Something to say about the file: a problem, or a note that changes nothing. */
+    private record Finding(int line, boolean problem, String message) {
     }
 
     private static final String GLOBAL_PREFIX = "global.";
@@ -76,24 +90,33 @@ public final class AegisTheme {
     private final String name;
     private final String description;
     private final int    format;
+    private final AegisJsonLines lines; // where each key is written; empty for the factory theme
 
     private final Map<String, String> global = new LinkedHashMap<>();   // as written
     private final Map<String, String> locals = new LinkedHashMap<>();   // as written
     private final List<Rule>          rules  = new ArrayList<>();
 
+    /** Keys whose value the file writes as a JSON number rather than a string — sizes, rightly. */
+    private final Set<String> writtenAsNumber = new HashSet<>();
+
     /** Every catalogue entry's value once global and defaults are resolved: a {@code float[4]} or a {@code Float}. */
     private final Map<String, Object> resolvedGlobal = new HashMap<>();
 
-    /** Warnings already said, so a mistake many widgets share is reported once. */
+    /** Mistakes already recorded, so one that many widgets share is reported once. */
     private final Set<String> warned = new HashSet<>();
+
+    /** What {@link #report} will say, gathered while reading and while dressing widgets. */
+    private final List<Finding> findings = new ArrayList<>();
+    private boolean reported;
 
     private AegisStyle globalStyle;
 
-    private AegisTheme(String source, String name, String description, int format) {
+    private AegisTheme(String source, String name, String description, int format, AegisJsonLines lines) {
         this.source      = source;
         this.name        = name;
         this.description = description;
         this.format      = format;
+        this.lines       = lines;
     }
 
     // -----------------------------------------------------------------------------------
@@ -109,7 +132,7 @@ public final class AegisTheme {
      */
     public static AegisTheme factory() {
         AegisTheme theme = new AegisTheme("factory", "Factory", "The defaults built into the engine.",
-                                          AegisThemeCatalogue.FORMAT);
+                                          AegisThemeCatalogue.FORMAT, AegisJsonLines.scan(""));
         theme.resolveGlobal();
         return theme;
     }
@@ -139,22 +162,43 @@ public final class AegisTheme {
      * @throws Unusable if it is not JSON, or not a JSON object
      */
     public static AegisTheme parse(Reader reader, String source) throws Unusable {
+        // Read whole, once: walked for where each key is written, then handed to Gson. A theme
+        // is a few kilobytes.
+        String text;
+        try {
+            StringWriter whole = new StringWriter();
+            reader.transferTo(whole);
+            text = whole.toString();
+        } catch (IOException e) {
+            throw new Unusable(source + " could not be read: " + e.getMessage(), e);
+        }
+
         JsonElement root;
         try {
-            JsonReader json = new JsonReader(reader);
+            JsonReader json = new JsonReader(new StringReader(text));
             json.setLenient(true);   // tolerate a comment someone added; the shipped themes have none
             root = JsonParser.parseReader(json);
         } catch (JsonParseException e) {
-            throw new Unusable(source + " is not valid JSON: " + e.getMessage(), e);
+            throw new Unusable(syntaxError(source, e), e);
         }
         if (!root.isJsonObject()) {
             throw new Unusable(source + " must hold one JSON object, { ... }, at the top.", null);
         }
         JsonObject top = root.getAsJsonObject();
 
+        JsonElement declared = top.get("format");
+        Integer declaredFormat = declared != null ? wholeNumber(declared) : null;
+
         AegisTheme theme = new AegisTheme(source,
             text(top, "name", source), text(top, "description", ""),
-            top.has("format") && top.get("format").isJsonPrimitive() ? top.get("format").getAsInt() : 1);
+            declaredFormat != null && declaredFormat >= 1 ? declaredFormat : 1,
+            AegisJsonLines.scan(text));
+
+        for (String[] path : theme.lines.repeated()) {
+            List<Integer> at = theme.lines.lines(path);
+            theme.note(String.join(".", path), String.join(".", path) + " is written on lines "
+                + listOf(at) + "; only line " + at.get(at.size() - 1) + " counts");
+        }
 
         for (Map.Entry<String, JsonElement> e : top.entrySet()) {
             String key = e.getKey();
@@ -171,19 +215,94 @@ public final class AegisTheme {
             else                      theme.rules.add(new Rule(key, value));
         }
 
+        theme.checkFormat(declared, declaredFormat);   // after "global" is read: it asks what the theme sets
         theme.resolveGlobal();
         return theme;
     }
 
+    /**
+     * What a theme's {@code format} says about its age, measured against the engine's. Older is
+     * normal — the theme simply predates some properties, which keep their defaults — and is a
+     * note listing them. Newer is a problem: it may use names this engine does not know yet.
+     * Missing or not a whole number, the theme is read as format 1.
+     */
+    private void checkFormat(JsonElement declared, Integer declaredFormat) {
+        int engine = AegisThemeCatalogue.FORMAT;
+
+        if (declared == null) {
+            note("format", "no \"format\"; read as format 1. Add \"format\": " + engine
+                + " so a later engine can tell which properties this theme predates");
+            return;
+        }
+        if (declaredFormat == null || declaredFormat < 1) {
+            warn("format", "\"format\" must be a whole number, 1 or more, written without quotes; got "
+                + declared + "; read as format 1");
+            return;
+        }
+        if (declaredFormat > engine) {
+            warn("format", "written for format " + declaredFormat + ", newer than this engine's "
+                + engine + "; names it does not know may come from a later version and are ignored");
+            return;
+        }
+        if (declaredFormat < engine) {
+            List<String> later = new ArrayList<>();
+            for (AegisThemeCatalogue.Entry entry : AegisThemeCatalogue.entries()) {
+                if (entry.since() > declaredFormat && !global.containsKey(entry.name())) later.add(entry.name());
+            }
+            if (!later.isEmpty()) {
+                note("format", "written for format " + declaredFormat + "; this engine is at format " + engine
+                    + ". Added since, and at their defaults unless a rule sets them: " + String.join(", ", later));
+            }
+        }
+    }
+
+    /** A JSON number with no fraction, or null. A string is not a number, even "1". */
+    private static Integer wholeNumber(JsonElement e) {
+        if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) return null;
+        try {
+            return new java.math.BigDecimal(e.getAsString().trim()).intValueExact();
+        } catch (NumberFormatException | ArithmeticException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Gson's complaint, said the way the other warnings are: the file and the line first.
+     * Gson writes "Expected ':' at line 5 column 12 path $.global.accent".
+     */
+    private static String syntaxError(String source, JsonParseException e) {
+        Throwable cause = e.getCause() instanceof MalformedJsonException ? e.getCause() : e;
+        String message = String.valueOf(cause.getMessage());
+        Matcher m = GSON_LOCATION.matcher(message);
+        if (!m.find()) return source + " is not valid JSON: " + message;
+        String what = message.substring(0, m.start()).trim();
+        // Gson reports where it noticed, which is often past the mistake: a missing comma at
+        // the end of one line is noticed on the next.
+        return source + ":" + m.group(1) + ": not valid JSON, column " + m.group(2) + ": " + what
+            + " (if this line looks right, check the end of the one before: a missing comma or quote)";
+    }
+
+    private static final Pattern GSON_LOCATION = Pattern.compile(" at line (\\d+) column (\\d+)");
+
+    /** "7", "7 and 22", "7, 15 and 22". */
+    private static String listOf(List<Integer> numbers) {
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < numbers.size(); i++) {
+            if (i > 0) s.append(i == numbers.size() - 1 ? " and " : ", ");
+            s.append(numbers.get(i));
+        }
+        return s.toString();
+    }
+
     private void readGlobal(JsonElement element) {
         if (!element.isJsonObject()) {
-            warn("\"global\" must be an object, { ... }; it is ignored");
+            warn("global", "\"global\" must be an object, { ... }; it is ignored");
             return;
         }
         for (Map.Entry<String, JsonElement> e : element.getAsJsonObject().entrySet()) {
             String key = e.getKey();
             if (AegisThemeCatalogue.find(key) == null) {
-                warn("global." + key + " is not something a theme can set; it is ignored");
+                warn("global." + key, "global." + key + " is not something a theme can set; it is ignored");
                 continue;
             }
             String value = valueText("global." + key, e.getValue());
@@ -195,9 +314,10 @@ public final class AegisTheme {
     private String valueText(String key, JsonElement element) {
         if (element.isJsonPrimitive()) {
             JsonPrimitive p = element.getAsJsonPrimitive();
+            if (p.isNumber()) writtenAsNumber.add(key);
             if (p.isString() || p.isNumber()) return p.getAsString();
         }
-        warn(key + " must be a colour, a number or a reference; it is ignored");
+        warn(key, key + " must be a colour, a number or a reference; it is ignored");
         return null;
     }
 
@@ -227,7 +347,7 @@ public final class AegisTheme {
     /**
      * The catalogue format the theme was written against.
      *
-     * @return the declared {@code format}, or 1 if the file declares none
+     * @return the declared {@code format}, or 1 if the file declares none or not a whole number
      */
     public int format() { return format; }
 
@@ -265,6 +385,8 @@ public final class AegisTheme {
         // panel and kind the depth of the panel, so a nearer panel beats a farther one.
         Map<AegisThemeCatalogue.Entry, Rule>    chosen   = null;
         Map<AegisThemeCatalogue.Entry, Integer> strength = null;
+        Map<AegisThemeCatalogue.Entry, Rule>    runnerUp = null;   // what would win if the chosen rule were gone
+        Map<AegisThemeCatalogue.Entry, Integer> runnerUpStrength = null;
 
         String full = String.join(".", path);
         int panels = ownId ? path.size() - 1 : path.size();
@@ -276,6 +398,7 @@ public final class AegisTheme {
             if (ownId && rule.key.startsWith(full + ".")) {
                 rule.matched = true;
                 entry = propertyOf(kind, rule.key.substring(full.length() + 1), rule.key);
+                if (entry == null) rule.broken = true;
                 power = 1000;
             } else {
                 for (int depth = panels; depth >= 1 && entry == null; depth--) {
@@ -291,7 +414,8 @@ public final class AegisTheme {
 
                     rule.matched = true;
                     entry = AegisThemeCatalogue.find(rest);
-                    if (entry == null) warn(rule.key + " — " + kind + " has no property "
+                    if (entry == null) rule.broken = true;
+                    if (entry == null) warn(rule.key, rule.key + " — " + kind + " has no property "
                                             + rest.substring(rest.indexOf('.') + 1) + "; it is ignored");
                     power = depth;
                 }
@@ -301,11 +425,23 @@ public final class AegisTheme {
             if (chosen == null) {
                 chosen   = new HashMap<>();
                 strength = new HashMap<>();
+                runnerUp = new HashMap<>();
+                runnerUpStrength = new HashMap<>();
             }
             Integer held = strength.get(entry);
             if (held == null || power > held) {
-                chosen.put(entry, rule);
+                Rule beaten = chosen.put(entry, rule);
+                if (beaten != null) {
+                    runnerUp.put(entry, beaten);
+                    runnerUpStrength.put(entry, held);
+                }
                 strength.put(entry, power);
+            } else {
+                Integer second = runnerUpStrength.get(entry);
+                if (second == null || power > second) {
+                    runnerUp.put(entry, rule);
+                    runnerUpStrength.put(entry, power);
+                }
             }
         }
         if (chosen == null) return null;
@@ -317,16 +453,33 @@ public final class AegisTheme {
             Object value = rule != null
                 ? resolveEntry(entry, rule.value, rule.key)
                 : resolvedGlobal.get(entry.name());
+            if (rule != null && !rule.broken
+                    && resolve(rule.value, entry.type(), rule.key, rule.key, new HashSet<>()) == null) {
+                rule.broken = true;   // its value is wrong, and already warned about
+            }
+            if (rule != null && !rule.changesSomething && !rule.broken) {
+                // Does it matter here? Only if, without it, this widget would look different.
+                Rule second = runnerUp.get(entry);
+                Object without = second != null
+                    ? resolveEntry(entry, second.value, second.key)
+                    : resolvedGlobal.get(entry.name());
+                if (!sameValue(value, without)) rule.changesSomething = true;
+            }
             write(style, entry, value);
         }
         return style;
+    }
+
+    private static boolean sameValue(Object a, Object b) {
+        if (a instanceof float[] fa && b instanceof float[] fb) return Arrays.equals(fa, fb);
+        return a.equals(b);
     }
 
     /** The catalogue entry a widget rule's property names — {@code fill.hover} on a button — or null, warned. */
     private AegisThemeCatalogue.Entry propertyOf(String kind, String property, String key) {
         String name = property.startsWith("focus.") ? property : kind + "." + property;
         AegisThemeCatalogue.Entry entry = AegisThemeCatalogue.find(name);
-        if (entry == null) warn(key + " — " + kind + " has no property " + property + "; it is ignored");
+        if (entry == null) warn(key, key + " — " + kind + " has no property " + property + "; it is ignored");
         return entry;
     }
 
@@ -335,14 +488,84 @@ public final class AegisTheme {
     }
 
     /**
-     * Warns about every scoped rule that reached no widget — most often an id renamed in an
-     * engine update, or a typo in a path. Called once the theme has been applied to a tree.
+     * Says, in one block in the log, everything worth saying about the file — called once the
+     * theme has been applied to a tree, since only then is it known which rules reached a
+     * widget. Problems are listed first, then notes, each in the order of the file's lines.
+     *
+     * <p>Problems are warnings, notes are information. A theme with a problem opens its block
+     * with a warning; one without, with a line of information saying so. The factory
+     * theme has no file and says nothing. Only the first call says anything.</p>
      */
-    void reportUnmatchedRules() {
+    void report() {
+        if (reported || source.equals("factory")) return;
+        reported = true;
+
         for (Rule rule : rules) {
-            if (!rule.matched) warn(rule.key + " reaches no widget; it is ignored");
+            if (!rule.matched) {
+                warn(rule.key, rule.key + " reaches no widget; it is ignored");
+            } else if (!rule.changesSomething && !rule.broken) {
+                // A broken rule is reported as a problem; calling it redundant as well would be
+                // the same mistake said twice, and the wrong way round.
+                note(rule.key, rule.key + " gives every widget it reaches the value it would have anyway; "
+                    + "it can be removed");
+            }
+        }
+        for (String local : locals.keySet()) {
+            if (!isReferenced(local)) {
+                note(local, local + " is a variable nothing refers to (@" + local + "); it paints nothing");
+            }
+        }
+        // The palette is left out: writing every palette colour out, even at its default, is
+        // how a theme says what its colours are, and is worth doing.
+        for (Map.Entry<String, String> e : global.entrySet()) {
+            AegisThemeCatalogue.Entry entry = AegisThemeCatalogue.find(e.getKey());
+            Object asDefault = resolve(entry.defaultValue(), entry.type(), "", "", new HashSet<>());
+            String key = "global." + e.getKey();
+            boolean broken = resolve(e.getValue(), entry.type(), key, key, new HashSet<>()) == null;   // already warned
+            if (!entry.isPalette() && !broken && asDefault != null
+                    && sameValue(resolvedGlobal.get(entry.name()), asDefault)) {
+                note("global." + e.getKey(), "global." + e.getKey()
+                    + " sets the value it has by default; it can be removed");
+            }
+        }
+
+        findings.sort((a, b) -> a.problem() != b.problem() ? (a.problem() ? -1 : 1)
+                                : Integer.compare(lineOrLast(a), lineOrLast(b)));
+        int problems = 0;
+        for (Finding f : findings) if (f.problem()) problems++;
+        int notes = findings.size() - problems;
+
+        if (problems > 0) {
+            Logger.warn(Logger.System.UI, "%s: %s", source, count(problems, "problem")
+                + (notes > 0 ? ", " + count(notes, "note") : "") + ":");
+            for (Finding f : findings) {
+                if (f.problem()) Logger.warn(Logger.System.UI, "  %s", lineText(f));
+                else             Logger.info(Logger.System.UI, "  %s", lineText(f));
+            }
+        } else if (notes > 0) {
+            Logger.info(Logger.System.UI, "%s: no problems, %s:", source, count(notes, "note"));
+            for (Finding f : findings) Logger.info(Logger.System.UI, "  %s", lineText(f));
+        } else {
+            Logger.info(Logger.System.UI, "%s: no problems.", source);
         }
     }
+
+    /** Whether any value in the file refers to the variable {@code name}. */
+    private boolean isReferenced(String name) {
+        String ref = "@" + name;
+        for (String v : global.values()) if (v.equals(ref)) return true;
+        for (String v : locals.values()) if (v.equals(ref)) return true;
+        for (Rule r : rules)             if (r.value.equals(ref)) return true;
+        return false;
+    }
+
+    private static int lineOrLast(Finding f) { return f.line() > 0 ? f.line() : Integer.MAX_VALUE; }
+
+    private static String lineText(Finding f) {
+        return (f.line() > 0 ? "line " + f.line() + ": " : "") + f.message();
+    }
+
+    private static String count(int n, String what) { return n + " " + what + (n == 1 ? "" : "s"); }
 
     // -----------------------------------------------------------------------------------
     // Resolving
@@ -364,11 +587,12 @@ public final class AegisTheme {
      * colour this theme broke — the factory's value, which always resolves.
      */
     private Object resolveEntry(AegisThemeCatalogue.Entry entry, String written, String where) {
-        Object value = resolve(written, entry.type(), where, new HashSet<>());
+        Object value = resolve(written, entry.type(), where, where, new HashSet<>());
         if (value != null) return value;
 
         if (!written.equals(entry.defaultValue())) {
-            value = resolve(entry.defaultValue(), entry.type(), "default of " + entry.name(), new HashSet<>());
+            String defaultOf = "default of " + entry.name();
+            value = resolve(entry.defaultValue(), entry.type(), defaultOf, defaultOf, new HashSet<>());
             if (value != null) return value;
         }
         return FACTORY_VALUES.get(entry.name());
@@ -377,37 +601,66 @@ public final class AegisTheme {
     /**
      * Follows references until a value, and parses it as {@code type}: a {@code float[4]} for
      * a colour, a {@code Float} for a size. Null, warned, if it cannot.
+     *
+     * @param where what is being resolved — the key whose value falls back if this fails
+     * @param at    the key {@code written} is the value of: {@code where} at first, then each
+     *              variable a reference leads to. A warning points at its line, since that is
+     *              where the wrong text is.
      */
-    private Object resolve(String written, AegisThemeCatalogue.Type type, String where, Set<String> visiting) {
+    private Object resolve(String written, AegisThemeCatalogue.Type type, String where, String at,
+                           Set<String> visiting) {
+        // Through a variable, say who led there; through a default, every widget kind would,
+        // and the mistake is the same one.
+        String reached = at.equals(where) || where.startsWith("default of ") ? "" : "; reached from " + where;
+
         if (written.startsWith("@")) {
             String ref = written.substring(1);
             String target;
+            String next = ref;
             if (ref.startsWith(GLOBAL_PREFIX)) {
                 String name = ref.substring(GLOBAL_PREFIX.length());
                 target = global.get(name);
                 if (target == null) {
                     AegisThemeCatalogue.Entry entry = AegisThemeCatalogue.find(name);
                     target = entry != null ? entry.defaultValue() : null;
+                    next = "default of " + name;
                 }
             } else {
                 target = locals.get(ref);
             }
             if (target == null) {
-                warn(where + " refers to " + written + ", which does not exist; using the default");
+                warn(at, at + "|" + written, at + " refers to " + written + ", which does not exist" + reached + "; using the default");
                 return null;
             }
             if (!visiting.add(ref)) {
-                warn(where + " is part of a reference cycle through " + written + "; using the default");
+                warn(at, at + "|" + written, at + " is part of a reference cycle through " + written + reached + "; using the default");
                 return null;
             }
-            return resolve(target, type, where, visiting);
+            return resolve(target, type, where, next, visiting);
+        }
+
+        // Typed strictly: a size is a JSON number, a colour is a string. "4" is text that happens
+        // to hold digits, and is refused rather than converted. Only what the file wrote is
+        // checked; the catalogue's defaults are text by construction.
+        if (lineOf(at) > 0) {
+            boolean isNumber = writtenAsNumber.contains(at);
+            if (type == AegisThemeCatalogue.Type.SIZE && !isNumber) {
+                warn(at, at + "|" + written, at + " — a size is a number, written without quotes, like 4; got the text \""
+                    + written + "\"" + reached + "; using the default");
+                return null;
+            }
+            if (type == AegisThemeCatalogue.Type.COLOUR && isNumber) {
+                warn(at, at + "|" + written, at + " — expected a colour like \"#5C9EF0\", got the number "
+                    + written + reached + "; using the default");
+                return null;
+            }
         }
 
         Object value = type == AegisThemeCatalogue.Type.COLOUR ? parseColour(written) : parseSize(written);
         if (value == null) {
-            warn(where + " — expected " + (type == AegisThemeCatalogue.Type.COLOUR
+            warn(at, at + "|" + written, at + " — expected " + (type == AegisThemeCatalogue.Type.COLOUR
                 ? "a colour like \"#5C9EF0\"" : "a number of pixels, 0 or more")
-                + ", got \"" + written + "\"; using the default");
+                + ", got \"" + written + "\"" + reached + "; using the default");
         }
         return value;
     }
@@ -444,8 +697,35 @@ public final class AegisTheme {
         }
     }
 
-    private void warn(String message) {
-        if (warned.add(message)) Logger.warn(Logger.System.UI, "%s: %s", source, message);
+    /**
+     * Records a problem for {@link #report}, once, with the line {@code key} is written on.
+     *
+     * @param key     the key the mistake is in — {@code global.accent}, a rule, a variable —
+     *                or anything else, which simply has no line
+     * @param message what is wrong, and what is done instead
+     */
+    private void warn(String key, String message) {
+        warn(key, message, message);
+    }
+
+    /**
+     * Like {@link #warn(String, String)}, said once per {@code mistake} rather than per message:
+     * one wrong value that many properties lead to is one thing to fix.
+     */
+    private void warn(String key, String mistake, String message) {
+        if (warned.add(mistake)) findings.add(new Finding(lineOf(key), true, message));
+    }
+
+    /** Like {@link #warn}, for something worth knowing that changes nothing. */
+    private void note(String key, String message) {
+        if (warned.add(message)) findings.add(new Finding(lineOf(key), false, message));
+    }
+
+    /** The line {@code key} is written on, or 0 when it is not known. */
+    private int lineOf(String key) {
+        return key.startsWith(GLOBAL_PREFIX)
+            ? lines.line("global", key.substring(GLOBAL_PREFIX.length()))
+            : lines.line(key);
     }
 
     /**
@@ -456,9 +736,9 @@ public final class AegisTheme {
     private static final Map<String, Object> FACTORY_VALUES = new HashMap<>();
 
     static {
-        AegisTheme bare = new AegisTheme("catalogue", "", "", AegisThemeCatalogue.FORMAT);
+        AegisTheme bare = new AegisTheme("catalogue", "", "", AegisThemeCatalogue.FORMAT, AegisJsonLines.scan(""));
         for (AegisThemeCatalogue.Entry entry : AegisThemeCatalogue.entries()) {
-            Object value = bare.resolve(entry.defaultValue(), entry.type(), entry.name(), new HashSet<>());
+            Object value = bare.resolve(entry.defaultValue(), entry.type(), entry.name(), entry.name(), new HashSet<>());
             if (value == null) {
                 throw new IllegalStateException("The theme catalogue's default for " + entry.name()
                     + " does not resolve: " + entry.defaultValue());

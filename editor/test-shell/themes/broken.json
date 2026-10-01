@@ -1,0 +1,27 @@
+{
+  "name": "Test - broken on purpose",
+  "description": "A test theme for step 3f part 3; it does not ship. Every entry below is one kind of mistake the theme reader must report with its line, except the Stop button's, which is right and turns it red so the theme is visibly loaded. Run with -PtestShell -Ptheme=broken and read the block in the log.",
+  "format": "1",
+
+  "global": {
+    "accent": "#5C9EF0",
+    "text": "#E6EBF2",
+    "accent": "#E0A030",
+    "button.radius": "4",
+    "button.border.width": 1,
+    "slider.thumb": "#FFFFF",
+    "checkbox.glow": "#FFFFFF"
+  },
+
+  "danger": "#C04040",
+  "unused": "#123456",
+  "loopA": "@loopB",
+  "loopB": "@loopA",
+
+  "viewport.stopButton.fill":  "@danger",
+  "viewport.pauseButton.fill": "@loopA",
+  "viewport.playButton.fill":  "@global.surface.raised",
+  "inspector.textfield.fill":  "@missing",
+  "inspector.textfield.glow":  "#FFFFFF",
+  "hierarchy.oldButton.fill":  "#FFFFFF"
+}

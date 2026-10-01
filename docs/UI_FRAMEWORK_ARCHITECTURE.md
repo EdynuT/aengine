@@ -42,6 +42,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3e-9 | Text box: several lines wrapped to its width, Enter breaks and Ctrl+Enter confirms, Up/Down keep the column, scrolled by caret or wheel |
 | Step 3f-1 | The theme catalogue: every themeable property with its type and a default on the palette; ids on layout nodes |
 | Step 3f-2 | Themes read and resolved into a style per widget — global, local variables, panel-and-kind and one-widget rules — with the factory theme when no file is found |
+| Step 3f-3 | A theme's mistakes reported in one block after it is applied, each with its line: problems as warnings, notes — repeated keys, unused variables, rules that change nothing — as information; strict types; the `format` checked against the engine's |
 
 ### The plan ahead
 
@@ -142,13 +143,13 @@ guide that lets the designer work without reading the code; the files that test 
 are test files, and do not ship.
 
 Five parts, in order, with `layout.json` brought forward from Phase 4 — **we stopped after
-part 2**:
+part 3**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
 | 1 ✅ | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; ids on layout nodes | Nothing on screen; it is the definition the next parts depend on |
 | 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
-| 3 | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
+| 3 ✅ | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
 | 4 | Layout | `layout.json` read by screens, panels registered by id, the chain user → installation → factory per screen, the factory layout in code, the atomic write of the user's copy | The scaffolding's frame built from a layout file; changing a width in it moves a pane |
 | 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
@@ -162,6 +163,31 @@ Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothi
 and 5 are what turn externalised constants into something another person can edit without
 fear. The settings page that lets a user pick a theme is built with the real settings panel
 in Phase 4; it calls the same reload part 5 delivers.
+
+**What part 3 settled.** Every finding carries the line its key is written on, found by a
+short walk over the text (`AegisJsonLines`) since Gson keeps no positions; `layout.json` will
+reuse it. A wrong value inside a variable is reported at the variable's line, saying which
+rule led there. Findings are gathered while the theme is read and applied, and said once, in
+one block, by `AegisTheme.report()` at the end of `applyTheme`: problems first as warnings,
+then notes as information, each group in line order. A theme with no problem says so in one
+line of information. Notes are things that change nothing but are worth fixing: a key
+written twice (JSON keeps the last without a word), a variable nothing refers to, a rule
+that gives every widget it reaches the value it would have had anyway, a `global` value equal
+to its default — the palette excepted, since writing it out is how a theme states its
+colours. A rule already reported as broken is never also called redundant.
+
+**Types are strict.** A size is a JSON number and a colour or reference is a string; `"4"`
+for a size, `5` for a colour, or `"1"` for `format` is a problem, not something converted
+quietly. `format` is checked against the engine's: missing is a note (read as 1), not a
+whole number is a problem (read as 1), newer than the engine is a problem — unknown names may
+come from a later version — and older is a note listing the properties added since. The
+older case cannot run until the catalogue reaches format 2, so it is untested.
+
+The deliberate test file is `editor/test-shell/themes/broken.json` (does not ship): run with
+`-PtestShell -Ptheme=broken`, it reports eight problems and four notes, and the Stop button,
+its one correct rule, turns red. On screen the result is only "nothing crashed"; the log is
+the check. Showing problems to the user is not planned yet — later, a popup that points at
+the log file (§10, `Logger`).
 
 **Step 3g — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.
@@ -1080,7 +1106,9 @@ Fallbacks reintroduce the risk of a mistake nobody notices, so **the warning car
 weight**. It names the file, the line and what was expected —
 `theme.json:14: panel.bg — expected a colour like "#1F2328", got "bleu"; using default` —
 and validation collects every problem in one pass, so a file with three mistakes reports
-three at once. Warnings go to the log, and to the editor's own console once it exists.
+three at once, in one block, after the notes on what is merely untidy (*What part 3
+settled*, in the plan at the top). Values are typed strictly: a size written as `"4"` is a
+problem, not a 4. Warnings go to the log; later a popup will point the user at the log file.
 
 ### Resolution pipeline
 
@@ -1418,6 +1446,21 @@ Known cross-boundary work. All of it is additive: nothing existing callers use w
 
 **`Window`** — needs to expose content scale (high-DPI), cursor shape control, and clipboard
 access. All three are GLFW calls already available through the existing handle.
+
+**`Logger`** — a step of its own, after 3f, not mixed into a UI step. Two gaps:
+
+- *More levels.* Five today (TRACE, DEBUG, INFO, WARN, ERROR). The owner wants a range like
+  `java.util.logging`'s seven (SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST): either
+  modelled on it, or JUL itself behind our formatter if that brings no problems. The call
+  site — `Logger.warn(System.UI, ...)`, used in 37 files — stays as it is; only what sits
+  behind it changes.
+- *A log file.* Today everything goes to the terminal only, so someone who starts the editor
+  with a double click sees nothing. The planned "something went wrong, see the log" popup
+  needs a file to point at. Planned: one file per run, under `$XDG_STATE_HOME/AEngine/logs/`
+  (`~/.local/state/AEngine/logs/` when unset) on Linux and `%LOCALAPPDATA%\AEngine\logs\` on
+  Windows; at startup the oldest is deleted so only the last five remain. Not `/tmp`, which
+  is RAM on many distributions and would lose the log of a run that froze the machine; not
+  `/var/log`, which a user program cannot write to.
 
 ---
 

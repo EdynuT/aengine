@@ -268,7 +268,7 @@ public final class AegisWidgets {
 
         pathScratch.clear();
         dressSubtree(theme, root);
-        theme.reportUnmatchedRules();
+        theme.report();
     }
 
     /** The ids from the top of the tree down to the node being dressed. */
