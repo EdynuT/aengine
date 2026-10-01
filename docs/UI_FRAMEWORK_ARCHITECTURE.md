@@ -43,6 +43,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-1 | The theme catalogue: every themeable property with its type and a default on the palette; ids on layout nodes |
 | Step 3f-2 | Themes read and resolved into a style per widget — global, local variables, panel-and-kind and one-widget rules — with the factory theme when no file is found |
 | Step 3f-3 | A theme's mistakes reported in one block after it is applied, each with its line: problems as warnings, notes — repeated keys, unused variables, rules that change nothing — as information; strict types; the `format` checked against the engine's |
+| Step 3f-4a | `AegisJsonLines` reads lines inside lists (`children[1].width`); `AegisLayout.attach` / `detach` move a node to another parent |
+| Step 3f-4b | `layout.json` read and checked into a description per screen — five node types, strict types, a screen that cannot form a tree set aside alone — reported like a theme; nothing built from it yet |
 
 ### The plan ahead
 
@@ -150,7 +152,7 @@ part 3**:
 | 1 ✅ | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; ids on layout nodes | Nothing on screen; it is the definition the next parts depend on |
 | 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
 | 3 ✅ | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
-| 4 | Layout | `layout.json` read by screens, panels registered by id, the chain user → installation → factory per screen, the factory layout in code, the atomic write of the user's copy | The scaffolding's frame built from a layout file; changing a width in it moves a pane |
+| 4 | Layout | `layout.json` read by screens; panels and their widgets registered by id in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
 | 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
 Then **a round of tests against the factory interface** — test themes and layouts that are
@@ -189,7 +191,38 @@ its one correct rule, turns red. On screen the result is only "nothing crashed";
 the check. Showing problems to the user is not planned yet — later, a popup that points at
 the log file (§10, `Logger`).
 
-**Step 3g — localisation.** Editor text comes from locale files instead of code (§8).
+**Part 4, decided.** Code creates every panel and every widget — a button stays wired to
+what it does in Java, which a file could never express — and `layout.json` decides only where
+each goes: which panels a screen shows and how big, and, inside a panel, the order of its
+widgets and how they are grouped into rows and columns. A panel the file gives no
+`"children"` keeps its widgets in the order code made them; a widget a file does not mention
+— one an update added after the user wrote theirs — goes to the end of its panel, so an
+update never hides a control. Writing the user's copy waits for Phase 4: nothing changes the
+layout in memory until dividers can be dragged, and code with no caller would go untested.
+`tabs` is part of the format now and validated, but until the tabbed pane exists (3g) it is
+built showing its first panel, with a note in the log.
+
+In four steps, each reviewed — **we stopped after 4b**: **4a** ✅ — `AegisJsonLines` learns
+arrays (`children[1].width`), and `AegisLayout` can move a node to another parent; **4b** ✅ —
+the file read and validated into a description (`AegisLayoutFile`), with the same report and
+strict types as a theme — the report's machinery now shared by both, in `AegisFindings` —
+nothing on screen yet;
+**4c** — screens built from it, the factory layout in the editor's code, the per-screen chain,
+the scaffolding rewritten to register panels; **4d** — a size code sets on a widget is kept
+when a theme is applied, which today replaces it.
+
+**Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
+against Swing's list. Planned, not started; each keyboard-operable like the rest.
+
+| Group | Widgets |
+|---|---|
+| First, the editor needs them | Label, separator, scroll pane, **tabbed pane** — tab bar, click, Ctrl+Tab and Ctrl+PageUp/PageDown, arrows while the bar has focus, like Swing's `JTabbedPane` — split pane (the draggable dividers), spinner (a number with arrows, for the inspector), tree (the hierarchy) |
+| Then, on an overlay layer | An **overlay layer** first — Swing's layered pane: drawn above everything, given the pointer first. Then tooltip, combo box (dropdown), menu bar and menus, dialog (modal; also the future "see the log" popup) |
+| When a real panel asks | Radio button, list, table (asset browser), progress bar (asset baking), colour chooser, toolbar |
+| Elsewhere | File chooser: the system's own dialog (tinyfd, bundled with LWJGL), not a reimplementation. Internal frames — floating windows inside the main one — come with docking, much later |
+| Not planned | Applet, root pane (Swing internals or obsolete), password field (the editor asks for none), rich-text panes (only if a script editor is ever built in) |
+
+**Step 3h — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.
 
 **Then Phase 4** migrates the real editor panels one at a time, and **Phase 5** deletes Dear
@@ -1013,7 +1046,13 @@ hang.
         { "type": "row", "grow": 1, "alignY": "stretch", "gap": 4, "children": [
           { "type": "panel", "panel": "hierarchy", "width": 240 },
           { "type": "panel", "panel": "viewport",  "grow": 1 },
-          { "type": "panel", "panel": "inspector", "width": 300 }
+          { "type": "panel", "panel": "inspector", "width": 300, "children": [
+            { "type": "widget", "widget": "nameField" },
+            { "type": "row", "gap": 12, "children": [
+              { "type": "widget", "widget": "showGridCheckbox" },
+              { "type": "widget", "widget": "snapCheckbox" }
+            ]}
+          ]}
         ]}
       ]}
     },
@@ -1038,14 +1077,22 @@ rearrange through the interface** — the editor's dividers can be dragged, the 
 screen's cannot — while **the file can rearrange any screen**, so the shell's designer can
 lay out settings without end users moving it by accident.
 
-Four kinds of node, mirroring `AegisLayout`:
+Five kinds of node, mirroring `AegisLayout`:
 
 | Node | Holds |
 |---|---|
 | `row` | Children side by side, left to right |
 | `column` | Children stacked, top to bottom |
-| `panel` | One panel's slot, by the id its code registered — `"panel": "inspector"` |
+| `panel` | One panel's slot, by the id its code registered — `"panel": "inspector"`. Optionally `"children"`: how the panel's own widgets are ordered and grouped |
+| `widget` | Inside a panel's `"children"` only: one of that panel's widgets, by its id — `"widget": "nameField"` |
 | `tabs` | Several panels sharing a slot, one shown at a time, in the order listed |
+
+**Inside a panel, the file arranges and code creates.** A panel's widgets are made in code,
+each wired to what it does; the file only orders them and groups them into rows and columns,
+by the same ids a theme uses. A panel without `"children"` shows its widgets as code laid
+them out. A widget the file does not mention is added at the end of its panel, in code order,
+with a note — an update's new control is never hidden by an older file. Rows and columns
+inside a panel carry no id, like the screen's, so regrouping a panel changes no theme path.
 
 Sizes and spacing are the layout's own: `width`, `height`, `grow`, and on rows and columns
 `gap`, `padding`, `alignX`, `alignY` (`start`, `center`, `end`, `stretch`). The `"type"` is
@@ -1092,6 +1139,10 @@ settings that could fix the problem.
 | Invalid size in the layout — `"width": -40` | value | Automatic sizing, with a warning |
 | `panel` id not registered in code | value | Slot left empty, with a warning; the rest still lays out |
 | The same panel in two slots | value | The second is left empty, with a warning |
+| `widget` id not one of that panel's widgets | value | Ignored, with a warning |
+| The same widget twice in a panel | value | The second is ignored, with a warning |
+| A panel's widget the file does not mention | — | Added at the end of its panel, with a note |
+| A wrong type — `"width": "240"`, `"grow": true` | value | Default for that property, with a warning; types are strict, as in a theme |
 | Registered panel absent from `layout.json` | — | Not shown — how a minimal layout is authored |
 | Property omitted | — | Default, no warning — this is what allows a partial theme |
 
@@ -1537,7 +1588,8 @@ nobody can review.
 | **3d** ✅ | A retained tree survives frames; hit-testing and focus order work | L4 |
 | **3e** ✅ | Button, checkbox, slider, text field and text box behave correctly | L4 |
 | **3f** | `theme.json` drives the colours and `layout.json` the arrangement, each falling back to the factory defaults in code; a broken file is reported precisely and never stops the editor; with the development option on, saving the theme reloads it live | §7 |
-| **3g** | Editor text comes from locale files, following the system language by default | §8 |
+| **3g** | The widget set: label, separator, scroll, tabbed and split panes, spinner, tree, the overlay layer and what sits on it | §6 |
+| **3h** | Editor text comes from locale files, following the system language by default | §8 |
 
 The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
 

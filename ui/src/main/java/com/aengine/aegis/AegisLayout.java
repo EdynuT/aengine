@@ -198,6 +198,68 @@ public final class AegisLayout {
     public int box(int parent) { return add(BOX, parent); }
 
     /**
+     * Moves a node, with everything under it, to the end of another node's children — or
+     * makes it a root, when {@code newParent} is {@link #NONE}.
+     *
+     * <p>How a layout file places what code made: a panel built by code as a root is attached
+     * to the slot the file gives it, and a widget is moved into a row the file groups it in.
+     * Handles do not change; only where the node hangs.</p>
+     *
+     * @param node      the node to move
+     * @param newParent a row or a column, or {@link #NONE}
+     * @throws IllegalArgumentException if {@code newParent} is a box, or is {@code node} itself
+     *                                  or under it — the tree would loop
+     */
+    public void attach(int node, int newParent) {
+        if (newParent != NONE) {
+            if (kind[newParent] == BOX) {
+                throw new IllegalArgumentException("A box holds nothing; attach to a row or a column instead.");
+            }
+            for (int up = newParent; up != NONE; up = parent[up]) {
+                if (up == node) {
+                    throw new IllegalArgumentException("A node cannot be attached under itself.");
+                }
+            }
+        }
+        detach(node);
+        if (newParent == NONE) return;
+
+        parent[node] = newParent;
+        if (firstChild[newParent] == NONE) {
+            firstChild[newParent] = node;
+        } else {
+            nextSibling[lastChild[newParent]] = node;
+        }
+        lastChild[newParent] = node;
+        version++;
+    }
+
+    /**
+     * Takes a node, with everything under it, out of its parent's children, leaving it a root.
+     * A node that is already a root is left as it is.
+     *
+     * <p>Walks the parent's children to find the one before it, since siblings link forward
+     * only; this is for building, not for the frame loop.</p>
+     *
+     * @param node the node to take out
+     */
+    public void detach(int node) {
+        int from = parent[node];
+        if (from == NONE) return;
+
+        int before = NONE;
+        for (int c = firstChild[from]; c != node; c = nextSibling[c]) before = c;
+
+        if (before == NONE) firstChild[from] = nextSibling[node];
+        else                nextSibling[before] = nextSibling[node];
+        if (lastChild[from] == node) lastChild[from] = before;
+
+        parent[node]      = NONE;
+        nextSibling[node] = NONE;
+        version++;
+    }
+
+    /**
      * The size a node asks for, in pixels.
      *
      * <p>A root does not need one: it takes the rectangle {@link #solve} hands it.</p>

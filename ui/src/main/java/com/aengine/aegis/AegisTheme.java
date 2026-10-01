@@ -1,6 +1,5 @@
 package com.aengine.aegis;
 
-import com.aengine.utils.Logger;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -8,12 +7,10 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
 
-import com.google.gson.stream.MalformedJsonException;
 
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,8 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A theme, read and resolved — step 3f part 2.
@@ -80,10 +75,6 @@ public final class AegisTheme {
         Rule(String key, String value) { this.key = key; this.value = value; }
     }
 
-    /** Something to say about the file: a problem, or a note that changes nothing. */
-    private record Finding(int line, boolean problem, String message) {
-    }
-
     private static final String GLOBAL_PREFIX = "global.";
 
     private final String source;        // where it came from, for warnings: a path, or "factory"
@@ -102,11 +93,8 @@ public final class AegisTheme {
     /** Every catalogue entry's value once global and defaults are resolved: a {@code float[4]} or a {@code Float}. */
     private final Map<String, Object> resolvedGlobal = new HashMap<>();
 
-    /** Mistakes already recorded, so one that many widgets share is reported once. */
-    private final Set<String> warned = new HashSet<>();
-
     /** What {@link #report} will say, gathered while reading and while dressing widgets. */
-    private final List<Finding> findings = new ArrayList<>();
+    private final AegisFindings findings;
     private boolean reported;
 
     private AegisStyle globalStyle;
@@ -117,6 +105,7 @@ public final class AegisTheme {
         this.description = description;
         this.format      = format;
         this.lines       = lines;
+        this.findings    = new AegisFindings(source);
     }
 
     // -----------------------------------------------------------------------------------
@@ -166,9 +155,7 @@ public final class AegisTheme {
         // is a few kilobytes.
         String text;
         try {
-            StringWriter whole = new StringWriter();
-            reader.transferTo(whole);
-            text = whole.toString();
+            text = AegisFindings.readAll(reader);
         } catch (IOException e) {
             throw new Unusable(source + " could not be read: " + e.getMessage(), e);
         }
@@ -179,7 +166,7 @@ public final class AegisTheme {
             json.setLenient(true);   // tolerate a comment someone added; the shipped themes have none
             root = JsonParser.parseReader(json);
         } catch (JsonParseException e) {
-            throw new Unusable(syntaxError(source, e), e);
+            throw new Unusable(AegisFindings.syntaxError(source, e), e);
         }
         if (!root.isJsonObject()) {
             throw new Unusable(source + " must hold one JSON object, { ... }, at the top.", null);
@@ -187,7 +174,7 @@ public final class AegisTheme {
         JsonObject top = root.getAsJsonObject();
 
         JsonElement declared = top.get("format");
-        Integer declaredFormat = declared != null ? wholeNumber(declared) : null;
+        Integer declaredFormat = declared != null ? AegisFindings.wholeNumber(declared) : null;
 
         AegisTheme theme = new AegisTheme(source,
             text(top, "name", source), text(top, "description", ""),
@@ -197,7 +184,7 @@ public final class AegisTheme {
         for (String[] path : theme.lines.repeated()) {
             List<Integer> at = theme.lines.lines(path);
             theme.note(String.join(".", path), String.join(".", path) + " is written on lines "
-                + listOf(at) + "; only line " + at.get(at.size() - 1) + " counts");
+                + AegisFindings.listOf(at) + "; only line " + at.get(at.size() - 1) + " counts");
         }
 
         for (Map.Entry<String, JsonElement> e : top.entrySet()) {
@@ -254,44 +241,6 @@ public final class AegisTheme {
                     + ". Added since, and at their defaults unless a rule sets them: " + String.join(", ", later));
             }
         }
-    }
-
-    /** A JSON number with no fraction, or null. A string is not a number, even "1". */
-    private static Integer wholeNumber(JsonElement e) {
-        if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) return null;
-        try {
-            return new java.math.BigDecimal(e.getAsString().trim()).intValueExact();
-        } catch (NumberFormatException | ArithmeticException ex) {
-            return null;
-        }
-    }
-
-    /**
-     * Gson's complaint, said the way the other warnings are: the file and the line first.
-     * Gson writes "Expected ':' at line 5 column 12 path $.global.accent".
-     */
-    private static String syntaxError(String source, JsonParseException e) {
-        Throwable cause = e.getCause() instanceof MalformedJsonException ? e.getCause() : e;
-        String message = String.valueOf(cause.getMessage());
-        Matcher m = GSON_LOCATION.matcher(message);
-        if (!m.find()) return source + " is not valid JSON: " + message;
-        String what = message.substring(0, m.start()).trim();
-        // Gson reports where it noticed, which is often past the mistake: a missing comma at
-        // the end of one line is noticed on the next.
-        return source + ":" + m.group(1) + ": not valid JSON, column " + m.group(2) + ": " + what
-            + " (if this line looks right, check the end of the one before: a missing comma or quote)";
-    }
-
-    private static final Pattern GSON_LOCATION = Pattern.compile(" at line (\\d+) column (\\d+)");
-
-    /** "7", "7 and 22", "7, 15 and 22". */
-    private static String listOf(List<Integer> numbers) {
-        StringBuilder s = new StringBuilder();
-        for (int i = 0; i < numbers.size(); i++) {
-            if (i > 0) s.append(i == numbers.size() - 1 ? " and " : ", ");
-            s.append(numbers.get(i));
-        }
-        return s.toString();
     }
 
     private void readGlobal(JsonElement element) {
@@ -529,25 +478,7 @@ public final class AegisTheme {
             }
         }
 
-        findings.sort((a, b) -> a.problem() != b.problem() ? (a.problem() ? -1 : 1)
-                                : Integer.compare(lineOrLast(a), lineOrLast(b)));
-        int problems = 0;
-        for (Finding f : findings) if (f.problem()) problems++;
-        int notes = findings.size() - problems;
-
-        if (problems > 0) {
-            Logger.warn(Logger.System.UI, "%s: %s", source, count(problems, "problem")
-                + (notes > 0 ? ", " + count(notes, "note") : "") + ":");
-            for (Finding f : findings) {
-                if (f.problem()) Logger.warn(Logger.System.UI, "  %s", lineText(f));
-                else             Logger.info(Logger.System.UI, "  %s", lineText(f));
-            }
-        } else if (notes > 0) {
-            Logger.info(Logger.System.UI, "%s: no problems, %s:", source, count(notes, "note"));
-            for (Finding f : findings) Logger.info(Logger.System.UI, "  %s", lineText(f));
-        } else {
-            Logger.info(Logger.System.UI, "%s: no problems.", source);
-        }
+        findings.log();
     }
 
     /** Whether any value in the file refers to the variable {@code name}. */
@@ -559,13 +490,6 @@ public final class AegisTheme {
         return false;
     }
 
-    private static int lineOrLast(Finding f) { return f.line() > 0 ? f.line() : Integer.MAX_VALUE; }
-
-    private static String lineText(Finding f) {
-        return (f.line() > 0 ? "line " + f.line() + ": " : "") + f.message();
-    }
-
-    private static String count(int n, String what) { return n + " " + what + (n == 1 ? "" : "s"); }
 
     // -----------------------------------------------------------------------------------
     // Resolving
@@ -713,12 +637,12 @@ public final class AegisTheme {
      * one wrong value that many properties lead to is one thing to fix.
      */
     private void warn(String key, String mistake, String message) {
-        if (warned.add(mistake)) findings.add(new Finding(lineOf(key), true, message));
+        findings.problem(lineOf(key), mistake, message);
     }
 
     /** Like {@link #warn}, for something worth knowing that changes nothing. */
     private void note(String key, String message) {
-        if (warned.add(message)) findings.add(new Finding(lineOf(key), false, message));
+        findings.note(lineOf(key), message);
     }
 
     /** The line {@code key} is written on, or 0 when it is not known. */
