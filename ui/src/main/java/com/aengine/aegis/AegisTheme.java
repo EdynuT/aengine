@@ -322,12 +322,12 @@ public final class AegisTheme {
      * A widget's own style, or {@code null} when no scoped rule reaches it and it should share
      * the global one.
      *
-     * @param path  the ids from the top of the tree down to the widget
-     * @param ownId whether the last id in {@code path} is the widget's own, rather than its
-     *              nearest named container's
-     * @param kind  the kind the catalogue dresses it as — {@code button}, {@code textfield}...
+     * @param path    the names from the top of the tree down to the widget
+     * @param ownName whether the last name in {@code path} is the widget's own, rather than its
+     *                nearest named container's
+     * @param kind    the kind the catalogue dresses it as — {@code button}, {@code textfield}...
      */
-    AegisStyle styleFor(List<String> path, boolean ownId, String kind) {
+    AegisStyle styleFor(List<String> path, boolean ownName, String kind) {
         if (rules.isEmpty() || kind.isEmpty()) return null;
 
         // Which rule wins for each property, and how strongly: one widget's own rule is 1000,
@@ -338,13 +338,13 @@ public final class AegisTheme {
         Map<AegisThemeCatalogue.Entry, Integer> runnerUpStrength = null;
 
         String full = String.join(".", path);
-        int panels = ownId ? path.size() - 1 : path.size();
+        int panels = ownName ? path.size() - 1 : path.size();
 
         for (Rule rule : rules) {
             AegisThemeCatalogue.Entry entry = null;
             int power = -1;
 
-            if (ownId && rule.key.startsWith(full + ".")) {
+            if (ownName && rule.key.startsWith(full + ".")) {
                 rule.matched = true;
                 entry = propertyOf(kind, rule.key.substring(full.length() + 1), rule.key);
                 if (entry == null) rule.broken = true;

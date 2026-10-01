@@ -250,7 +250,7 @@ public final class AegisWidgets {
      * style all widgets share, and each widget a scoped rule reaches gets a style of its own.
      * Widgets are then sized again, since a theme may change their padding.
      *
-     * <p>Call it after the tree is built and its ids are set — paths are made of ids — and again
+     * <p>Call it after the tree is built and its nodes are named — paths are made of names — and again
      * after building more under {@code root}. Never in the frame loop: rules are matched here,
      * by name, so that drawing only ever reads a field.</p>
      *
@@ -260,7 +260,7 @@ public final class AegisWidgets {
      * <p>Rules that reach no widget are reported in the log once this is done.</p>
      *
      * @param theme the theme to apply
-     * @param root  the top of the tree to dress; ids are read from here down
+     * @param root  the top of the tree to dress; names are read from here down
      */
     public void applyTheme(AegisTheme theme, int root) {
         globalStyle = theme.globalStyle();
@@ -271,16 +271,16 @@ public final class AegisWidgets {
         theme.report();
     }
 
-    /** The ids from the top of the tree down to the node being dressed. */
+    /** The names from the top of the tree down to the node being dressed. */
     private final ArrayList<String> pathScratch = new ArrayList<>();
 
     /** Walks a subtree, giving each widget the style its path calls for, and sizing it again. */
     private void dressSubtree(AegisTheme theme, int node) {
-        String id = layout.id(node);
-        if (id != null) pathScratch.add(id);
+        String name = layout.nodeName(node);
+        if (name != null) pathScratch.add(name);
 
         if (kind[node] != NOT_A_WIDGET) {
-            styleOf[node] = theme.styleFor(pathScratch, id != null, themeKind(node));
+            styleOf[node] = theme.styleFor(pathScratch, name != null, themeKind(node));
             fitToContent(node);
         }
         for (int child = layout.firstChild(node); child != AegisLayout.NONE;
@@ -288,7 +288,7 @@ public final class AegisWidgets {
             dressSubtree(theme, child);
         }
 
-        if (id != null) pathScratch.remove(pathScratch.size() - 1);
+        if (name != null) pathScratch.remove(pathScratch.size() - 1);
     }
 
     /** The kind a theme knows a widget by: the first part of the catalogue names that dress it. */

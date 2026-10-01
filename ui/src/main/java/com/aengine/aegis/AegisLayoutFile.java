@@ -28,7 +28,7 @@ import java.util.Set;
  * <p>Describes where things go and nothing else: which panels each screen shows, in which rows,
  * columns and tabs, at what size, and how a panel's widgets are ordered and grouped. Everything
  * it places is made by code — a panel and its widgets, each wired to what it does — and
- * registered under an id; this file only arranges those ids (§7, <em>Format</em>). Reading it
+ * registered under a name; this file only arranges those names (§7, <em>Format</em>). Reading it
  * builds nothing: it produces a description per screen, {@link Node}s, which step 4c turns into
  * layout nodes.</p>
  *
@@ -40,7 +40,7 @@ import java.util.Set;
  * not an object, a {@code "type"} that is not one of the five, {@code "children"} that is not a
  * list — is set aside, that screen alone, for the next file in line to supply. Anything else
  * is one property or one node wrong, and is dropped or falls back by itself. Types are strict:
- * a size is a JSON number, an id a string. Every finding names its line and is said in one
+ * a size is a JSON number, a name a string. Every finding names its line and is said in one
  * block by {@link #report}.</p>
  */
 public final class AegisLayoutFile {
@@ -59,9 +59,9 @@ public final class AegisLayoutFile {
         ROW,
         /** Children stacked, top to bottom. */
         COLUMN,
-        /** One panel's slot, by the id code registered it under. */
+        /** One panel's slot, by the name code registered it under. */
         PANEL,
-        /** Inside a panel only: one of that panel's widgets, by its id. */
+        /** Inside a panel only: one of that panel's widgets, by its name. */
         WIDGET,
         /** Several panels sharing a slot, one shown at a time. */
         TABS
@@ -74,7 +74,7 @@ public final class AegisLayoutFile {
      */
     public static final class Node {
         private final Type   type;
-        private final String id;          // the panel's or the widget's; null for the others
+        private final String name;        // the panel's or the widget's; null for the others
         private final int    line;
         private final List<Node>   children = new ArrayList<>();
         private final List<String> tabs     = new ArrayList<>();
@@ -83,17 +83,17 @@ public final class AegisLayoutFile {
         float width = Float.NaN, height = Float.NaN, grow = Float.NaN, gap = Float.NaN, padding = Float.NaN;
         AegisLayout.Align alignX, alignY;
 
-        Node(Type type, String id, int line) {
+        Node(Type type, String name, int line) {
             this.type = type;
-            this.id   = id;
+            this.name = name;
             this.line = line;
         }
 
         /** @return what kind of node it is */
         public Type type() { return type; }
 
-        /** @return the panel's id for a panel, the widget's for a widget, otherwise {@code null} */
-        public String id() { return id; }
+        /** @return the panel's name for a panel, the widget's for a widget, otherwise {@code null} */
+        public String name() { return name; }
 
         /** @return the line the node starts on, or 0 when not known */
         public int line() { return line; }
@@ -130,7 +130,7 @@ public final class AegisLayoutFile {
 
         /** {@code panel "inspector"}, {@code widget "nameField"}, {@code row}: how messages name it. */
         String label() {
-            return id != null ? type.name().toLowerCase() + " \"" + id + "\"" : type.name().toLowerCase();
+            return name != null ? type.name().toLowerCase() + " \"" + name + "\"" : type.name().toLowerCase();
         }
     }
 
@@ -335,18 +335,18 @@ public final class AegisLayoutFile {
         }
 
         // What it refers to, for a panel or a widget, and where it may stand.
-        String id = null;
+        String name = null;
         if (type == Type.PANEL || type == Type.WIDGET) {
             String key = type == Type.PANEL ? "panel" : "widget";
-            JsonElement idElement = object.get(key);
-            if (!isString(idElement)) {
-                findings.problem(at, "a " + key + " node needs \"" + key + "\": the id code registered,"
+            JsonElement nameElement = object.get(key);
+            if (!isString(nameElement)) {
+                findings.problem(at, "a " + key + " node needs \"" + key + "\": the name code registered,"
                     + " in quotes; the node is left out");
                 return null;
             }
-            id = idElement.getAsString();
+            name = nameElement.getAsString();
         }
-        Node node = new Node(type, id, at);
+        Node node = new Node(type, name, at);
 
         if (panel != null && (type == Type.PANEL || type == Type.TABS)) {
             findings.problem(at, node.label() + " is inside " + panel.label()
@@ -358,7 +358,7 @@ public final class AegisLayoutFile {
                 + " its panel's \"children\". It is left out");
             return null;
         }
-        if (type == Type.PANEL && !place(node, id)) return null;
+        if (type == Type.PANEL && !place(node, name)) return null;
         if (type == Type.WIDGET && !placeWidget(node, panel)) return null;
 
         // Properties: which a node may hold depends on its type.
@@ -391,7 +391,7 @@ public final class AegisLayoutFile {
         }
 
         if (type == Type.TABS && object.get("panels") == null) {
-            findings.problem(at, "tabs needs \"panels\": a list of panel ids; the node is left out");
+            findings.problem(at, "tabs needs \"panels\": a list of panel names; the node is left out");
             return null;
         }
         if (type == Type.TABS && !node.tabs.isEmpty()) {
@@ -412,7 +412,7 @@ public final class AegisLayoutFile {
 
     private void readTabs(Node node, JsonElement value, List<String> path, int keyLine) {
         if (!value.isJsonArray()) {
-            findings.problem(keyLine, "tabs: \"panels\" must be a list of panel ids, [\"a\", \"b\"]; it is ignored");
+            findings.problem(keyLine, "tabs: \"panels\" must be a list of panel names, [\"a\", \"b\"]; it is ignored");
             return;
         }
         JsonArray array = value.getAsJsonArray();
@@ -421,25 +421,25 @@ public final class AegisLayoutFile {
             int at = line(path);
             JsonElement e = array.get(i);
             if (!isString(e)) {
-                findings.problem(at, "tabs: a panel id is text in quotes; got " + e + ". It is left out");
+                findings.problem(at, "tabs: a panel name is text in quotes; got " + e + ". It is left out");
             } else {
                 Node slot = new Node(Type.PANEL, e.getAsString(), at);
-                if (place(slot, slot.id)) node.tabs.add(slot.id);
+                if (place(slot, slot.name)) node.tabs.add(slot.name);
             }
             path.remove(path.size() - 1);
         }
     }
 
     /** Records where a panel goes; false, reported, if it already has a place. */
-    private boolean place(Node node, String id) {
-        Node earlier = placedPanels.get(id);
+    private boolean place(Node node, String name) {
+        Node earlier = placedPanels.get(name);
         if (earlier != null) {
-            findings.problem(node.line, "panel \"" + id + "\" is already placed"
+            findings.problem(node.line, "panel \"" + name + "\" is already placed"
                 + (earlier.line > 0 ? " on line " + earlier.line : "")
                 + "; a panel has one place in the whole file. This one is left empty");
             return false;
         }
-        placedPanels.put(id, node);
+        placedPanels.put(name, node);
         screenOf.put(node, reading);
         return true;
     }
@@ -449,13 +449,13 @@ public final class AegisLayoutFile {
 
     private boolean placeWidget(Node node, Node panel) {
         Map<String, Node> placed = placedWidgets.computeIfAbsent(panel, p -> new HashMap<>());
-        Node earlier = placed.get(node.id);
+        Node earlier = placed.get(node.name);
         if (earlier != null) {
             findings.problem(node.line, node.label() + " is already placed in " + panel.label()
                 + (earlier.line > 0 ? " on line " + earlier.line : "") + "; this one is left out");
             return false;
         }
-        placed.put(node.id, node);
+        placed.put(node.name, node);
         return true;
     }
 
@@ -511,12 +511,12 @@ public final class AegisLayoutFile {
     /**
      * A screen's root as the file describes it.
      *
-     * @param screen the screen's id, e.g. {@code "editor"}
+     * @param screen the screen's name, e.g. {@code "editor"}
      * @return its root, or {@code null} when the file has no such screen or it was set aside
      */
     public Node screen(String screen) { return screens.get(screen); }
 
-    /** @return the ids of the screens the file describes usably, in file order */
+    /** @return the names of the screens the file describes usably, in file order */
     public Set<String> screens() { return Collections.unmodifiableSet(screens.keySet()); }
 
     /** @return the {@code name} the file declares, or its source */
@@ -532,7 +532,7 @@ public final class AegisLayoutFile {
     public String source() { return source; }
 
     /**
-     * Records a problem found while building from the file — a panel id code never registered,
+     * Records a problem found while building from the file — a panel name code never registered,
      * a widget that is not that panel's — so it is said with the rest.
      */
     void problem(Node node, String message) { findings.problem(node.line, message); }

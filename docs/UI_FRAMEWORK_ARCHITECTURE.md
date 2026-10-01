@@ -40,7 +40,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3e-7 | Selection by Shift+keys and dragging, word jumps, Ctrl+A/C/X/V through the system clipboard; typed and pasted text filtered alike |
 | Step 3e-8 | Undo and redo in the field being edited, in blocks: a word, a run of spaces, of Backspaces or of Deletes, a paste |
 | Step 3e-9 | Text box: several lines wrapped to its width, Enter breaks and Ctrl+Enter confirms, Up/Down keep the column, scrolled by caret or wheel |
-| Step 3f-1 | The theme catalogue: every themeable property with its type and a default on the palette; ids on layout nodes |
+| Step 3f-1 | The theme catalogue: every themeable property with its type and a default on the palette; names on layout nodes |
 | Step 3f-2 | Themes read and resolved into a style per widget — global, local variables, panel-and-kind and one-widget rules — with the factory theme when no file is found |
 | Step 3f-3 | A theme's mistakes reported in one block after it is applied, each with its line: problems as warnings, notes — repeated keys, unused variables, rules that change nothing — as information; strict types; the `format` checked against the engine's |
 | Step 3f-4a | `AegisJsonLines` reads lines inside lists (`children[1].width`); `AegisLayout.attach` / `detach` move a node to another parent |
@@ -149,16 +149,16 @@ part 3**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
-| 1 ✅ | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; ids on layout nodes | Nothing on screen; it is the definition the next parts depend on |
+| 1 ✅ | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; names on layout nodes | Nothing on screen; it is the definition the next parts depend on |
 | 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
 | 3 ✅ | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
-| 4 | Layout | `layout.json` read by screens; panels and their widgets registered by id in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
+| 4 | Layout | `layout.json` read by screens; panels and their widgets registered by name in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
 | 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
 Then **a round of tests against the factory interface** — test themes and layouts that are
 missing, partial, broken, contradictory or out of date — to find the gaps before anyone else
 does. Only after it, the **guide for the shell's designer**: the format, the whole catalogue
-with what each entry changes on screen, the ids there are to reach, and the advice to write
+with what each entry changes on screen, the names there are to reach, and the advice to write
 in `global` — describing only what those tests have shown to work.
 
 Parts 1 and 2 go together, since a catalogue with nothing reading it shows nothing. Parts 3
@@ -201,6 +201,11 @@ update never hides a control. Writing the user's copy waits for Phase 4: nothing
 layout in memory until dividers can be dragged, and code with no caller would go untested.
 `tabs` is part of the format now and validated, but until the tabbed pane exists (3g) it is
 built showing its first panel, with a note in the log.
+
+Before 4c, what was called a node's *id* became its **name** — `setNodeName`,
+`nodeName(node)` — since "id" suggested a number the engine generates, when it is a word
+whoever writes the code chooses, and the one a theme or layout file writes. `setNodeName`
+rather than `setName`, so the call says what it names.
 
 In four steps, each reviewed — **we stopped after 4b**: **4a** ✅ — `AegisJsonLines` learns
 arrays (`children[1].width`), and `AegisLayout` can move a node to another parent; **4b** ✅ —
@@ -901,7 +906,7 @@ or where it goes.**
 | Behaviour, state, interaction | Colours, radii, spacing, typography |
 
 No line of editor code names a colour or a pixel position. A panel registers under a stable
-id and declares a semantic role; the package maps roles to appearance and ids to positions.
+name and declares a semantic role; the package maps roles to appearance and names to positions.
 This is the same cut as `<button class="primary">` against `.primary { … }`, and it is what
 makes the package genuinely detachable rather than just externalised constants.
 
@@ -997,7 +1002,7 @@ A theme holds four kinds of entry:
 | Metadata | `name`, `description`, `format` | What the theme list shows, and which catalogue version the theme was written against. Not colours. |
 | Global | inside `"global"` | Applies everywhere: the **palette** (`accent`, `surface`, `text`…) and the look of each **kind** of widget (`button.fill` — every button). |
 | Local variable | a key **without** a dot, outside `global` | Paints nothing by itself; takes effect only where referenced as `@name`. |
-| Scoped rule | a key **with** a dot, outside `global` | A path of ids, then a property. `panel.kind.property` — `inspector.textfield.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetId.property` — `viewport.stopButton.fill` — styles one widget. |
+| Scoped rule | a key **with** a dot, outside `global` | A path of names, then a property. `panel.kind.property` — `inspector.textfield.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetName.property` — `viewport.stopButton.fill` — styles one widget. |
 
 The dot is what tells a local variable from a scoped rule, which is why local variables are
 one word (`danger`, `warning`). References say where they point: `@global.accent` reads the
@@ -1005,11 +1010,13 @@ global, `@danger` a local variable.
 
 **Precedence:** one widget's own rule > panel and kind > global > the catalogue's default.
 
-**Paths are made of ids given in code** — `layout.setId(stopButton, "stopButton")` — never of
-handles, which shift whenever a widget is added before another. Containers without an id are
-left out of the path, so wrapping part of a panel in a new row does not break a theme. Ids are
-thereby part of the contract with theme authors: renaming one is a change to announce in the
-release notes, and a path that no longer matches is reported, not silently ignored.
+**Paths are made of names given in code** — `layout.setNodeName(stopButton, "stopButton")` —
+never of handles, which shift whenever a widget is added before another. A name is chosen by
+whoever writes the code, not generated, so it reads as what the thing is and stays the same
+from one run to the next. Containers without a name are left out of the path, so wrapping
+part of a panel in a new row does not break a theme. Names are thereby part of the contract
+with theme authors: renaming one is a change to announce in the release notes, and a path
+that no longer matches is reported, not silently ignored.
 
 **How a custom theme survives an engine update.** An update that adds widgets must not leave
 them looking foreign in someone's theme. Three layers see to it, strongest first:
@@ -1072,7 +1079,7 @@ panel, which is the panel's code, nor what it looks like, which is the theme.
 
 **It describes screens, not one window.** The editor's main screen is one entry of
 `"screens"`; settings is another, and screens not yet decided are added the same way. A
-screen is registered in code under an id, as a panel is. **Code decides what the user may
+screen is registered in code under a name, as a panel is. **Code decides what the user may
 rearrange through the interface** — the editor's dividers can be dragged, the settings
 screen's cannot — while **the file can rearrange any screen**, so the shell's designer can
 lay out settings without end users moving it by accident.
@@ -1083,24 +1090,24 @@ Five kinds of node, mirroring `AegisLayout`:
 |---|---|
 | `row` | Children side by side, left to right |
 | `column` | Children stacked, top to bottom |
-| `panel` | One panel's slot, by the id its code registered — `"panel": "inspector"`. Optionally `"children"`: how the panel's own widgets are ordered and grouped |
-| `widget` | Inside a panel's `"children"` only: one of that panel's widgets, by its id — `"widget": "nameField"` |
+| `panel` | One panel's slot, by the name its code registered — `"panel": "inspector"`. Optionally `"children"`: how the panel's own widgets are ordered and grouped |
+| `widget` | Inside a panel's `"children"` only: one of that panel's widgets, by its name — `"widget": "nameField"` |
 | `tabs` | Several panels sharing a slot, one shown at a time, in the order listed |
 
 **Inside a panel, the file arranges and code creates.** A panel's widgets are made in code,
 each wired to what it does; the file only orders them and groups them into rows and columns,
-by the same ids a theme uses. A panel without `"children"` shows its widgets as code laid
+by the same names a theme uses. A panel without `"children"` shows its widgets as code laid
 them out. A widget the file does not mention is added at the end of its panel, in code order,
 with a note — an update's new control is never hidden by an older file. Rows and columns
-inside a panel carry no id, like the screen's, so regrouping a panel changes no theme path.
+inside a panel carry no name, like the screen's, so regrouping a panel changes no theme path.
 
 Sizes and spacing are the layout's own: `width`, `height`, `grow`, and on rows and columns
 `gap`, `padding`, `alignX`, `alignY` (`start`, `center`, `end`, `stretch`). The `"type"` is
 always written, so the four kinds read plainly.
 
-**Panel ids are unique across the whole engine**, not per screen, so a theme path stays
+**Panel names are unique across the whole engine**, not per screen, so a theme path stays
 `panel.widget` — `settingsGeneral.fontSize.border` — with no screen in it; a panel belongs to
-one screen. Rows, columns and tabs in the layout carry no id and never appear in a theme
+one screen. Rows, columns and tabs in the layout carry no name and never appear in a theme
 path, so moving the inspector to the other side changes no theme.
 
 Screens fall back **one by one**: the editor screen may come from the user's file while
@@ -1133,13 +1140,13 @@ settings that could fix the problem.
 | A layout screen does not form a tree — `"type": "diagonal"`, `children` not a list | structure | That screen from the next in line, with a warning; the file's other screens still apply |
 | Invalid value — `"bleu"` for a colour | value | Default, with a warning |
 | Unknown property name — `button.fil` | value | Ignored, with a warning; the intended property falls to its default |
-| A path that matches no widget — an id renamed | value | Ignored, with a warning |
+| A path that matches no widget — a name changed in code | value | Ignored, with a warning |
 | `@reference` to a name that does not exist | value | Default, with a warning |
 | `@reference` cycle | value | Default for every property in the cycle, with a warning |
 | Invalid size in the layout — `"width": -40` | value | Automatic sizing, with a warning |
-| `panel` id not registered in code | value | Slot left empty, with a warning; the rest still lays out |
+| `panel` name not registered in code | value | Slot left empty, with a warning; the rest still lays out |
 | The same panel in two slots | value | The second is left empty, with a warning |
-| `widget` id not one of that panel's widgets | value | Ignored, with a warning |
+| `widget` name not one of that panel's widgets | value | Ignored, with a warning |
 | The same widget twice in a panel | value | The second is ignored, with a warning |
 | A panel's widget the file does not mention | — | Added at the end of its panel, with a note |
 | A wrong type — `"width": "240"`, `"grow": true` | value | Default for that property, with a warning; types are strict, as in a theme |
@@ -1303,7 +1310,7 @@ anything inside the viewport, that is a defect.
 
 ### Where the cost lands
 
-Addressing panels by id from data requires every panel to be a registration rather than a
+Addressing panels by name from data requires every panel to be a registration rather than a
 hardcoded call. That is not extra work bolted on: it is how panels have to be written anyway
 as they move to the framework in Phase 4. The arrangement half of this feature is largely
 absorbed by migration work already planned.
@@ -1594,7 +1601,7 @@ nobody can review.
 The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
 
 The arrangement half of the shell package — panels placed from data rather than from code —
-was first put in Phase 4, since it needs panels that register by id. It moved into 3f: the
+was first put in Phase 4, since it needs panels that register by name. It moved into 3f: the
 scaffolding's panes are enough to register, and settling the format with the theme's let
 both be designed together.
 
@@ -1611,7 +1618,7 @@ raise and lower it, and the wheel over a text box also zooms it. When the viewpo
 viewport has been clicked — has focus — and a click anywhere else, or focus in any widget,
 takes the camera's keys away. Until then it is left as it is.
 
-Each panel arrives as a **registration under a stable id** rather than a hardcoded call, so
+Each panel arrives as a **registration under a stable name** rather than a hardcoded call, so
 `layout.json` — read since 3f — can place it; it costs almost nothing extra here because a
 panel being migrated has to be rewritten anyway. This phase adds what needs real panels:
 dividers the user drags, written back to their `layout.json` a second after release, and

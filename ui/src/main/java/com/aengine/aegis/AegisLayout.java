@@ -114,8 +114,8 @@ public final class AegisLayout {
     private final Align[] alignX;
     private final Align[] alignY;
 
-    // A name given in code, for a theme to find the node by. Null for a node without one.
-    private final String[] id;
+    // A name given in code, for a theme or a layout file to find the node by. Null for a node without one.
+    private final String[] name;
 
     // What the solve gave it.
     private final float[] solvedX;
@@ -159,7 +159,7 @@ public final class AegisLayout {
         alignX          = new Align[capacity];
         alignY          = new Align[capacity];
 
-        id = new String[capacity];
+        name = new String[capacity];
 
         solvedX      = new float[capacity];
         solvedY      = new float[capacity];
@@ -376,12 +376,12 @@ public final class AegisLayout {
     /**
      * Names a node, so a theme can reach it.
      *
-     * <p>A theme finds a widget by the path of ids from the top of the tree down to it —
+     * <p>A theme finds a widget by the path of names from the top of the tree down to it —
      * {@code viewport.stopButton} — never by handle, since handles shift whenever a node is
-     * added before another. Nodes without an id are left out of the path: wrapping part of a
+     * added before another. Nodes without a name are left out of the path: wrapping part of a
      * panel in a new row changes no path, so no theme breaks.</p>
      *
-     * <p>That makes ids part of the contract with theme authors. Renaming one silently drops
+     * <p>That makes names part of the contract with theme authors. Renaming one silently drops
      * every theme rule that named it; do it as deliberately as renaming a public method.</p>
      *
      * @param node the handle
@@ -389,30 +389,30 @@ public final class AegisLayout {
      *             dot is what separates the parts of a path
      * @throws IllegalArgumentException for a name that could not appear in a path
      */
-    public void setId(int node, String name) {
-        if (!isValidId(name)) {
+    public void setNodeName(int node, String name) {
+        if (!isValidNodeName(name)) {
             throw new IllegalArgumentException(
-                "\"" + name + "\" cannot be an id: use letters, digits and underscores, "
+                "\"" + name + "\" cannot be a node name: use letters, digits and underscores, "
                 + "starting with a letter. A dot would split it into two parts of a theme path.");
         }
-        id[node] = name;
+        this.name[node] = name;
     }
 
     /**
-     * A node's id, or {@code null} if it was not given one.
+     * A node's name, or {@code null} if it was not given one.
      *
      * @param node the handle
-     * @return the id, or {@code null}
+     * @return the name, or {@code null}
      */
-    public String id(int node) { return id[node]; }
+    public String nodeName(int node) { return name[node]; }
 
     /**
-     * Whether a name is usable as an id: a letter, then letters, digits or underscores.
+     * Whether a name is usable as a node's name: a letter, then letters, digits or underscores.
      *
      * @param name the candidate
-     * @return {@code true} if {@link #setId} would accept it
+     * @return {@code true} if {@link #setNodeName} would accept it
      */
-    public static boolean isValidId(String name) {
+    public static boolean isValidNodeName(String name) {
         if (name == null || name.isEmpty() || !Character.isLetter(name.charAt(0))) return false;
         for (int i = 1; i < name.length(); i++) {
             char c = name.charAt(i);
@@ -630,7 +630,7 @@ public final class AegisLayout {
         grow[node]            = 0.0f;
         alignX[node]          = Align.START;
         alignY[node]          = Align.START;
-        id[node]              = null;
+        name[node]            = null;
 
         // Never solved. A handle reused after clear() must not inherit the version its
         // previous owner was solved at, or its first solve could be skipped.
