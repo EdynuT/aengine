@@ -1,4 +1,4 @@
-# AEngine
+# Ængine
 
 A high-performance, multi-API capable graphics engine built in Java, running as a single self-contained process.
 
