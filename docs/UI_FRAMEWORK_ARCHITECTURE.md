@@ -808,10 +808,16 @@ at a time — so it allocates nothing.
 *Widgets* are `AegisWidgets` (step 3e), handed out by `aegis.widgets()`. What is worth
 recording:
 
-**One generic call per kind, not one per use.** `ae.button(parent, "Play")` creates a layout
-node, marks it interactive and focusable, and records its kind and label in the widgets' own
-arrays — the same handle again. The caller asks `ae.wasActivated(playButton)` each frame;
-there are no callbacks and no object per widget.
+**One generic call per kind, not one per use.** `ae.button(parent, "playButton", "Play")`
+creates a layout node, names it, marks it interactive and focusable, and records its kind and
+label in the widgets' own arrays — the same handle again. The caller asks
+`ae.wasActivated(playButton)` each frame; there are no callbacks and no object per widget.
+
+**Every widget is named as it is made.** The name — `"playButton"` — is what a theme or a
+layout file writes to reach it, and the label — `"Play"` — is what the user reads; the first
+stays put, the second may be translated. Making the name an argument rather than a later
+`setNodeName` means a widget cannot be left without one, so every widget can be dressed and
+placed by a file.
 
 **Keyboard intent is handed in, like the pointer.** `ae.key(key, mods, repeat)` and
 `ae.character(codepoint)` are fed from the `Input` event queue by the caller, which decides

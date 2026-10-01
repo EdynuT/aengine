@@ -1089,7 +1089,7 @@ public class Main extends Engine {
         // to mean something. It asks for 200 pixels of the pane's 224 and, the pane being START
         // on X, gets exactly that. One small step is a hundredth of the range by default — 1
         // here — and Shift makes it ten.
-        opacitySlider = ae.slider(layoutHierarchy, 0.0f, 100.0f, 50.0f);
+        opacitySlider = ae.slider(layoutHierarchy, "opacitySlider", 0.0f, 100.0f, 50.0f);
 
         // Viewport: takes the width the side panes leave, and centres what it holds on both
         // axes — one call per axis. A row, so its buttons sit side by side: CENTER on X moves
@@ -1103,14 +1103,18 @@ public class Main extends Engine {
         // Step 3e-3: three real buttons. Each call makes the layout node, sizes it to its label,
         // makes it clickable and reachable with Tab, and records that it is a button — nothing
         // else to wire. ae is the widgets object, declared at the top of this method.
-        playButton = ae.button(layoutViewport, "Play");
-        pauseButton = ae.button(layoutViewport, "Pause");
-        stopButton  = ae.button(layoutViewport, "Stop");
+        // Every widget is named as it is made — the second argument, "playButton" — and the
+        // name is what a theme or a layout file writes to reach it; the third is the label the
+        // user sees. The name is for files and stays put; the label is for people and may be
+        // translated.
+        playButton  = ae.button(layoutViewport, "playButton",  "Play");
+        pauseButton = ae.button(layoutViewport, "pauseButton", "Pause");
+        stopButton  = ae.button(layoutViewport, "stopButton",  "Stop");
 
         // Step 3e-9: a text box beside them, four lines tall, with no length limit. Lines wrap
         // at its width; Enter breaks a line and Ctrl+Enter confirms. setText() fills it with
         // enough text to scroll — the "\n" in it are line breaks the box shows as such.
-        descriptionBox = ae.textBox(layoutViewport, 4);
+        descriptionBox = ae.textBox(layoutViewport, "descriptionBox", 4);
         ae.setText(descriptionBox,
             "A text box wraps long lines at its own width, so this sentence carries on below.\n"
             + "Enter starts a new line; Ctrl+Enter confirms.\n"
@@ -1135,13 +1139,13 @@ public class Main extends Engine {
         // something is typed and back when the field is emptied again. To start it with a real
         // value instead — an entity's current name — call ae.setText(nameField, "Main Camera"),
         // which fills it from code without counting as an edit.
-        nameField = ae.textField(layoutInspector, 64);
+        nameField = ae.textField(layoutInspector, "nameField", 64);
         ae.setPlaceholder(nameField, "Typing text here");
 
         // Step 3e-7: a second field, made with the form that takes no limit — its buffer grows
         // as needed. Start it with a sentence long enough to scroll, to have something to
         // select, copy and paste between the two fields.
-        notesField = ae.textField(layoutInspector);
+        notesField = ae.textField(layoutInspector, "notesField");
         ae.setText(notesField, "No limit here: select with Shift+arrows or by dragging, then Ctrl+C, Ctrl+X, Ctrl+V");
 
         // Step 3e-7: copy, cut and paste use the system clipboard, through the window. Handed in
@@ -1152,30 +1156,23 @@ public class Main extends Engine {
         // X makes each as wide as the pane, so a click anywhere along its row ticks it — the
         // label is part of the target, as in every desktop toolkit. "Snap to grid" starts
         // ticked through setChecked(), which sets it without counting as the user's change.
-        showGridCheckbox = ae.checkbox(layoutInspector, "Show grid");
-        snapCheckbox     = ae.checkbox(layoutInspector, "Snap to grid");
+        showGridCheckbox = ae.checkbox(layoutInspector, "showGridCheckbox", "Show grid");
+        snapCheckbox     = ae.checkbox(layoutInspector, "snapCheckbox",     "Snap to grid");
         ae.setChecked(snapCheckbox, true);
 
         // Step 3f-1: names, so a theme can reach a panel or a widget by name — never by handle,
-        // since handles shift whenever a node is added before another. The frame and the body
-        // row get none, and are left out of every path: the Stop button's path is
-        // viewport.stopButton, not frame.body.viewport.stopButton, so regrouping the rows
-        // later breaks no theme. The paths these give:
+        // since handles shift whenever a node is added before another. The widgets were named
+        // as they were made; the three panes are named here, with setNodeName, since a row or a
+        // column is made without one. The frame and the body row get none, and are left out of
+        // every path: the Stop button's path is viewport.stopButton, not
+        // frame.body.viewport.stopButton, so regrouping the rows later breaks no theme. The
+        // paths these give:
         //   hierarchy.opacitySlider
         //   viewport.playButton   viewport.pauseButton   viewport.stopButton   viewport.descriptionBox
         //   inspector.nameField   inspector.notesField   inspector.showGridCheckbox   inspector.snapCheckbox
-        layout.setNodeName(layoutHierarchy,  "hierarchy");
-        layout.setNodeName(layoutViewport,   "viewport");
-        layout.setNodeName(layoutInspector,  "inspector");
-        layout.setNodeName(opacitySlider,    "opacitySlider");
-        layout.setNodeName(playButton,       "playButton");
-        layout.setNodeName(pauseButton,      "pauseButton");
-        layout.setNodeName(stopButton,       "stopButton");
-        layout.setNodeName(descriptionBox,   "descriptionBox");
-        layout.setNodeName(nameField,        "nameField");
-        layout.setNodeName(notesField,       "notesField");
-        layout.setNodeName(showGridCheckbox, "showGridCheckbox");
-        layout.setNodeName(snapCheckbox,     "snapCheckbox");
+        layout.setNodeName(layoutHierarchy, "hierarchy");
+        layout.setNodeName(layoutViewport,  "viewport");
+        layout.setNodeName(layoutInspector, "inspector");
 
         // Step 3d-2: which nodes react to the pointer. Everything else — panes, the toolbar
         // itself, the fields — lets it pass through to whatever interactive node holds it.

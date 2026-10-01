@@ -346,11 +346,14 @@ public final class AegisWidgets {
      * A font must already be loaded, since the label is measured here.</p>
      *
      * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "stopButton"};
+     *               see {@link AegisLayout#setNodeName}
      * @param text   the label; kept, so pass a string that does not change
      * @return its handle — a layout node, usable with the layout and the tree like any other
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int button(int parent, String text) {
-        int node = layout.box(parent);
+    public int button(int parent, String name, String text) {
+        int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
@@ -370,11 +373,14 @@ public final class AegisWidgets {
      * the line height plus {@code checkboxPaddingY} above and below. Interactive and focusable.</p>
      *
      * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "snapCheckbox"};
+     *               see {@link AegisLayout#setNodeName}
      * @param text   the label; kept, so pass a string that does not change
      * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int checkbox(int parent, String text) {
-        int node = layout.box(parent);
+    public int checkbox(int parent, String name, String text) {
+        int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
@@ -417,13 +423,16 @@ public final class AegisWidgets {
      * Shift + arrow moves {@value #LARGE_STEP} steps, Home and End go to the ends.</p>
      *
      * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "opacitySlider"};
+     *               see {@link AegisLayout#setNodeName}
      * @param min    the value at the left end
      * @param max    the value at the right end
      * @param value  the starting value, clamped to the range
      * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int slider(int parent, float min, float max, float value) {
-        int node = layout.box(parent);
+    public int slider(int parent, String name, float min, float max, float value) {
+        int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
@@ -469,14 +478,17 @@ public final class AegisWidgets {
      *
      * <p>Its buffer starts with room for {@value #UNLIMITED_START_CAPACITY} characters and
      * grows when the text outgrows it — an allocation now and then while typing past that, never
-     * one per frame. Use {@link #textField(int, int)} where a limit makes sense, and editing
-     * then allocates nothing at all.</p>
+     * one per frame. Use {@link #textField(int, String, int)} where a limit makes sense, and
+     * editing then allocates nothing at all.</p>
      *
      * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "notesField"};
+     *               see {@link AegisLayout#setNodeName}
      * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int textField(int parent) {
-        return textWidget(parent, TEXT_FIELD, 1, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
+    public int textField(int parent, String name) {
+        return textWidget(parent, name, TEXT_FIELD, 1, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
     }
 
     /**
@@ -492,18 +504,21 @@ public final class AegisWidgets {
      * in view. Interactive and focusable.</p>
      *
      * @param parent    the row or column to add it to
+     * @param name      its name, which a theme or a layout file writes — {@code "nameField"};
+     *                  see {@link AegisLayout#setNodeName}
      * @param maxLength the most characters it will hold
      * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int textField(int parent, int maxLength) {
-        return textWidget(parent, TEXT_FIELD, 1, maxLength, maxLength);
+    public int textField(int parent, String name, int maxLength) {
+        return textWidget(parent, name, TEXT_FIELD, 1, maxLength, maxLength);
     }
 
     /**
      * A text box — text of several lines — showing {@code visibleLines} lines, with no limit on
      * its length, added to {@code parent}. Starts empty.
      *
-     * <p>Everything a {@linkplain #textField(int) text field} does, with these differences:
+     * <p>Everything a {@linkplain #textField(int, String) text field} does, with these differences:
      * lines wrap at the box's width instead of scrolling sideways, and text taller than the box
      * scrolls up and down, by the caret or by the mouse wheel ({@link #scroll}). Enter breaks
      * the line, so <strong>Ctrl+Enter</strong> is what confirms — {@link #wasActivated}. Up and
@@ -514,29 +529,34 @@ public final class AegisWidgets {
      * <p>Asks for {@code textFieldWidth} and that many lines' height plus padding.</p>
      *
      * @param parent       the row or column to add it to
+     * @param name         its name, which a theme or a layout file writes — {@code "descriptionBox"};
+     *                     see {@link AegisLayout#setNodeName}
      * @param visibleLines how many lines tall it is
      * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int textBox(int parent, int visibleLines) {
-        return textWidget(parent, TEXT_BOX, visibleLines, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
+    public int textBox(int parent, String name, int visibleLines) {
+        return textWidget(parent, name, TEXT_BOX, visibleLines, Integer.MAX_VALUE, UNLIMITED_START_CAPACITY);
     }
 
     /**
      * A text box showing {@code visibleLines} lines and holding at most {@code maxLength}
-     * characters, line breaks included. See {@link #textBox(int, int)}.
+     * characters, line breaks included. See {@link #textBox(int, String, int)}.
      *
      * @param parent       the row or column to add it to
+     * @param name         its name; see {@link AegisLayout#setNodeName}
      * @param visibleLines how many lines tall it is
      * @param maxLength    the most characters it will hold
      * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
-    public int textBox(int parent, int visibleLines, int maxLength) {
-        return textWidget(parent, TEXT_BOX, visibleLines, maxLength, maxLength);
+    public int textBox(int parent, String name, int visibleLines, int maxLength) {
+        return textWidget(parent, name, TEXT_BOX, visibleLines, maxLength, maxLength);
     }
 
     /** What every text field and text box form does: its kind, its height in lines, a limit, and the room the buffer starts with. */
-    private int textWidget(int parent, byte textKind, int visibleLines, int maxLength, int startCapacity) {
-        int node = layout.box(parent);
+    private int textWidget(int parent, String name, byte textKind, int visibleLines, int maxLength, int startCapacity) {
+        int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
 
@@ -549,6 +569,17 @@ public final class AegisWidgets {
         this.visibleLines[node] = visibleLines;
         styleOf[node]           = null;
         fitToContent(node);
+        return node;
+    }
+
+    /**
+     * The layout node every widget is made on, with its name. The name is checked before the
+     * node is made, so a refused one leaves nothing half-built behind.
+     */
+    private int namedBox(int parent, String name) {
+        AegisLayout.checkNodeName(name);
+        int node = layout.box(parent);
+        layout.setNodeName(node, name);
         return node;
     }
 

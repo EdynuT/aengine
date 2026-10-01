@@ -390,12 +390,17 @@ public final class AegisLayout {
      * @throws IllegalArgumentException for a name that could not appear in a path
      */
     public void setNodeName(int node, String name) {
+        checkNodeName(name);
+        this.name[node] = name;
+    }
+
+    /** Throws, saying why, for a name {@link #setNodeName} would refuse; for callers that check before building. */
+    static void checkNodeName(String name) {
         if (!isValidNodeName(name)) {
             throw new IllegalArgumentException(
                 "\"" + name + "\" cannot be a node name: use letters, digits and underscores, "
                 + "starting with a letter. A dot would split it into two parts of a theme path.");
         }
-        this.name[node] = name;
     }
 
     /**
