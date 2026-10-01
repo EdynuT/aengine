@@ -207,14 +207,26 @@ Before 4c, what was called a node's *id* became its **name** — `setNodeName`,
 whoever writes the code chooses, and the one a theme or layout file writes. `setNodeName`
 rather than `setName`, so the call says what it names.
 
-In four steps, each reviewed — **we stopped after 4b**: **4a** ✅ — `AegisJsonLines` learns
+In four steps, each reviewed — **we stopped after 4c-1**: **4a** ✅ — `AegisJsonLines` learns
 arrays (`children[1].width`), and `AegisLayout` can move a node to another parent; **4b** ✅ —
 the file read and validated into a description (`AegisLayoutFile`), with the same report and
 strict types as a theme — the report's machinery now shared by both, in `AegisFindings` —
 nothing on screen yet;
-**4c** — screens built from it, the factory layout in the editor's code, the per-screen chain,
-the scaffolding rewritten to register panels; **4d** — a size code sets on a widget is kept
-when a theme is applied, which today replaces it.
+**4c** — screens built from it, in two parts: **4c-1** ✅ — every widget named as it is made
+(`ae.button(viewport, "stopButton", "Stop")`), panels registered by code
+(`aegis.screens().columnPanel("inspector")`, `rowPanel`), and the editor screen built from the
+factory layout (`FactoryLayout`, the format's own text, compiled into the editor) by
+`screens.build("editor", files...)` — the screen looks as it did, but its outer column and
+body row now come from the layout; **4c-2** — the chain user → installation → factory, per
+screen, in `ShellFiles`, and a test `layout.json` that moves a pane and reorders widgets;
+**4d** — a size code sets on a widget is kept when a theme is applied, which today replaces
+it.
+
+A panel's widgets, for the layout, are its direct children as code made them. Code sets a
+panel's inside — padding, the gap between its widgets, their alignment — and the layout its
+size and place; what the layout also writes on a panel replaces code's value. Building twice
+would leave the first build's rows and columns behind, since the layout frees no nodes: the
+reload step (3f-5) has to settle that.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list. Planned, not started; each keyboard-operable like the rest.

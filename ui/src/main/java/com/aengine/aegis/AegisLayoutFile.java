@@ -540,8 +540,12 @@ public final class AegisLayoutFile {
     /** Records a note found while building, like {@link #problem}. */
     void note(Node node, String message) { findings.note(node.line, message); }
 
-    /** Says everything found, in one block; see {@link AegisFindings#log}. Only the first call speaks. */
-    void report() { findings.log(); }
+    /**
+     * Says everything found — reading the file and building screens from it — in one block;
+     * see {@link AegisFindings#log}. Call it once every screen is built. Only the first call
+     * speaks.
+     */
+    public void report() { findings.log(); }
 
     // -----------------------------------------------------------------------------------
     // Internals

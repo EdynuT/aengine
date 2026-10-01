@@ -46,6 +46,7 @@ public final class Aegis {
     private final AegisLayout   layout;
     private final AegisTree     tree;
     private final AegisWidgets  widgets;
+    private final AegisScreens  screens;
 
     /**
      * The font text is drawn with when a call does not name one.
@@ -73,6 +74,7 @@ public final class Aegis {
         this.layout   = new AegisLayout(LAYOUT_NODES);
         this.tree     = new AegisTree(layout, LAYOUT_NODES);
         this.widgets  = new AegisWidgets(this, layout, tree, LAYOUT_NODES);
+        this.screens  = new AegisScreens(layout);
     }
 
     /**
@@ -365,12 +367,21 @@ public final class Aegis {
      *
      * <pre>{@code
      * AegisWidgets ae = aegis.widgets();
-     * int play = ae.button(toolbar, "Play");
+     * int play = ae.button(toolbar, "playButton", "Play");
      * }</pre>
      *
      * @return the widgets, the same instance for this object's lifetime
      */
     public AegisWidgets widgets() { return widgets; }
+
+    /**
+     * The panels code registers, and the screens built from a layout file that places them.
+     *
+     * <p>Made on the layout's nodes, and handed out as an object like the widgets.</p>
+     *
+     * @return the screens, the same instance for this object's lifetime
+     */
+    public AegisScreens screens() { return screens; }
 
     // -----------------------------------------------------------------------------------
     // Escape hatches and lifecycle

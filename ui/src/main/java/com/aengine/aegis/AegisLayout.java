@@ -276,6 +276,35 @@ public final class AegisLayout {
     }
 
     /**
+     * The width a node asks for, in pixels, leaving the height it asks for as it is — how a
+     * layout file that writes only {@code "width"} changes a panel without undoing its code.
+     *
+     * @param node  the handle
+     * @param width width asked for
+     */
+    public void setWidth(int node, float width) {
+        setSize(node, width, requestedHeight[node]);
+    }
+
+    /**
+     * The height a node asks for, in pixels, leaving the width as it is. See {@link #setWidth}.
+     *
+     * @param node   the handle
+     * @param height height asked for
+     */
+    public void setHeight(int node, float height) {
+        setSize(node, requestedWidth[node], height);
+    }
+
+    /**
+     * Whether a node is a row or a column — something that holds children — rather than a box.
+     *
+     * @param node the handle
+     * @return {@code true} for a row or a column
+     */
+    public boolean isContainer(int node) { return kind[node] != BOX; }
+
+    /**
      * Space kept clear inside a row or column's edges, on all four sides, in pixels.
      *
      * @param node   the row or column

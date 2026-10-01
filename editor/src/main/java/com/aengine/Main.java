@@ -97,16 +97,16 @@ public class Main extends Engine {
     private static final float[] FOCUS_RING        = { 0.95f, 0.97f, 1.00f, 1.0f };
 
     // SCAFFOLDING — steps 3c-1 to 3c-3: an outline of the editor's frame. A column holding a
-    // toolbar row (four boxes, two fixed and two growing) above a body row of three panes.
-    // Handles into aegis.layout(), built once in buildLayoutScaffolding() and solved every
-    // frame in drawUiFirstLight().
-    private int layoutFrame;
-    private int layoutRow;          // the toolbar
+    // toolbar row (four boxes, two fixed and two growing) above a body row of three panes;
+    // since 3f-4c the panes and the toolbar are panels, and the column and the body row come
+    // from the layout. Handles into aegis.layout(), built once in buildLayoutScaffolding() and
+    // solved every frame in drawUiFirstLight().
+    private int layoutFrame;        // the screen's root, from the layout
+    private int layoutRow;          // the toolbar panel
     private int layoutBoxA;
     private int layoutBoxB;
     private int layoutBoxC;
     private int layoutBoxD;
-    private int layoutBody;
     private int layoutHierarchy;
     private int layoutTreeItemA;
     private int layoutTreeItemB;
@@ -1007,40 +1007,41 @@ public class Main extends Engine {
     }
 
     /**
-     * SCAFFOLDING — steps 3c-1 to 3c-3: builds the layout tree the frame will solve.
+     * SCAFFOLDING — steps 3c-1 to 3c-3, rebuilt in 3f-4c: the panels, made by code and
+     * registered, and the screen that places them, built from a layout description.
      *
-     * <p>Runs once, at init. Building says what contains what and how big each thing asks to
-     * be; it does not say where anything goes — that is the solve's job, every frame.</p>
+     * <p>Runs once, at init. Code makes each panel and fills it with widgets, each wired to
+     * what it does; the layout says where each panel goes and how big it is. Building says
+     * what contains what and how big each thing asks to be; it does not say where anything
+     * goes — that is the solve's job, every frame.</p>
      *
-     * <p>The tree, from the outside in:</p>
+     * <p>The screen, as the factory layout ({@code FactoryLayout}) describes it:</p>
      * <pre>
-     * frame      column, X STRETCH
-     * ├─ toolbar row, 84 tall        A fixed · B grow 1 · C grow 2 · D fixed
-     * └─ body    row, grow 1, Y STRETCH
-     *    ├─ hierarchy  column, 240 wide, X START               two items of their own width
-     *    ├─ viewport   column, grow 1, X CENTER, Y CENTER      one box, in the middle
-     *    └─ inspector  column, 300 wide, X STRETCH             two fields as wide as the pane
+     * column, padding 8, gap 8, X STRETCH                  from the layout
+     * ├─ toolbar    panel, 84 tall                         A fixed · B grow 1 · C grow 2 · D fixed
+     * └─ row, grow 1, gap 8, Y STRETCH                     from the layout
+     *    ├─ hierarchy  panel, 240 wide, X START            two items of their own width, a slider
+     *    ├─ viewport   panel, grow 1, X CENTER, Y CENTER   three buttons and a text box, in the middle
+     *    └─ inspector  panel, 300 wide, X STRETCH          fields and checkboxes as wide as the pane
      * </pre>
      *
-     * <p>Nobody in this tree is told the window's size. The frame receives it from solve(),
+     * <p>Nobody in this tree is told the window's size. The root receives it from solve(),
      * and every pane's width and height follows from grow and stretch — resize the window
      * and all of it moves.</p>
      */
     private void buildLayoutScaffolding() {
-        com.aengine.aegis.AegisLayout layout = aegis.layout();
-        com.aengine.aegis.AegisWidgets ae    = aegis.widgets();   // short name: see the ae convention
+        com.aengine.aegis.AegisLayout  layout  = aegis.layout();
+        com.aengine.aegis.AegisWidgets ae      = aegis.widgets();   // short name: see the ae convention
+        com.aengine.aegis.AegisScreens screens = aegis.screens();
 
-        // The root: a column with no parent. It takes whatever rectangle solve() hands it, and
-        // STRETCH on X makes both of its rows as wide as it is, so neither asks for a width.
-        layoutFrame = layout.column(com.aengine.aegis.AegisLayout.NONE);
-        layout.setPadding(layoutFrame, 8.0f);
-        layout.setGap(layoutFrame, 8.0f);
-        layout.setAlignX(layoutFrame, com.aengine.aegis.AegisLayout.Align.STRETCH);
+        // Step 3f-4c: a panel is made by registering it under its name — rowPanel() when its
+        // widgets sit side by side, columnPanel() when they stack. It hangs nowhere yet: the
+        // layout, at the end of this method, says where it goes. What is set on a panel here
+        // is its inside — padding, the gap between its widgets, how they align. How big the
+        // panel is, and where, is the layout's: none of them is given a size here.
 
-        // The toolbar: the 3c-2 row, now a child. It asks for a height and no width — the
-        // frame's STRETCH supplies the width.
-        layoutRow = layout.row(layoutFrame);
-        layout.setSize(layoutRow, 0.0f, 84.0f);
+        // The toolbar: the 3c-2 row, now a panel. Its height comes from the layout.
+        layoutRow = screens.rowPanel("toolbar");
         layout.setPadding(layoutRow, 12.0f);   // clear space inside the row's edges
         layout.setGap(layoutRow, 8.0f);        // space between one box and the next
 
@@ -1062,18 +1063,10 @@ public class Main extends Engine {
         layoutBoxD = layout.box(layoutRow);
         layout.setSize(layoutBoxD, 60.0f, 60.0f);
 
-        // The body: takes all the height the toolbar leaves (grow, in a column, is height),
-        // and STRETCH on Y makes its three panes that tall.
-        layoutBody = layout.row(layoutFrame);
-        layout.setGrow(layoutBody, 1.0f);
-        layout.setGap(layoutBody, 8.0f);
-        layout.setAlignY(layoutBody, com.aengine.aegis.AegisLayout.Align.STRETCH);
-
-        // Hierarchy: a fixed-width pane. START on X keeps each item at the width it asked for,
-        // against the left edge — the way tree rows of different lengths sit. START is the
-        // default; it is written out so the three panes read side by side.
-        layoutHierarchy = layout.column(layoutBody);
-        layout.setSize(layoutHierarchy, 240.0f, 0.0f);
+        // Hierarchy: START on X keeps each item at the width it asked for, against the left
+        // edge — the way tree rows of different lengths sit. START is the default; it is
+        // written out so the three panes read side by side. Its width comes from the layout.
+        layoutHierarchy = screens.columnPanel("hierarchy");
         layout.setPadding(layoutHierarchy, 8.0f);
         layout.setGap(layoutHierarchy, 6.0f);
         layout.setAlignX(layoutHierarchy, com.aengine.aegis.AegisLayout.Align.START);
@@ -1091,11 +1084,11 @@ public class Main extends Engine {
         // here — and Shift makes it ten.
         opacitySlider = ae.slider(layoutHierarchy, "opacitySlider", 0.0f, 100.0f, 50.0f);
 
-        // Viewport: takes the width the side panes leave, and centres what it holds on both
-        // axes — one call per axis. A row, so its buttons sit side by side: CENTER on X moves
-        // the three of them together into the middle, CENTER on Y centres each one vertically.
-        layoutViewport = layout.row(layoutBody);
-        layout.setGrow(layoutViewport, 1.0f);
+        // Viewport: centres what it holds on both axes — one call per axis. A row panel, so its
+        // buttons sit side by side: CENTER on X moves the three of them together into the
+        // middle, CENTER on Y centres each one vertically. The layout makes it take the width
+        // the side panes leave.
+        layoutViewport = screens.rowPanel("viewport");
         layout.setGap(layoutViewport, 8.0f);
         layout.setAlignX(layoutViewport, com.aengine.aegis.AegisLayout.Align.CENTER);
         layout.setAlignY(layoutViewport, com.aengine.aegis.AegisLayout.Align.CENTER);
@@ -1122,10 +1115,9 @@ public class Main extends Engine {
             + "The wheel scrolls it too.");
         ae.setPlaceholder(descriptionBox, "Description");
 
-        // Inspector: a fixed-width pane. STRETCH on X makes every field as wide as the pane, so
-        // the fields ask only for a height.
-        layoutInspector = layout.column(layoutBody);
-        layout.setSize(layoutInspector, 300.0f, 0.0f);
+        // Inspector: STRETCH on X makes every field as wide as the pane, so the fields ask only
+        // for a height. Its width comes from the layout.
+        layoutInspector = screens.columnPanel("inspector");
         layout.setPadding(layoutInspector, 8.0f);
         layout.setGap(layoutInspector, 6.0f);
         layout.setAlignX(layoutInspector, com.aengine.aegis.AegisLayout.Align.STRETCH);
@@ -1160,19 +1152,29 @@ public class Main extends Engine {
         snapCheckbox     = ae.checkbox(layoutInspector, "snapCheckbox",     "Snap to grid");
         ae.setChecked(snapCheckbox, true);
 
-        // Step 3f-1: names, so a theme can reach a panel or a widget by name — never by handle,
-        // since handles shift whenever a node is added before another. The widgets were named
-        // as they were made; the three panes are named here, with setNodeName, since a row or a
-        // column is made without one. The frame and the body row get none, and are left out of
-        // every path: the Stop button's path is viewport.stopButton, not
-        // frame.body.viewport.stopButton, so regrouping the rows later breaks no theme. The
-        // paths these give:
-        //   hierarchy.opacitySlider
-        //   viewport.playButton   viewport.pauseButton   viewport.stopButton   viewport.descriptionBox
-        //   inspector.nameField   inspector.notesField   inspector.showGridCheckbox   inspector.snapCheckbox
-        layout.setNodeName(layoutHierarchy, "hierarchy");
-        layout.setNodeName(layoutViewport,  "viewport");
-        layout.setNodeName(layoutInspector, "inspector");
+        // Step 3f-4c: the scaffolding's plain boxes are not widgets, so nothing names them as
+        // they are made. Named here with setNodeName, so a layout file can move them like the
+        // widgets around them.
+        layout.setNodeName(layoutBoxA,      "boxA");
+        layout.setNodeName(layoutBoxB,      "boxB");
+        layout.setNodeName(layoutBoxC,      "boxC");
+        layout.setNodeName(layoutBoxD,      "boxD");
+        layout.setNodeName(layoutTreeItemA, "treeItemA");
+        layout.setNodeName(layoutTreeItemB, "treeItemB");
+        layout.setNodeName(layoutFieldA,    "fieldA");
+
+        // Step 3f-4c: the screen. The factory layout — the editor's own, compiled in — places
+        // the four panels: the outer column and the body row are its, with their padding and
+        // gaps, and each panel's size. build() makes those rows and columns, attaches each
+        // registered panel where it stands, and returns the root, which is solved and drawn
+        // every frame. report() then says, in one block, anything that did not fit: a panel
+        // the layout names that code never registered, say.
+        //
+        // A theme's paths are made of names, and the layout's rows and columns have none, so
+        // they stay what they were: viewport.stopButton, inspector.nameField...
+        com.aengine.aegis.AegisLayoutFile factoryLayout = com.aengine.editor.FactoryLayout.read();
+        layoutFrame = screens.build("editor", factoryLayout);
+        factoryLayout.report();
 
         // Step 3d-2: which nodes react to the pointer. Everything else — panes, the toolbar
         // itself, the fields — lets it pass through to whatever interactive node holds it.
