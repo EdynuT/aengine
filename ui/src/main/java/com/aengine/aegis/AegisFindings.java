@@ -19,10 +19,12 @@ import java.util.regex.Pattern;
  * What a shell file's reader found wrong or untidy, said in one block — step 3f part 3,
  * shared by the theme and the layout readers since 3f part 4.
  *
- * <p>A reader records findings as it goes: a <em>problem</em> is something it had to fall back
- * on, a <em>note</em> something that changes nothing but is worth fixing. Each is said once,
- * however many times it is met. {@link #log} then says them all: problems first, as warnings,
- * then notes, as information, each group in the order of the file's lines. A file with no
+ * <p>A reader records findings as it goes: an <em>error</em> is something that made it set a
+ * part of the file aside — a layout screen, which then comes from the next file in line; a
+ * <em>problem</em> is something it had to ignore or fall back on; a <em>note</em> something
+ * that changes nothing but is worth fixing. Each is said once, however many times it is met.
+ * {@link #log} then says them all: errors first, as errors, then problems, as warnings, then
+ * notes, as information, each group in the order of the file's lines. A file with no error or
  * problem says so in one line of information.</p>
  *
  * <p>Also here, since both readers need them alike: reading the whole text, turning Gson's
@@ -30,7 +32,10 @@ import java.util.regex.Pattern;
  */
 final class AegisFindings {
 
-    private record Finding(int line, boolean problem, String message) {}
+    /** How much a finding weighs, heaviest first: the order they are said in. */
+    private enum Weight { ERROR, PROBLEM, NOTE }
+
+    private record Finding(int line, Weight weight, String message) {}
 
     private final String source;
     private final Set<String> said = new HashSet<>();
@@ -53,7 +58,7 @@ final class AegisFindings {
      * @param message what is wrong, and what is done instead
      */
     void problem(int line, String mistake, String message) {
-        if (said.add(mistake)) findings.add(new Finding(line, true, message));
+        if (said.add(mistake)) findings.add(new Finding(line, Weight.PROBLEM, message));
     }
 
     /** {@link #problem(int, String, String)}, with the message as what identifies it. */
@@ -68,7 +73,23 @@ final class AegisFindings {
      * @param message what it is
      */
     void note(int line, String message) {
-        if (said.add(message)) findings.add(new Finding(line, false, message));
+        if (said.add(message)) findings.add(new Finding(line, Weight.NOTE, message));
+    }
+
+    /**
+     * Records an error: something that made the reader set part of the file aside.
+     *
+     * @param line    the line it is written on, or 0 when not known
+     * @param message what is wrong, and what was set aside
+     */
+    void error(int line, String message) {
+        if (said.add(message)) findings.add(new Finding(line, Weight.ERROR, message));
+    }
+
+    /** @return whether an error has been recorded */
+    boolean hasErrors() {
+        for (Finding f : findings) if (f.weight() == Weight.ERROR) return true;
+        return false;
     }
 
     /**
@@ -78,18 +99,30 @@ final class AegisFindings {
         if (logged) return;
         logged = true;
 
-        findings.sort((a, b) -> a.problem() != b.problem() ? (a.problem() ? -1 : 1)
+        findings.sort((a, b) -> a.weight() != b.weight() ? a.weight().compareTo(b.weight())
                                 : Integer.compare(lineOrLast(a), lineOrLast(b)));
-        int problems = 0;
-        for (Finding f : findings) if (f.problem()) problems++;
-        int notes = findings.size() - problems;
+        int errors = 0, problems = 0, notes = 0;
+        for (Finding f : findings) {
+            switch (f.weight()) {
+                case ERROR   -> errors++;
+                case PROBLEM -> problems++;
+                case NOTE    -> notes++;
+            }
+        }
 
-        if (problems > 0) {
-            Logger.warn(Logger.System.UI, "%s: %s", source, count(problems, "problem")
-                + (notes > 0 ? ", " + count(notes, "note") : "") + ":");
+        if (errors > 0 || problems > 0) {
+            StringBuilder counts = new StringBuilder();
+            if (errors > 0)   counts.append(count(errors, "error"));
+            if (problems > 0) counts.append(counts.length() > 0 ? ", " : "").append(count(problems, "problem"));
+            if (notes > 0)    counts.append(", ").append(count(notes, "note"));
+            if (errors > 0) Logger.error(Logger.System.UI, "%s: %s:", source, counts);
+            else            Logger.warn (Logger.System.UI, "%s: %s:", source, counts);
             for (Finding f : findings) {
-                if (f.problem()) Logger.warn(Logger.System.UI, "  %s", lineText(f));
-                else             Logger.info(Logger.System.UI, "  %s", lineText(f));
+                switch (f.weight()) {
+                    case ERROR   -> Logger.error(Logger.System.UI, "  %s", lineText(f));
+                    case PROBLEM -> Logger.warn (Logger.System.UI, "  %s", lineText(f));
+                    case NOTE    -> Logger.info (Logger.System.UI, "  %s", lineText(f));
+                }
             }
         } else if (notes > 0) {
             Logger.info(Logger.System.UI, "%s: no problems, %s:", source, count(notes, "note"));

@@ -47,8 +47,15 @@ tasks.named('run') {
     if (project.hasProperty('testShell')) {
         systemProperty 'aengine.userdata', file('test-shell').absolutePath
     }
-    // ./gradlew :editor:run -Ptheme=<name> picks a theme by name; "dark" otherwise.
-    if (project.hasProperty('theme')) {
-        systemProperty 'aengine.theme', project.property('theme')
+    // ./gradlew :editor:run -PthemeFile=<name> picks a theme by name; "dark" otherwise.
+    if (project.hasProperty('themeFile')) {
+        systemProperty 'aengine.theme', project.property('themeFile')
+    }
+    // ./gradlew :editor:run -PlayoutFile=<name> reads layouts/<name>.json instead of
+    // layouts/default.json — with -PtestShell, one of the test layouts, e.g. -PlayoutFile=moved.
+    // Not -Playout: every Gradle project already has a "layout" property of its own, which
+    // would be read instead, on every run.
+    if (project.hasProperty('layoutFile')) {
+        systemProperty 'aengine.layout', project.property('layoutFile')
     }
 }

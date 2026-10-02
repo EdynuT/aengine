@@ -1,0 +1,27 @@
+{
+  "name":        "Test - broken on purpose",
+  "description": "Test layout, does not ship: one of each mistake a layout can hold. The editor screen still builds from it; the settings screen is set aside.",
+  "format":      1,
+
+  "screens": {
+    "editor": {
+      "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "toolbar", "height": "84" },
+        { "type": "row", "grow": 1, "gap": 8, "alignY": "middle", "children": [
+          { "type": "panel", "panel": "hierarchy", "width": 240 },
+          { "type": "panel", "panel": "outliner", "width": 120 },
+          { "type": "panel", "panel": "viewport", "grow": 1, "colour": "#FF0000" },
+          { "type": "panel", "panel": "inspector", "width": -300, "children": [
+            { "type": "widget", "widget": "nameField" },
+            { "type": "widget", "widget": "nameField" },
+            { "type": "widget", "widget": "stopButton" }
+          ]},
+          { "type": "panel", "panel": "hierarchy", "width": 100 }
+        ]}
+      ]}
+    },
+    "settings": {
+      "root": { "type": "diagonal", "children": [] }
+    }
+  }
+}

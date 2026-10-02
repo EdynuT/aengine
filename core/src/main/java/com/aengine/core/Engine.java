@@ -230,7 +230,7 @@ public abstract class Engine {
 
         window.cleanup();
 
-        Logger.info(Logger.System.CORE, "Engine lifecycle shutdown complete.");
+        Logger.info(Logger.System.CORE, "Engine lifecycle shutdown complete.\n");
     }
 
     /**

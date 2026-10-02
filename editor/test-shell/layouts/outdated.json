@@ -1,0 +1,23 @@
+{
+  "name":        "Test - outdated",
+  "description": "Test layout, does not ship: a user's layout written before an engine update. It names a widget the update removed (recordButton), does not place one the update added (descriptionBox), and carries a property no layout holds. Every one of those is a warning: the layout is still used.",
+  "format":      1,
+
+  "screens": {
+    "editor": {
+      "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "toolbar", "height": 84 },
+        { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
+          { "type": "panel", "panel": "hierarchy", "width": 200 },
+          { "type": "panel", "panel": "viewport", "grow": 1, "colour": "#FF0000", "children": [
+            { "type": "widget", "widget": "stopButton" },
+            { "type": "widget", "widget": "recordButton" },
+            { "type": "widget", "widget": "playButton" },
+            { "type": "widget", "widget": "pauseButton" }
+          ]},
+          { "type": "panel", "panel": "inspector", "width": 340 }
+        ]}
+      ]}
+    }
+  }
+}

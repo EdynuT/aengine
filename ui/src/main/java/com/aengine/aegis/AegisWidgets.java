@@ -5,6 +5,7 @@ import com.aengine.core.Window;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 /**
  * The widgets — layer L4's controls, built on the layout and the tree.
  *
@@ -88,6 +89,21 @@ public final class AegisWidgets {
      * Indexed by layout handle.
      */
     private final AegisStyle[] styleOf;
+
+    /**
+     * The size each widget was last fitted to from its content. A size the layout holds that
+     * differs from it was set by someone else — code with {@link AegisLayout#setSize}, or a
+     * layout file — and is kept when the widget is fitted again, on that axis.
+     */
+    private final float[] fittedWidth;
+    private final float[] fittedHeight;
+
+    /**
+     * The path a theme reaches each widget by, ending in its own name: the names above it when
+     * it was made — {@code viewport, stopButton}. Kept from creation rather than read from the
+     * tree, so a layout that moves the widget to another panel does not change how it is dressed.
+     */
+    private final List<String>[] themePath;
 
     /** How many lines a text box shows — kept so its height can be worked out again when a theme changes the padding. */
     private final int[] visibleLines;
@@ -227,7 +243,12 @@ public final class AegisWidgets {
         this.fieldScroll    = new float[capacity];
 
         this.styleOf      = new AegisStyle[capacity];
+        this.fittedWidth  = new float[capacity];
+        this.fittedHeight = new float[capacity];
         this.visibleLines = new int[capacity];
+        @SuppressWarnings("unchecked")
+        List<String>[] paths = new List[capacity];
+        this.themePath = paths;
     }
 
     /**
@@ -250,12 +271,19 @@ public final class AegisWidgets {
      * style all widgets share, and each widget a scoped rule reaches gets a style of its own.
      * Widgets are then sized again, since a theme may change their padding.
      *
-     * <p>Call it after the tree is built and its nodes are named — paths are made of names — and again
-     * after building more under {@code root}. Never in the frame loop: rules are matched here,
-     * by name, so that drawing only ever reads a field.</p>
+     * <p>Call it after the tree is built, and again after building more under {@code root}.
+     * Never in the frame loop: rules are matched here, by name, so that drawing only ever reads a
+     * field.</p>
      *
-     * <p>A widget's size is worked out again from its content and the theme, which replaces a
-     * size set on it by hand with {@link AegisLayout#setSize}.</p>
+     * <p>A widget is reached by the path it was made with — the panel code made it in, then its
+     * name: {@code viewport.stopButton} — wherever a layout file has since moved it. A theme
+     * and a layout are thereby independent: moving the Stop button to the toolbar keeps it red,
+     * and the toolbar's {@code toolbar.button} rules do not reach it.</p>
+     *
+     * <p>A widget's size is worked out again from its content and the theme — a theme with
+     * more padding makes a button larger — except on an axis where something else set it: code
+     * with {@link AegisLayout#setSize}, or a layout file's {@code "width"}. That size is
+     * kept.</p>
      *
      * <p>Rules that reach no widget are reported in the log once this is done.</p>
      *
@@ -266,29 +294,20 @@ public final class AegisWidgets {
         globalStyle = theme.globalStyle();
         Arrays.fill(styleOf, null);
 
-        pathScratch.clear();
         dressSubtree(theme, root);
         theme.report();
     }
 
-    /** The names from the top of the tree down to the node being dressed. */
-    private final ArrayList<String> pathScratch = new ArrayList<>();
-
     /** Walks a subtree, giving each widget the style its path calls for, and sizing it again. */
     private void dressSubtree(AegisTheme theme, int node) {
-        String name = layout.nodeName(node);
-        if (name != null) pathScratch.add(name);
-
         if (kind[node] != NOT_A_WIDGET) {
-            styleOf[node] = theme.styleFor(pathScratch, name != null, themeKind(node));
+            styleOf[node] = theme.styleFor(themePath[node], true, themeKind(node));
             fitToContent(node);
         }
         for (int child = layout.firstChild(node); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
             dressSubtree(theme, child);
         }
-
-        if (name != null) pathScratch.remove(pathScratch.size() - 1);
     }
 
     /** The kind a theme knows a widget by: the first part of the catalogue names that dress it. */
@@ -311,18 +330,31 @@ public final class AegisWidgets {
         AegisStyle style = styleOf(node);
         float line = aegis.lineHeight();
         switch (kind[node]) {
-            case BUTTON -> layout.setSize(node,
+            case BUTTON -> fit(node,
                 (float) Math.ceil(aegis.measure(label[node])) + style.buttonPaddingX * 2.0f,
                 line + style.buttonPaddingY * 2.0f);
-            case CHECKBOX -> layout.setSize(node,
+            case CHECKBOX -> fit(node,
                 style.checkboxSize + style.checkboxGap + (float) Math.ceil(aegis.measure(label[node])),
                 Math.max(style.checkboxSize, line) + style.checkboxPaddingY * 2.0f);
-            case SLIDER -> layout.setSize(node, style.sliderWidth,
+            case SLIDER -> fit(node, style.sliderWidth,
                 Math.max(style.sliderThumbSize, line) + style.sliderPaddingY * 2.0f);
-            case TEXT_FIELD, TEXT_BOX -> layout.setSize(node, style.textFieldWidth,
+            case TEXT_FIELD, TEXT_BOX -> fit(node, style.textFieldWidth,
                 line * Math.max(1, visibleLines[node]) + style.textFieldPaddingY * 2.0f);
             default -> { }
         }
+    }
+
+    /**
+     * Gives a widget the size its content needs, on each axis where nothing else has set one —
+     * step 3f part 4d. A size that differs from the one last fitted was set by code or a layout
+     * file, and stays.
+     */
+    private void fit(int node, float width, float height) {
+        float keepWidth  = layout.requestedWidth(node)  != fittedWidth[node]  ? layout.requestedWidth(node)  : width;
+        float keepHeight = layout.requestedHeight(node) != fittedHeight[node] ? layout.requestedHeight(node) : height;
+        fittedWidth[node]  = width;
+        fittedHeight[node] = height;
+        layout.setSize(node, keepWidth, keepHeight);
     }
 
     /**
@@ -580,6 +612,15 @@ public final class AegisWidgets {
         AegisLayout.checkNodeName(name);
         int node = layout.box(parent);
         layout.setNodeName(node, name);
+
+        // The theme path: the names above it now, top down, then its own.
+        ArrayList<String> path = new ArrayList<>();
+        path.add(name);
+        for (int up = parent; up != AegisLayout.NONE; up = layout.parent(up)) {
+            String above = layout.nodeName(up);
+            if (above != null) path.add(0, above);
+        }
+        themePath[node] = List.copyOf(path);
         return node;
     }
 
@@ -660,6 +701,9 @@ public final class AegisWidgets {
         Arrays.fill(label, null);
         Arrays.fill(checked, false);
         Arrays.fill(fieldText, null);
+        Arrays.fill(themePath, null);
+        Arrays.fill(fittedWidth, 0.0f);
+        Arrays.fill(fittedHeight, 0.0f);
         activated = AegisLayout.NONE;
         changed   = AegisLayout.NONE;
         edited    = AegisLayout.NONE;

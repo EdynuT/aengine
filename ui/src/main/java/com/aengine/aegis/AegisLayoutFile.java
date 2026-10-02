@@ -26,22 +26,37 @@ import java.util.Set;
  * A layout file, read and checked — step 3f part 4.
  *
  * <p>Describes where things go and nothing else: which panels each screen shows, in which rows,
- * columns and tabs, at what size, and how a panel's widgets are ordered and grouped. Everything
- * it places is made by code — a panel and its widgets, each wired to what it does — and
- * registered under a name; this file only arranges those names (§7, <em>Format</em>). Reading it
- * builds nothing: it produces a description per screen, {@link Node}s, which step 4c turns into
- * layout nodes.</p>
+ * columns and tabs, at what size, and where each widget goes — in which panel, in what order,
+ * grouped into which rows and columns. Everything it places is made by code — a panel and its
+ * widgets, each wired to what it does — and registered under a name; this file only arranges
+ * those names (§7, <em>Format</em>). Reading it builds nothing: it produces a description per
+ * screen, {@link Node}s, which {@link AegisScreens#build} turns into layout nodes.</p>
  *
  * <h2>What goes wrong, and what happens</h2>
  *
- * <p>The rule is the theme's. A file that is not JSON, not an object, or has no
- * {@code "screens"} object holds nothing to build: {@link #read} throws {@link Unusable}, and
- * the caller moves to the next file in line. A screen that cannot form a tree — a node that is
- * not an object, a {@code "type"} that is not one of the five, {@code "children"} that is not a
- * list — is set aside, that screen alone, for the next file in line to supply. Anything else
- * is one property or one node wrong, and is dropped or falls back by itself. Types are strict:
- * a size is a JSON number, a name a string. Every finding names its line and is said in one
- * block by {@link #report}.</p>
+ * <p>Stricter than a theme, since a wrong layout breaks a whole screen where a wrong theme
+ * spoils a colour. A file that is not JSON, not an object, or has no {@code "screens"} object
+ * holds nothing to build: {@link #read} throws {@link Unusable}, and the caller moves to the
+ * next file in line. Within a usable file, each screen stands or falls alone:</p>
+ *
+ * <ul>
+ *   <li><b>An error sets the screen aside</b>, for the next file in line to supply: anything
+ *       wrong with the tree — a node that is not an object, an unknown {@code "type"},
+ *       {@code "children"} that is not a list, a panel inside a panel, a widget outside one, a
+ *       panel or a widget placed twice — and any wrong value — a size or a spacing that is not
+ *       a number of 0 or more, an alignment that is not one of the four. Building adds one
+ *       more: a panel code does not register. Every error of a screen is reported, not only
+ *       the first.</li>
+ *   <li><b>A warning drops what is declared and never used</b>, and the screen is still used: a
+ *       property a node does not hold, a key written twice, a widget name no panel has, a
+ *       widget the file does not place — which goes to the end of the panel code made it
+ *       in.</li>
+ * </ul>
+ *
+ * <p>That split is what lets a user's layout survive an engine update: a widget the update
+ * adds, removes or moves to another panel is a warning, not a lost layout. Types are strict: a
+ * size is a JSON number, a name a string. Every finding names its line and is said in one block
+ * by {@link #report}.</p>
  */
 public final class AegisLayoutFile {
 
@@ -134,12 +149,6 @@ public final class AegisLayoutFile {
         }
     }
 
-    /** A screen that cannot form a tree: thrown inside one screen's reading, caught around it. */
-    private static final class ScreenBroken extends Exception {
-        final int line;
-        ScreenBroken(int line, String message) { super(message, null, false, false); this.line = line; }
-    }
-
     private static final Set<String> SIZES      = Set.of("width", "height", "grow");
     private static final Set<String> CONTAINERS = Set.of("gap", "padding", "alignX", "alignY");
 
@@ -152,8 +161,26 @@ public final class AegisLayoutFile {
 
     private final Map<String, Node> screens = new LinkedHashMap<>();
 
+    /**
+     * What could be read of each screen set aside, so building can still check it against
+     * code and report everything wrong with it in one go — never to build from.
+     */
+    private final Map<String, Node> setAside = new HashMap<>();
+
+    /** The line each screen starts on, read usably or not, for the error that sets it aside. */
+    private final Map<String, Integer> screenLines = new HashMap<>();
+
     /** Where each panel is placed, across every screen: a panel belongs to one place. */
     private final Map<String, Node> placedPanels = new HashMap<>();
+
+    /** Where each widget is placed, across every screen: a widget belongs to one place. */
+    private final Map<String, Node> placedWidgets = new HashMap<>();
+
+    /** The screen each placed panel or widget came from, so a screen set aside frees them. */
+    private final Map<Node, String> screenOf = new HashMap<>();
+
+    private String  reading;         // the screen being read
+    private boolean readingBroken;   // whether it has an error yet
 
     private AegisLayoutFile(String source, String name, String description, int format, AegisJsonLines lines) {
         this.source      = source;
@@ -228,9 +255,10 @@ public final class AegisLayoutFile {
             stringOr(top.get("name"), source), stringOr(top.get("description"), ""),
             declaredFormat != null && declaredFormat >= 1 ? declaredFormat : 1, lines);
 
+        // A key written twice: the first is declared and never used.
         for (String[] path : lines.repeated()) {
             List<Integer> at = lines.lines(path);
-            file.findings.note(at.get(at.size() - 1), display(path) + " is written on lines "
+            file.findings.problem(at.get(at.size() - 1), display(path) + " is written on lines "
                 + AegisFindings.listOf(at) + "; only line " + at.get(at.size() - 1) + " counts");
         }
         file.checkMetadata(top, declared, declaredFormat);
@@ -269,13 +297,20 @@ public final class AegisLayoutFile {
         }
     }
 
+    /**
+     * Reads one screen. Every error in it is recorded, not only the first, so one reading of
+     * the log shows everything to fix; a screen with any error is then set aside whole.
+     */
     private void readScreen(String screen, JsonElement element) {
         List<String> path = new ArrayList<>(List.of("screens", screen));
         reading = screen;
-        try {
-            if (!element.isJsonObject()) {
-                throw new ScreenBroken(line(path), "must be an object holding \"root\"");
-            }
+        readingBroken = false;
+        screenLines.put(screen, line(path));
+
+        Node root = null;
+        if (!element.isJsonObject()) {
+            error(line(path), "screen \"" + screen + "\" must be an object holding \"root\"");
+        } else {
             JsonObject object = element.getAsJsonObject();
             for (String key : object.keySet()) {
                 if (!key.equals("root")) {
@@ -286,43 +321,62 @@ public final class AegisLayoutFile {
                 }
             }
             JsonElement rootElement = object.get("root");
-            if (rootElement == null) throw new ScreenBroken(line(path), "has no \"root\"");
+            if (rootElement == null) {
+                error(line(path), "screen \"" + screen + "\" has no \"root\"");
+            } else {
+                path.add("root");
+                root = readNode(rootElement, path, null);
+                if (root != null && root.type == Type.WIDGET) {
+                    error(root.line, "the root of screen \"" + screen + "\" is a widget; a widget belongs inside a panel");
+                }
+            }
+        }
 
-            path.add("root");
-            Node root = readNode(rootElement, path, null);
-            if (root == null) throw new ScreenBroken(line(path), "its root was dropped, so nothing is left");
-            if (root.type == Type.WIDGET) throw new ScreenBroken(root.line, "its root is a widget; a widget belongs inside a panel");
+        if (readingBroken || root == null) {
+            setAside(screen);
+            if (root != null) setAside.put(screen, root);
+        } else {
             screens.put(screen, root);
-        } catch (ScreenBroken broken) {
-            // Panels placed by the abandoned screen are free again for another to place.
-            placedPanels.values().removeIf(n -> screen.equals(screenOf.get(n)));
-            findings.problem(broken.line, "screen \"" + screen + "\" " + broken.getMessage()
-                + "; it is set aside and taken from the next file in line");
         }
     }
 
-    /** The screen each placed panel came from, so a screen set aside frees its panels. */
-    private final Map<Node, String> screenOf = new HashMap<>();
-    private String reading;   // the screen being read
+    /**
+     * Sets a screen aside: it is not built from this file, and comes from the next in line.
+     * The panels and widgets it placed are free again for another screen of the file.
+     */
+    private void setAside(String screen) {
+        screens.remove(screen);
+        placedPanels.values().removeIf(n -> screen.equals(screenOf.get(n)));
+        placedWidgets.values().removeIf(n -> screen.equals(screenOf.get(n)));
+        findings.error(screenLines.getOrDefault(screen, 0), "screen \"" + screen + "\" has errors and is not"
+            + " used; it comes from the next layout in line. Its errors:");
+    }
+
+    /** Records an error in the screen being read, which will be set aside. */
+    private void error(int line, String message) {
+        findings.error(line, message);
+        readingBroken = true;
+    }
 
     /**
      * Reads one node and everything under it.
      *
      * @param panel the panel whose {@code "children"} this is inside, or null outside any panel
-     * @return the node, or null when it is dropped (already reported)
+     * @return the node, or null when it could not be read (an error, already recorded)
      */
-    private Node readNode(JsonElement element, List<String> path, Node panel) throws ScreenBroken {
+    private Node readNode(JsonElement element, List<String> path, Node panel) {
         int at = line(path);
 
         if (!element.isJsonObject()) {
-            throw new ScreenBroken(at, "has a node that is not an object, { \"type\": ... }");
+            error(at, "a node is not an object, { \"type\": ... }; got " + element);
+            return null;
         }
         JsonObject object = element.getAsJsonObject();
 
         JsonElement typeElement = object.get("type");
         if (!isString(typeElement)) {
-            throw new ScreenBroken(at, "has a node without a \"type\" in quotes:"
-                + " row, column, panel, widget or tabs");
+            error(at, "a node has no \"type\" in quotes: row, column, panel, widget or tabs");
+            return null;
         }
         String typeName = typeElement.getAsString();
         Type type;
@@ -330,8 +384,8 @@ public final class AegisLayoutFile {
             type = Type.valueOf(typeName.toUpperCase());
             if (!type.name().toLowerCase().equals(typeName)) throw new IllegalArgumentException();
         } catch (IllegalArgumentException e) {
-            throw new ScreenBroken(at, "has a node of type \"" + typeName
-                + "\"; the types are row, column, panel, widget and tabs");
+            error(at, "a node is of type \"" + typeName + "\"; the types are row, column, panel, widget and tabs");
+            return null;
         }
 
         // What it refers to, for a panel or a widget, and where it may stand.
@@ -340,8 +394,7 @@ public final class AegisLayoutFile {
             String key = type == Type.PANEL ? "panel" : "widget";
             JsonElement nameElement = object.get(key);
             if (!isString(nameElement)) {
-                findings.problem(at, "a " + key + " node needs \"" + key + "\": the name code registered,"
-                    + " in quotes; the node is left out");
+                error(at, "a " + key + " node needs \"" + key + "\": the name code gave it, in quotes");
                 return null;
             }
             name = nameElement.getAsString();
@@ -349,17 +402,13 @@ public final class AegisLayoutFile {
         Node node = new Node(type, name, at);
 
         if (panel != null && (type == Type.PANEL || type == Type.TABS)) {
-            findings.problem(at, node.label() + " is inside " + panel.label()
-                + "; a panel holds its own widgets, not other panels. It is left out");
-            return null;
+            error(at, node.label() + " is inside " + panel.label() + "; a panel holds widgets, not other panels");
         }
         if (panel == null && type == Type.WIDGET) {
-            findings.problem(at, node.label() + " is outside any panel; a widget is placed inside"
-                + " its panel's \"children\". It is left out");
-            return null;
+            error(at, node.label() + " is outside any panel; a widget is placed inside a panel's \"children\"");
         }
-        if (type == Type.PANEL && !place(node, name)) return null;
-        if (type == Type.WIDGET && !placeWidget(node, panel)) return null;
+        if (type == Type.PANEL) place(node, name);
+        if (type == Type.WIDGET) placeWidget(node);
 
         // Properties: which a node may hold depends on its type.
         for (Map.Entry<String, JsonElement> e : object.entrySet()) {
@@ -375,15 +424,15 @@ public final class AegisLayoutFile {
                 readProperty(node, key, value, keyLine);
             } else if (key.equals("children") && (type == Type.ROW || type == Type.COLUMN || type == Type.PANEL)) {
                 if (!value.isJsonArray()) {
-                    path.remove(path.size() - 1);
-                    throw new ScreenBroken(keyLine, "has \"children\" that is not a list, [ ... ], in "
-                        + node.label());
+                    error(keyLine, node.label() + ": \"children\" must be a list, [ ... ]; got " + value);
+                } else {
+                    if (type == Type.PANEL) node.hasChildren = true;
+                    readChildren(node, value.getAsJsonArray(), path, type == Type.PANEL ? node : panel);
                 }
-                if (type == Type.PANEL) node.hasChildren = true;
-                readChildren(node, value.getAsJsonArray(), path, type == Type.PANEL ? node : panel);
             } else if (key.equals("panels") && type == Type.TABS) {
                 readTabs(node, value, path, keyLine);
             } else {
+                // Declared and never used: a warning, not a reason to set the screen aside.
                 findings.problem(keyLine, node.label() + ": \"" + key + "\" is not something a "
                     + type.name().toLowerCase() + " holds; it is ignored");
             }
@@ -391,8 +440,7 @@ public final class AegisLayoutFile {
         }
 
         if (type == Type.TABS && object.get("panels") == null) {
-            findings.problem(at, "tabs needs \"panels\": a list of panel names; the node is left out");
-            return null;
+            error(at, "tabs needs \"panels\": a list of panel names");
         }
         if (type == Type.TABS && !node.tabs.isEmpty()) {
             findings.note(at, "tabs shows only its first panel, \"" + node.tabs.get(0)
@@ -401,7 +449,7 @@ public final class AegisLayoutFile {
         return node;
     }
 
-    private void readChildren(Node node, JsonArray array, List<String> path, Node panel) throws ScreenBroken {
+    private void readChildren(Node node, JsonArray array, List<String> path, Node panel) {
         for (int i = 0; i < array.size(); i++) {
             path.add("[" + i + "]");
             Node child = readNode(array.get(i), path, panel);
@@ -412,7 +460,7 @@ public final class AegisLayoutFile {
 
     private void readTabs(Node node, JsonElement value, List<String> path, int keyLine) {
         if (!value.isJsonArray()) {
-            findings.problem(keyLine, "tabs: \"panels\" must be a list of panel names, [\"a\", \"b\"]; it is ignored");
+            error(keyLine, "tabs: \"panels\" must be a list of panel names, [\"a\", \"b\"]; got " + value);
             return;
         }
         JsonArray array = value.getAsJsonArray();
@@ -421,44 +469,41 @@ public final class AegisLayoutFile {
             int at = line(path);
             JsonElement e = array.get(i);
             if (!isString(e)) {
-                findings.problem(at, "tabs: a panel name is text in quotes; got " + e + ". It is left out");
+                error(at, "tabs: a panel name is text in quotes; got " + e);
             } else {
                 Node slot = new Node(Type.PANEL, e.getAsString(), at);
-                if (place(slot, slot.name)) node.tabs.add(slot.name);
+                place(slot, slot.name);
+                node.tabs.add(slot.name);
             }
             path.remove(path.size() - 1);
         }
     }
 
-    /** Records where a panel goes; false, reported, if it already has a place. */
-    private boolean place(Node node, String name) {
+    /** Records where a panel goes; an error if it already has a place in the file. */
+    private void place(Node node, String name) {
         Node earlier = placedPanels.get(name);
         if (earlier != null) {
-            findings.problem(node.line, "panel \"" + name + "\" is already placed"
-                + (earlier.line > 0 ? " on line " + earlier.line : "")
-                + "; a panel has one place in the whole file. This one is left empty");
-            return false;
+            error(node.line, "panel \"" + name + "\" on line " + node.line + " was already declared on line "
+                + earlier.line + "; a panel has one place in the whole file");
+            return;
         }
         placedPanels.put(name, node);
         screenOf.put(node, reading);
-        return true;
     }
 
-    /** Widgets already placed in each panel, so one placed twice is caught. */
-    private final Map<Node, Map<String, Node>> placedWidgets = new HashMap<>();
-
-    private boolean placeWidget(Node node, Node panel) {
-        Map<String, Node> placed = placedWidgets.computeIfAbsent(panel, p -> new HashMap<>());
-        Node earlier = placed.get(node.name);
+    /** Records where a widget goes; an error if it already has a place in the file. */
+    private void placeWidget(Node node) {
+        Node earlier = placedWidgets.get(node.name);
         if (earlier != null) {
-            findings.problem(node.line, node.label() + " is already placed in " + panel.label()
-                + (earlier.line > 0 ? " on line " + earlier.line : "") + "; this one is left out");
-            return false;
+            error(node.line, node.label() + " on line " + node.line + " was already declared on line "
+                + earlier.line + "; a widget has one place in the whole file");
+            return;
         }
-        placed.put(node.name, node);
-        return true;
+        placedWidgets.put(node.name, node);
+        screenOf.put(node, reading);
     }
 
+    /** A size, a spacing or an alignment. A wrong value is an error: it would leave the screen misshapen. */
     private void readProperty(Node node, String key, JsonElement value, int at) {
         if (key.equals("alignX") || key.equals("alignY")) {
             AegisLayout.Align align = null;
@@ -472,8 +517,8 @@ public final class AegisLayoutFile {
                 }
             }
             if (align == null) {
-                findings.problem(at, node.label() + ": " + key + " is one of \"start\", \"center\", \"end\""
-                    + " or \"stretch\", in quotes; got " + value + ". It is ignored");
+                error(at, node.label() + ": " + key + " is one of \"start\", \"center\", \"end\""
+                    + " or \"stretch\", in quotes; got " + value);
             } else if (key.equals("alignX")) {
                 node.alignX = align;
             } else {
@@ -485,13 +530,12 @@ public final class AegisLayoutFile {
         // A size or a spacing: a JSON number, 0 or more.
         JsonPrimitive p = value.isJsonPrimitive() ? value.getAsJsonPrimitive() : null;
         if (p == null || !p.isNumber()) {
-            findings.problem(at, node.label() + ": " + key + " is a number, written without quotes, like 240;"
-                + " got " + value + ". It is ignored");
+            error(at, node.label() + ": " + key + " is a number, written without quotes, like 240; got " + value);
             return;
         }
         float number = p.getAsFloat();
         if (!(number >= 0.0f) || !Float.isFinite(number)) {
-            findings.problem(at, node.label() + ": " + key + " must be 0 or more; got " + value + ". It is ignored");
+            error(at, node.label() + ": " + key + " must be 0 or more; got " + value);
             return;
         }
         switch (key) {
@@ -532,13 +576,26 @@ public final class AegisLayoutFile {
     public String source() { return source; }
 
     /**
-     * Records a problem found while building from the file — a panel name code never registered,
-     * a widget that is not that panel's — so it is said with the rest.
+     * Records an error found while building from the file — a panel code never registered —
+     * so it is said with the rest. The caller then {@linkplain #setAsideWhileBuilding sets the
+     * screen aside}.
+     */
+    void error(Node node, String message) { findings.error(node.line, message); }
+
+    /**
+     * Records a warning found while building — a widget no panel has, one the file does not
+     * place — so it is said with the rest.
      */
     void problem(Node node, String message) { findings.problem(node.line, message); }
 
     /** Records a note found while building, like {@link #problem}. */
     void note(Node node, String message) { findings.note(node.line, message); }
+
+    /** Sets a screen aside after building found an error in it; see {@link #setAside}. */
+    void setAsideWhileBuilding(String screen) { setAside(screen); }
+
+    /** What could be read of a screen set aside while reading, or null; for checking, never building. */
+    Node setAsideScreen(String screen) { return setAside.get(screen); }
 
     /**
      * Says everything found — reading the file and building screens from it — in one block;

@@ -6,15 +6,12 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-import imgui.ImGui;
-
 import com.aengine.audio.AudioDevice;
-
 import com.aengine.core.Engine;
-import com.aengine.core.RenderMode;
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
-
+import com.aengine.core.RenderMode;
+import com.aengine.debug.DebugOverlay;
 import com.aengine.ecs.components.CameraComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
@@ -23,26 +20,22 @@ import com.aengine.ecs.systems.AudioSystem;
 import com.aengine.ecs.systems.CameraSystem;
 import com.aengine.ecs.systems.PhysicsSystem;
 import com.aengine.ecs.systems.ScriptSystem;
-
-import com.aengine.debug.DebugOverlay;
-
 import com.aengine.editor.EditorState;
 import com.aengine.editor.EntityFactory;
 import com.aengine.editor.SceneSerializer;
-
 import com.aengine.graphics.AssetManager;
 import com.aengine.graphics.Camera;
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
-
 import com.aengine.physics.PhysicsThread;
-
 import com.aengine.utils.AssetBaker;
 import com.aengine.utils.AssetWatcher;
-import com.aengine.utils.FileSystem;
 import com.aengine.utils.FPSTracker;
+import com.aengine.utils.FileSystem;
 import com.aengine.utils.Logger;
 import com.aengine.utils.ProjectWizard;
+
+import imgui.ImGui;
 
 
 /**
@@ -255,7 +248,7 @@ public class Main extends Engine {
         // directory, then the installation's ui/themes, and falls back to the factory theme —
         // the catalogue's defaults, compiled in — so there is always one. Applied after the
         // tree is built and its nodes are named, because a theme finds widgets by their paths.
-        // "dark" unless -Ptheme=<name> says otherwise; -PtestShell uses the test themes.
+        // "dark" unless -PthemeFile=<name> says otherwise; -PtestShell uses the test themes.
         com.aengine.aegis.AegisTheme theme =
             com.aengine.editor.ShellFiles.loadTheme(System.getProperty("aengine.theme", "dark"));
         aegis.widgets().applyTheme(theme, layoutFrame);
@@ -1163,18 +1156,23 @@ public class Main extends Engine {
         layout.setNodeName(layoutTreeItemB, "treeItemB");
         layout.setNodeName(layoutFieldA,    "fieldA");
 
-        // Step 3f-4c: the screen. The factory layout — the editor's own, compiled in — places
-        // the four panels: the outer column and the body row are its, with their padding and
-        // gaps, and each panel's size. build() makes those rows and columns, attaches each
-        // registered panel where it stands, and returns the root, which is solved and drawn
-        // every frame. report() then says, in one block, anything that did not fit: a panel
-        // the layout names that code never registered, say.
+        // Step 3f-4c: the screen. ShellFiles hands over the layouts in the order they are
+        // tried — the user's layouts/default.json, the installation's, and the factory layout, compiled
+        // in, always last — and build() takes the "editor" screen from the first that
+        // describes it. The layout places the four panels: the outer column and the body row
+        // are its, with their padding and gaps, and each panel's size; a panel it gives
+        // "children" has its widgets reordered. build() makes those rows and columns, attaches
+        // each registered panel where it stands, and returns the root, which is solved and
+        // drawn every frame. Each file's report() then says, in one block, what did not fit:
+        // a panel the layout names that code never registered, say.
         //
         // A theme's paths are made of names, and the layout's rows and columns have none, so
         // they stay what they were: viewport.stopButton, inspector.nameField...
-        com.aengine.aegis.AegisLayoutFile factoryLayout = com.aengine.editor.FactoryLayout.read();
-        layoutFrame = screens.build("editor", factoryLayout);
-        factoryLayout.report();
+        // "default" unless -PlayoutFile=<name> says otherwise; -PtestShell uses the test layouts.
+        com.aengine.aegis.AegisLayoutFile[] layouts =
+            com.aengine.editor.ShellFiles.loadLayouts(System.getProperty("aengine.layout", "default"));
+        layoutFrame = screens.build("editor", layouts);
+        for (com.aengine.aegis.AegisLayoutFile layoutFile : layouts) layoutFile.report();
 
         // Step 3d-2: which nodes react to the pointer. Everything else — panes, the toolbar
         // itself, the fields — lets it pass through to whatever interactive node holds it.

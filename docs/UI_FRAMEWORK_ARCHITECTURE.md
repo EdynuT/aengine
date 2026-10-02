@@ -45,6 +45,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-3 | A theme's mistakes reported in one block after it is applied, each with its line: problems as warnings, notes — repeated keys, unused variables, rules that change nothing — as information; strict types; the `format` checked against the engine's |
 | Step 3f-4a | `AegisJsonLines` reads lines inside lists (`children[1].width`); `AegisLayout.attach` / `detach` move a node to another parent |
 | Step 3f-4b | `layout.json` read and checked into a description per screen — five node types, strict types, a screen that cannot form a tree set aside alone — reported like a theme; nothing built from it yet |
+| Step 3f-4c | Screens built from layouts: widgets named as they are made, panels registered by code (`aegis.screens()`), the chain user → installation → factory per screen in `ShellFiles`, layouts in `layouts/`; a widget can be moved to any panel; stricter than a theme — an error sets the screen aside, only what is declared and never used is a warning; rows and columns with no size take their content's |
+| Step 3f-4d | A size code or a layout file sets on a widget is kept when a theme is applied |
 
 ### The plan ahead
 
@@ -145,14 +147,14 @@ guide that lets the designer work without reading the code; the files that test 
 are test files, and do not ship.
 
 Five parts, in order, with `layout.json` brought forward from Phase 4 — **we stopped after
-part 3**:
+part 4**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
 | 1 ✅ | Property catalogue | The closed list of what is themeable — name, type, default pointing at the palette — which validation checks against and fallbacks read from; names on layout nodes | Nothing on screen; it is the definition the next parts depend on |
 | 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
 | 3 ✅ | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
-| 4 | Layout | `layout.json` read by screens; panels and their widgets registered by name in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
+| 4 ✅ | Layout | `layout.json` read by screens; panels and their widgets registered by name in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
 | 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
 Then **a round of tests against the factory interface** — test themes and layouts that are
@@ -186,7 +188,7 @@ come from a later version — and older is a note listing the properties added s
 older case cannot run until the catalogue reaches format 2, so it is untested.
 
 The deliberate test file is `editor/test-shell/themes/broken.json` (does not ship): run with
-`-PtestShell -Ptheme=broken`, it reports eight problems and four notes, and the Stop button,
+`-PtestShell -PthemeFile=broken`, it reports eight problems and four notes, and the Stop button,
 its one correct rule, turns red. On screen the result is only "nothing crashed"; the log is
 the check. Showing problems to the user is not planned yet — later, a popup that points at
 the log file (§10, `Logger`).
@@ -207,7 +209,7 @@ Before 4c, what was called a node's *id* became its **name** — `setNodeName`,
 whoever writes the code chooses, and the one a theme or layout file writes. `setNodeName`
 rather than `setName`, so the call says what it names.
 
-In four steps, each reviewed — **we stopped after 4c-1**: **4a** ✅ — `AegisJsonLines` learns
+In four steps, each reviewed — **part 4 is done**: **4a** ✅ — `AegisJsonLines` learns
 arrays (`children[1].width`), and `AegisLayout` can move a node to another parent; **4b** ✅ —
 the file read and validated into a description (`AegisLayoutFile`), with the same report and
 strict types as a theme — the report's machinery now shared by both, in `AegisFindings` —
@@ -217,10 +219,41 @@ nothing on screen yet;
 (`aegis.screens().columnPanel("inspector")`, `rowPanel`), and the editor screen built from the
 factory layout (`FactoryLayout`, the format's own text, compiled into the editor) by
 `screens.build("editor", files...)` — the screen looks as it did, but its outer column and
-body row now come from the layout; **4c-2** — the chain user → installation → factory, per
-screen, in `ShellFiles`, and a test `layout.json` that moves a pane and reorders widgets;
-**4d** — a size code sets on a widget is kept when a theme is applied, which today replaces
-it.
+body row now come from the layout; **4c-2** ✅ — the chain user → installation → factory, per
+screen, in `ShellFiles`, layouts kept in `layouts/` like themes, the stricter rule below,
+widgets moved between panels, and rows and columns that take their content's size; **4d** ✅
+— a size code or a layout file sets on a widget is kept when a theme is applied, which used
+to replace it.
+
+**What 4c-2 settled.** The test layouts showed what a lenient layout does: a wrong size
+ignored left a panel at 0 and the screen unusable. So a layout is **stricter than a theme**,
+since a wrong layout breaks a whole screen where a wrong theme spoils a colour:
+
+| Finding | Level | Result |
+|---|---|---|
+| Anything wrong with the tree — unknown `"type"`, `children` not a list, a panel inside a panel, a widget outside one, a panel or widget placed twice, a panel code does not register — and any wrong value: a size or spacing that is not a number of 0 or more, an alignment not one of the four | **ERROR** | The screen is set aside and comes from the next layout in line; every error of the screen is listed, including the ones only building can find |
+| Declared and never used — a property a node does not hold, a key written twice, a widget name no panel has | **WARN** | Ignored; the layout is used |
+| A widget the file places nowhere | **WARN** | Added at the end of the panel code made it in; the layout is used |
+
+The split is what lets a user's layout survive an engine update: a widget the update adds,
+removes or moves to another panel is a warning, never a lost layout. The user's file is never
+rewritten or deleted for an error: it is only not used that run, and the log says where and
+why — and which layout comes instead, as it happens: `Screen "editor" in …/default.json has
+errors, listed in its report; trying to apply <the installation's>`, or `applying factory
+layout` when the factory is next. A name placed twice says both lines: `widget "nameField" on
+line 16 was already declared on line 15`.
+
+**A widget can be placed in any panel**, not only the one code made it in — the Stop button in
+the toolbar — by naming it in that panel's `"children"`. It is the same handle, so code that
+asks `ae.wasActivated(stopButton)` notices nothing; Tab follows its new place. Widget names are
+therefore unique across panels, which `build` checks. A widget is **dressed by the panel code
+made it in** — `viewport.stopButton` wherever it stands — so moving it in a layout never
+changes its look, and a theme and a layout stay independent.
+
+**A row or column given no size takes its content's**: its children and the gaps between
+along its direction, the largest across it, plus padding. A layout grouping two checkboxes in
+a new row no longer has to know how tall a checkbox is. A size asked for still wins, and a
+growing or stretching parent may still make it larger.
 
 A panel's widgets, for the layout, are its direct children as code made them. Code sets a
 panel's inside — padding, the gap between its widgets, their alignment — and the layout its
@@ -252,7 +285,7 @@ Step 3d is closed; none of these blocks step 3e, which follows it.
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
 - ~~**Where the shell, font and locale files live**~~ — **decided:** built-in dark and light
   themes, the default font and the locale files in the installation (locales in
-  `<install>/lang/`); user themes, user fonts and `layout.json` under `AEngine/ui/` in the
+  `<install>/lang/`); user themes, user fonts and layouts under `AEngine/ui/` in the
   user's data directory (`~/.local/share/AEngine/ui/`, `%LOCALAPPDATA%\AEngine\ui\`). Not per
   project. See §7 and §8.
 - **Instancing** — 3b-4 has put real paragraphs on screen, so the size of the question is now
@@ -1109,15 +1142,17 @@ Five kinds of node, mirroring `AegisLayout`:
 | `row` | Children side by side, left to right |
 | `column` | Children stacked, top to bottom |
 | `panel` | One panel's slot, by the name its code registered — `"panel": "inspector"`. Optionally `"children"`: how the panel's own widgets are ordered and grouped |
-| `widget` | Inside a panel's `"children"` only: one of that panel's widgets, by its name — `"widget": "nameField"` |
+| `widget` | Inside a panel's `"children"` only: a widget, by its name — `"widget": "nameField"` — one of that panel's, or one moved in from another panel |
 | `tabs` | Several panels sharing a slot, one shown at a time, in the order listed |
 
 **Inside a panel, the file arranges and code creates.** A panel's widgets are made in code,
 each wired to what it does; the file only orders them and groups them into rows and columns,
-by the same names a theme uses. A panel without `"children"` shows its widgets as code laid
-them out. A widget the file does not mention is added at the end of its panel, in code order,
-with a note — an update's new control is never hidden by an older file. Rows and columns
-inside a panel carry no name, like the screen's, so regrouping a panel changes no theme path.
+by the same names a theme uses — and may move a widget into another panel, by naming it in
+that panel's `"children"`. A panel without `"children"` shows its widgets as code laid them
+out. A widget the file places nowhere is added at the end of the panel code made it in, in
+code order, with a warning — an update's new control is never hidden by an older file. Rows
+and columns inside a panel carry no name, like the screen's, so regrouping a panel changes no
+theme path; and a widget is dressed by the panel code made it in, wherever the file moves it.
 
 Sizes and spacing are the layout's own: `width`, `height`, `grow`, and on rows and columns
 `gap`, `padding`, `alignX`, `alignY` (`start`, `center`, `end`, `stretch`). The `"type"` is
@@ -1125,7 +1160,8 @@ always written, so the four kinds read plainly.
 
 **Panel names are unique across the whole engine**, not per screen, so a theme path stays
 `panel.widget` — `settingsGeneral.fontSize.border` — with no screen in it; a panel belongs to
-one screen. Rows, columns and tabs in the layout carry no name and never appear in a theme
+one screen. **Widget names are unique across the engine too**, since a layout names a widget
+without its panel; `build` refuses two panels with a widget of the same name. Rows, columns and tabs in the layout carry no name and never appear in a theme
 path, so moving the inspector to the other side changes no theme.
 
 Screens fall back **one by one**: the editor screen may come from the user's file while
@@ -1155,24 +1191,25 @@ settings that could fix the problem.
 |---|---|---|
 | File missing | — | The next in line — installation, then factory — with no warning for the user's, which is normally absent |
 | JSON does not parse | structure | The next in line, with a warning |
-| A layout screen does not form a tree — `"type": "diagonal"`, `children` not a list | structure | That screen from the next in line, with a warning; the file's other screens still apply |
+| A layout screen with an **error** — anything wrong with the tree (`"type": "diagonal"`, `children` not a list, a panel inside a panel, a widget outside one, a panel or widget placed twice, a `panel` name code does not register) or a wrong value (`"width": -40`, `"width": "240"`, `"alignY": "middle"`) | structure | That screen from the next in line, with an **error** listing every one found; the file's other screens still apply |
 | Invalid value — `"bleu"` for a colour | value | Default, with a warning |
 | Unknown property name — `button.fil` | value | Ignored, with a warning; the intended property falls to its default |
 | A path that matches no widget — a name changed in code | value | Ignored, with a warning |
 | `@reference` to a name that does not exist | value | Default, with a warning |
 | `@reference` cycle | value | Default for every property in the cycle, with a warning |
-| Invalid size in the layout — `"width": -40` | value | Automatic sizing, with a warning |
-| `panel` name not registered in code | value | Slot left empty, with a warning; the rest still lays out |
-| The same panel in two slots | value | The second is left empty, with a warning |
-| `widget` name not one of that panel's widgets | value | Ignored, with a warning |
-| The same widget twice in a panel | value | The second is ignored, with a warning |
-| A panel's widget the file does not mention | — | Added at the end of its panel, with a note |
-| A wrong type — `"width": "240"`, `"grow": true` | value | Default for that property, with a warning; types are strict, as in a theme |
+| A layout property a node does not hold — `"colour"` on a panel | declared, unused | Ignored, with a warning |
+| A `widget` name no panel has | declared, unused | Ignored, with a warning |
+| A widget the layout places nowhere | — | Added at the end of the panel code made it in, with a warning |
 | Registered panel absent from `layout.json` | — | Not shown — how a minimal layout is authored |
 | Property omitted | — | Default, no warning — this is what allows a partial theme |
 
-An unregistered `panel` falls back rather than refusing so that renaming a panel in code does
-not stop the editor from starting for everyone with an older `layout.json`.
+**A layout is stricter than a theme.** A theme value that falls back spoils one colour; a
+layout value that falls back can leave a panel 0 wide and the screen unusable, which the
+first test layouts showed. So in a layout everything wrong is an error that sets the screen
+aside, and only what is declared and never used is a warning — the split that lets a user's
+layout survive an update which adds, removes or moves widgets (*Part 4*, in the plan at the
+top). A panel name code does not register is an error too: a panel an update adds has no
+obvious place to go, and the next layout in line puts it somewhere.
 
 Default values come from the property catalogue described under *Scope discipline* below:
 each supported property is declared with a name, a type and a default. That catalogue is not
@@ -1280,9 +1317,12 @@ A new theme is a file placed in `themes/` inside that directory. The procedure �
 start from a built-in theme and where to put the result — is for user documentation, not
 for the editor to guide.
 
-The installation carries a default `layout.json` beside its themes, made by the shell's
-designer and never written. **The user's `layout.json`**, which the program writes, lives
-under `AEngine/ui/` and **never in the installation**, so an engine update cannot reset a
+**Layouts live in `layouts/`, as themes live in `themes/`** — the one the editor reads is
+`layouts/default.json`; elsewhere this document calls it `layout.json`, the format's name.
+Keeping them in a folder of their own leaves room for several layouts to choose from, the
+way themes are chosen. The installation carries a default layout in its `layouts/`, made by
+the shell's designer and never written. **The user's layout**, which the program writes,
+lives under `AEngine/ui/layouts/` and **never in the installation**, so an engine update cannot reset a
 user's arrangement. Not in a cache directory either (`~/.cache`): the system and cleaning tools treat a cache as
 disposable and empty it, which would reset the arrangement just the same.
 
@@ -1297,7 +1337,10 @@ development runs work: `aengine.home` is the installation, and `./gradlew :edito
 it at `editor/src/dist`, which is what the application plugin copies into an installation;
 `aengine.userdata` is the user's directory, and `-PtestShell` points it at
 `editor/test-shell`, where the test themes and layouts live, so trying one never touches the
-real `~/.local/share/AEngine`. `-Ptheme=<name>` picks a theme by name. Nothing in
+real `~/.local/share/AEngine`. `-PthemeFile=<name>` picks a theme by name, and
+`-PlayoutFile=<name>` a layout — not `-Playout`, since every Gradle project already has a
+`layout` property of its own, which would be read instead; the theme's option is named the
+same way for uniformity. Nothing in
 `test-shell` ships.
 
 The per-project option — each game project carrying its own editor appearance — is

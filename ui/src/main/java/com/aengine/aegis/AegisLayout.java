@@ -117,6 +117,11 @@ public final class AegisLayout {
     // A name given in code, for a theme or a layout file to find the node by. Null for a node without one.
     private final String[] name;
 
+    // What a row or column asking for no size on an axis asks for instead: what its children
+    // take up there. Measured at the start of every solve that runs, before anything is placed.
+    private final float[] contentWidth;
+    private final float[] contentHeight;
+
     // What the solve gave it.
     private final float[] solvedX;
     private final float[] solvedY;
@@ -161,6 +166,8 @@ public final class AegisLayout {
 
         name = new String[capacity];
 
+        contentWidth  = new float[capacity];
+        contentHeight = new float[capacity];
         solvedX      = new float[capacity];
         solvedY      = new float[capacity];
         solvedWidth  = new float[capacity];
@@ -295,6 +302,12 @@ public final class AegisLayout {
     public void setHeight(int node, float height) {
         setSize(node, requestedWidth[node], height);
     }
+
+    /** The width a node asks for, as last set; 0 when none was. For the widgets' own sizing. */
+    float requestedWidth(int node) { return requestedWidth[node]; }
+
+    /** The height a node asks for, as last set; 0 when none was. */
+    float requestedHeight(int node) { return requestedHeight[node]; }
 
     /**
      * Whether a node is a row or a column — something that holds children — rather than a box.
@@ -537,9 +550,47 @@ public final class AegisLayout {
             solveSkips++;
             return;
         }
+        measure(root);
         place(root, x, y, width, height);
         solvedVersion[root] = version;
         solves++;
+    }
+
+    /**
+     * What a row or column takes up when it asks for no size: along its own direction, its
+     * children one after the other with the gaps between; across it, the largest child; padding
+     * on both sides of each. Bottom up, so a row's measure already holds its rows' and columns'.
+     *
+     * <p>This is what lets a layout file group widgets in a new row without giving it a size:
+     * the row is as tall as its tallest widget. A size asked for — {@code setSize}, or a
+     * layout file's {@code "width"} — still wins, and a stretching or growing parent may still
+     * make it larger.</p>
+     */
+    private void measure(int node) {
+        if (kind[node] == BOX) return;
+        boolean horizontal = kind[node] == ROW;
+        float along = 0.0f, across = 0.0f;
+        int children = 0;
+        for (int child = firstChild[node]; child != NONE; child = nextSibling[child]) {
+            measure(child);
+            along  += horizontal ? askedWidth(child) : askedHeight(child);
+            across  = Math.max(across, horizontal ? askedHeight(child) : askedWidth(child));
+            children++;
+        }
+        if (children > 1) along += gap[node] * (children - 1);
+        float pad = padding[node] * 2.0f;
+        contentWidth[node]  = (horizontal ? along : across) + pad;
+        contentHeight[node] = (horizontal ? across : along) + pad;
+    }
+
+    /** The width a node asks for: what it was given, or, for a row or column given none, its content's. */
+    private float askedWidth(int node) {
+        return requestedWidth[node] > 0.0f || kind[node] == BOX ? requestedWidth[node] : contentWidth[node];
+    }
+
+    /** The height a node asks for; see {@link #askedWidth}. */
+    private float askedHeight(int node) {
+        return requestedHeight[node] > 0.0f || kind[node] == BOX ? requestedHeight[node] : contentHeight[node];
     }
 
     /**
@@ -719,7 +770,7 @@ public final class AegisLayout {
         float totalGrow = 0.0f;
         int   children  = 0;
         for (int child = firstChild[node]; child != NONE; child = nextSibling[child]) {
-            asked     += horizontal ? requestedWidth[child] : requestedHeight[child];
+            asked     += horizontal ? askedWidth(child) : askedHeight(child);
             totalGrow += grow[child];
             children++;
         }
@@ -743,13 +794,13 @@ public final class AegisLayout {
         // rounded, so rounding never accumulates — see the class comment.
         float cursor = (horizontal ? innerX : innerY) + shift;
         for (int child = firstChild[node]; child != NONE; child = nextSibling[child]) {
-            float main = horizontal ? requestedWidth[child] : requestedHeight[child];
+            float main = horizontal ? askedWidth(child) : askedHeight(child);
             if (totalGrow > 0.0f) main += spare * (grow[child] / totalGrow);
 
             float start = Math.round(cursor);
             float end   = Math.round(cursor + main);
 
-            float askedCross = horizontal ? requestedHeight[child] : requestedWidth[child];
+            float askedCross = horizontal ? askedHeight(child) : askedWidth(child);
             float cross      = crossSize(crossAlign, askedCross, innerCross);
             float crossAt    = crossStart(crossAlign, crossFrom, innerCross, cross);
 

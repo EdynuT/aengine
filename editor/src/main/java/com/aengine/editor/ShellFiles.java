@@ -1,11 +1,14 @@
 package com.aengine.editor;
 
+import com.aengine.aegis.AegisLayoutFile;
 import com.aengine.aegis.AegisTheme;
 import com.aengine.utils.Logger;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Where the shell's files live, and which of them the editor uses — the one place that knows
@@ -86,5 +89,41 @@ public final class ShellFiles {
         }
         Logger.info(Logger.System.UI, "No theme \"%s\" found; using the factory theme.", name);
         return AegisTheme.factory();
+    }
+
+    /**
+     * The layouts to build screens from, in the order they are tried: the user's
+     * {@code layouts/<name>.json}, the installation's, and the factory layout, which is always last
+     * and always there. A screen is taken from the first of them that describes it usably
+     * ({@link com.aengine.aegis.AegisScreens#build}), so the user's file may lay out one
+     * screen and leave the others to the next in line.
+     *
+     * <p>A file that is missing is passed over quietly — the user normally has none — and one
+     * that cannot be read or used is passed over with a warning saying why. Each file returned
+     * reports its findings when the caller calls {@code report()}, once its screens are built.</p>
+     *
+     * @param name the file's name without {@code .json}: {@code "default"}, unless a development
+     *             run names a test layout
+     * @return the usable files, first choice first, ending with the factory layout; never empty
+     */
+    public static AegisLayoutFile[] loadLayouts(String name) {
+        String file = name + ".json";
+        List<AegisLayoutFile> inLine = new ArrayList<>(3);
+        for (Path candidate : new Path[] {
+                userDir().resolve("layouts").resolve(file),
+                installDir().resolve("layouts").resolve(file) }) {
+            if (!Files.exists(candidate)) continue;
+            try {
+                AegisLayoutFile layout = AegisLayoutFile.read(candidate);
+                Logger.info(Logger.System.UI, "Layout \"%s\" from %s.", layout.name(), candidate);
+                inLine.add(layout);
+            } catch (IOException e) {
+                Logger.warn(Logger.System.UI, "%s cannot be read (%s); trying the next.", candidate, e.getMessage());
+            } catch (AegisLayoutFile.Unusable e) {
+                Logger.warn(Logger.System.UI, "%s; trying the next.", e.getMessage());
+            }
+        }
+        inLine.add(FactoryLayout.read());
+        return inLine.toArray(new AegisLayoutFile[0]);
     }
 }
