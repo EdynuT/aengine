@@ -129,4 +129,20 @@ public final class AegisStyle {
     public float         textFieldPaddingY      = 6.0f;
     /** Width of the caret. */
     public float         textFieldCaretWidth    = 2.0f;
+
+    // ── Label ────────────────────────────────────────────────────────────
+
+    /** The label's text. */
+    public final float[] labelText          = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** Space above and below the text; a checkbox's, by default, so the two line up in a row. */
+    public float         labelPaddingY      = 4.0f;
+
+    // ── Separator ────────────────────────────────────────────────────────
+
+    /** The line. */
+    public final float[] separatorLine      = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** How thick the line is. */
+    public float         separatorThickness = 1.0f;
+    /** Clear space on each side of the line, along the direction its parent stacks in. */
+    public float         separatorMargin    = 4.0f;
 }

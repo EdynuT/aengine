@@ -124,6 +124,9 @@ public class Main extends Engine {
     private int nameField;          // step 3e-6: a text field, from the one ae.textField() method
     private int notesField;         // step 3e-7: a text field with no length limit
     private int descriptionBox;     // step 3e-9: a text box, from the one ae.textBox() method
+    private int nameLabel;          // step 3g-1: a label, from ae.label()
+    private int inspectorSeparator; // step 3g-1: separators, from ae.separator() — flat in a column,
+    private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
 
@@ -1085,6 +1088,11 @@ public class Main extends Engine {
         layoutBoxA = layout.box(layoutRow);
         layout.setSize(layoutBoxA, 80.0f, 60.0f);
 
+        // Step 3g-1: a separator between A and B. The toolbar is a row, so the line stands
+        // upright and runs the toolbar's height; it takes only its thickness and margins of the
+        // row's width. Put in a column, the same call gives a horizontal line.
+        toolbarSeparator = ae.separator(layoutRow, "toolbarSeparator");
+
         // Grows: asks for 0 wide, so its width is its share of the spare space and nothing else.
         layoutBoxB = layout.box(layoutRow);
         layout.setSize(layoutBoxB, 0.0f, 60.0f);
@@ -1167,6 +1175,10 @@ public class Main extends Engine {
         // something is typed and back when the field is emptied again. To start it with a real
         // value instead — an entity's current name — call ae.setText(nameField, "Main Camera"),
         // which fills it from code without counting as an edit.
+        // Step 3g-1: a label says what the field below it is. Text and nothing to act on: Tab
+        // passes it by. setLabel() would show other text later, sized again to fit.
+        nameLabel = ae.label(layoutInspector, "nameLabel", "Name");
+
         nameField = ae.textField(layoutInspector, "nameField", 64);
         ae.setPlaceholder(nameField, "Typing text here");
 
@@ -1184,6 +1196,10 @@ public class Main extends Engine {
         // X makes each as wide as the pane, so a click anywhere along its row ticks it — the
         // label is part of the target, as in every desktop toolkit. "Snap to grid" starts
         // ticked through setChecked(), which sets it without counting as the user's change.
+        // Step 3g-1: a separator sets the settings apart from the fields. The inspector is a
+        // column, so the line lies flat and spans the pane from edge to edge.
+        inspectorSeparator = ae.separator(layoutInspector, "inspectorSeparator");
+
         showGridCheckbox = ae.checkbox(layoutInspector, "showGridCheckbox", "Show grid");
         snapCheckbox     = ae.checkbox(layoutInspector, "snapCheckbox",     "Snap to grid");
         ae.setChecked(snapCheckbox, true);

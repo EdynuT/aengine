@@ -37,8 +37,12 @@ import java.util.Map;
  * <p>Every entry records the {@link #FORMAT} it arrived in. A theme declares the format it was
  * written against, and entries newer than that are what the loader is to report as unset — how
  * an engine update tells a theme author what is new (§7, <em>How a custom theme survives an
- * engine update</em>). The report is not written yet: {@link AegisTheme} reads the declared
- * format but does not compare it with the entries.</p>
+ * engine update</em>): {@link AegisTheme} notes, for a theme declaring an older format, the
+ * entries added since that it does not set.</p>
+ *
+ * <p>The format stays 1 while the framework is in development: widgets and entries added
+ * before release arrive in format 1, since nobody yet has a theme they could break. It is
+ * raised only after release, and rarely — each raise flags every custom theme.</p>
  *
  * <p>Built once, when the class loads; read at theme load, never in the frame loop.</p>
  */
@@ -183,6 +187,15 @@ public final class AegisThemeCatalogue {
         size  ("textfield.padding.x",      "8",   (s, v) -> s.textFieldPaddingX = v);
         size  ("textfield.padding.y",      "6",   (s, v) -> s.textFieldPaddingY = v);
         size  ("textfield.caret.width",    "2",   (s, v) -> s.textFieldCaretWidth = v);
+
+        // ── Label ──────────────────────────────────────────────────────────────────────
+        colour("label.text",      "@global.text", s -> s.labelText);
+        size  ("label.padding.y", "4", (s, v) -> s.labelPaddingY = v);   // as a checkbox's, so the two line up in a row
+
+        // ── Separator ──────────────────────────────────────────────────────────────────
+        colour("separator.line",      "@global.border", s -> s.separatorLine);
+        size  ("separator.thickness", "1", (s, v) -> s.separatorThickness = v);
+        size  ("separator.margin",    "4", (s, v) -> s.separatorMargin = v);   // clear space on each side of the line
     }
 
     private AegisThemeCatalogue() { }

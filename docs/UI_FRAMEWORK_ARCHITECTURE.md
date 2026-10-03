@@ -49,6 +49,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-4d | A size code or a layout file sets on a widget is kept when a theme is applied |
 | Step 3f-5a | The theme read again in a running editor with Ctrl+R, applied at the start of the next frame; a file that cannot be used keeps the theme on screen |
 | Step 3f-5b | The theme author's development option, `-PthemeWatch` for now: saving the theme file applies it, through a small watcher of the editor's own |
+| Step 3g-1 | Label and separator; the format stays 1 until release |
 
 ### The plan ahead
 
@@ -280,7 +281,8 @@ unless `-PthemeWatch` turns it on, until the settings page carries the option; o
 one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
-against Swing's list. Planned, not started; each keyboard-operable like the rest.
+against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
+3g-1.**
 
 | Group | Widgets |
 |---|---|
@@ -289,6 +291,29 @@ against Swing's list. Planned, not started; each keyboard-operable like the rest
 | When a real panel asks | Radio button, list, table (asset browser), progress bar (asset baking), colour chooser, toolbar |
 | Elsewhere | File chooser: the system's own dialog (tinyfd, bundled with LWJGL), not a reimplementation. Internal frames — floating windows inside the main one — come with docking, much later |
 | Not planned | Applet, root pane (Swing internals or obsolete), password field (the editor asks for none), rich-text panes (only if a script editor is ever built in) |
+
+The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅ label and
+separator; **3g-2** scroll pane; **3g-3** spinner; **3g-4** tabbed pane, which the layout's
+`tabs` then uses instead of showing its first panel; **3g-5** split pane, its dividers dragged
+in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
+tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
+waits for the panels that ask for it, in Phase 4.
+
+**The format stays 1 until release.** Theme and layout files keep `"format": 1` while the
+framework is in development: the entries new widgets bring arrive in format 1, since nobody
+yet has a theme or a layout they could break. The format is raised only after release, and
+rarely, since each raise flags every custom theme or layout. The path that reports an older
+format works — 3g-1 ran it once, briefly at format 2, and a format-1 theme was told which
+entries came since — and waits for that day.
+
+**3g-1, label and separator.** `ae.label(parent, name, text)` is text with nothing to act on,
+like `JLabel`: neither clickable nor focusable, so Tab passes it by; `setLabel` shows other
+text and sizes it again. Its `label.padding.y` defaults to a checkbox's, so the two line up in
+a row. `ae.separator(parent, name)` is a line that follows its parent — flat in a column,
+upright in a row — drawn across the whole parent from one inner edge to the other, so it spans
+the panel whether or not the panel stretches its children; moved by a layout into a row, it
+turns upright. Theme entries: `label.text`, `label.padding.y`, `separator.line`,
+`separator.thickness`, `separator.margin`.
 
 **Step 3h — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.

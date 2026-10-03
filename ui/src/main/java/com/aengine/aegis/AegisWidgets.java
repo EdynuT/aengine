@@ -66,6 +66,8 @@ public final class AegisWidgets {
     private static final byte SLIDER       = 3;
     private static final byte TEXT_FIELD   = 4;
     private static final byte TEXT_BOX     = 5;   // a text field of several lines: shares all of its state
+    private static final byte LABEL        = 6;   // step 3g-1: text, and nothing to act on
+    private static final byte SEPARATOR    = 7;   // step 3g-1: a line across its parent
 
     /** Shift + arrow moves a slider this many steps at once. */
     private static final int LARGE_STEP = 10;
@@ -317,6 +319,8 @@ public final class AegisWidgets {
             case CHECKBOX             -> "checkbox";
             case SLIDER               -> "slider";
             case TEXT_FIELD, TEXT_BOX -> "textfield";
+            case LABEL                -> "label";
+            case SEPARATOR            -> "separator";
             default                   -> "";
         };
     }
@@ -340,6 +344,15 @@ public final class AegisWidgets {
                 Math.max(style.sliderThumbSize, line) + style.sliderPaddingY * 2.0f);
             case TEXT_FIELD, TEXT_BOX -> fit(node, style.textFieldWidth,
                 line * Math.max(1, visibleLines[node]) + style.textFieldPaddingY * 2.0f);
+            case LABEL -> fit(node,
+                (float) Math.ceil(aegis.measure(label[node])), line + style.labelPaddingY * 2.0f);
+            case SEPARATOR -> {
+                // Room for the line and its margins along the way its parent stacks; nothing
+                // across, since the line is drawn across the whole parent (drawSeparator).
+                float room = style.separatorThickness + style.separatorMargin * 2.0f;
+                if (layout.isRow(layout.parent(node))) fit(node, room, 0.0f);
+                else                                   fit(node, 0.0f, room);
+            }
             default -> { }
         }
     }
@@ -440,6 +453,65 @@ public final class AegisWidgets {
      * @param on   {@code true} to tick it
      */
     public void setChecked(int node, boolean on) { checked[node] = on; }
+
+    /**
+     * A label: text on its own, added to {@code parent} — step 3g-1.
+     *
+     * <p>Says what something is — "Name", "Opacity" — and has nothing to act on, like Swing's
+     * {@code JLabel}: neither clickable nor focusable, so Tab passes it by. Sized to its text,
+     * with {@code label.padding.y} above and below, which matches a checkbox's so a label and a
+     * checkbox line up in a row.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "nameLabel"};
+     *               see {@link AegisLayout#setNodeName}
+     * @param text   the text; kept, so pass a string that does not change, and use
+     *               {@link #setLabel} to show another
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int label(int parent, String name, String text) {
+        int node = namedBox(parent, name);
+        kind[node]    = LABEL;
+        label[node]   = text;
+        styleOf[node] = null;
+        fitToContent(node);
+        return node;
+    }
+
+    /**
+     * Shows other text in a label, and sizes it again to fit. For text that changes now and
+     * then — a count, a name — not every frame: it measures the text.
+     *
+     * @param node the label
+     * @param text the text; kept, as at creation
+     */
+    public void setLabel(int node, String text) {
+        label[node] = text;
+        fitToContent(node);
+    }
+
+    /**
+     * A separator: a thin line that sets groups apart, added to {@code parent} — step 3g-1.
+     *
+     * <p>It follows its parent: a horizontal line in a column, a vertical one in a row, drawn
+     * across the whole parent from one inner edge to the other. It takes
+     * {@code separator.thickness} plus {@code separator.margin} on each side along the way its
+     * parent stacks, and nothing across. Neither clickable nor focusable.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "settingsSeparator"};
+     *               see {@link AegisLayout#setNodeName}
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int separator(int parent, String name) {
+        int node = namedBox(parent, name);
+        kind[node]    = SEPARATOR;
+        styleOf[node] = null;
+        fitToContent(node);
+        return node;
+    }
 
     /**
      * A slider over {@code min}..{@code max}, starting at {@code value}, added to
@@ -685,7 +757,8 @@ public final class AegisWidgets {
     public int selectionEnd(int node) { return Math.max(anchor[node], caret[node]); }
 
     /**
-     * Whether a node was made by this class — a button, a checkbox, a slider, a text field or box.
+     * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
+     * box, a label or a separator.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -1607,6 +1680,8 @@ public final class AegisWidgets {
         if (kind[root] == SLIDER)   drawSlider(root);
         if (kind[root] == TEXT_FIELD) drawTextField(root);
         if (kind[root] == TEXT_BOX)   drawTextBox(root);
+        if (kind[root] == LABEL)      drawLabel(root);
+        if (kind[root] == SEPARATOR)  drawSeparator(root);
         for (int child = layout.firstChild(root); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
             draw(child);
@@ -1873,6 +1948,41 @@ public final class AegisWidgets {
     }
 
     /** The focus ring, standing {@code focusRingGap} off a widget's edge. Shared by every kind. */
+    /** A label: its text, at the left, centred in its height, clipped to its rectangle. */
+    private void drawLabel(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node);
+        float w = layout.width(node), h = layout.height(node);
+        float[] ink = style.labelText;
+        aegis.pushClipRect(x, y, w, h);
+        aegis.addTextTop(x, y + (h - aegis.lineHeight()) * 0.5f, label[node], ink[0], ink[1], ink[2], ink[3]);
+        aegis.popClipRect();
+    }
+
+    /**
+     * A separator: a line across its parent — horizontal in a column, vertical in a row —
+     * from one inner edge to the other, centred in the room the separator takes. Drawn across
+     * the parent rather than the separator's own rectangle, so it spans the panel whether or
+     * not the panel stretches its children.
+     */
+    private void drawSeparator(int node) {
+        AegisStyle style = styleOf(node);
+        int parent = layout.parent(node);
+        if (parent == AegisLayout.NONE) return;
+        float pad = layout.padding(parent);
+        float t = style.separatorThickness;
+        float[] line = style.separatorLine;
+        if (layout.isRow(parent)) {
+            float x = Math.round(layout.x(node) + (layout.width(node) - t) * 0.5f);
+            aegis.addRoundedRect(x, layout.y(parent) + pad, t, layout.height(parent) - pad * 2.0f, 0.0f,
+                line[0], line[1], line[2], line[3]);
+        } else {
+            float y = Math.round(layout.y(node) + (layout.height(node) - t) * 0.5f);
+            aegis.addRoundedRect(layout.x(parent) + pad, y, layout.width(parent) - pad * 2.0f, t, 0.0f,
+                line[0], line[1], line[2], line[3]);
+        }
+    }
+
     private void drawFocusRing(AegisStyle style, float x, float y, float w, float h, float radius) {
         float out = style.focusRingGap + style.focusRingWidth;
         float[] ring = style.focusRing;

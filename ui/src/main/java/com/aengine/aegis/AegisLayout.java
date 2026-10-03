@@ -318,6 +318,22 @@ public final class AegisLayout {
     public boolean isContainer(int node) { return kind[node] != BOX; }
 
     /**
+     * Whether a node is a row — lays its children out left to right.
+     *
+     * @param node the handle
+     * @return {@code true} for a row; {@code false} for a column or a box
+     */
+    public boolean isRow(int node) { return kind[node] == ROW; }
+
+    /**
+     * The space kept clear inside a row or column's edges, as set with {@link #setPadding}.
+     *
+     * @param node the handle
+     * @return the padding in pixels; 0 for a box
+     */
+    public float padding(int node) { return padding[node]; }
+
+    /**
      * Space kept clear inside a row or column's edges, on all four sides, in pixels.
      *
      * @param node   the row or column

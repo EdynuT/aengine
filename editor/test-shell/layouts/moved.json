@@ -8,6 +8,7 @@
       "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
         { "type": "panel", "panel": "toolbar", "height": 100, "children": [
           { "type": "widget", "widget": "boxA" },
+          { "type": "widget", "widget": "toolbarSeparator" },
           { "type": "widget", "widget": "stopButton", "width": 140 },
           { "type": "widget", "widget": "boxB" },
           { "type": "widget", "widget": "boxC" },
@@ -19,6 +20,8 @@
               { "type": "widget", "widget": "snapCheckbox" },
               { "type": "widget", "widget": "showGridCheckbox" }
             ]},
+            { "type": "widget", "widget": "inspectorSeparator" },
+            { "type": "widget", "widget": "nameLabel" },
             { "type": "widget", "widget": "nameField" }
           ]},
           { "type": "panel", "panel": "viewport", "grow": 1, "children": [
