@@ -48,6 +48,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-4c | Screens built from layouts: widgets named as they are made, panels registered by code (`aegis.screens()`), the chain user → installation → factory per screen in `ShellFiles`, layouts in `layouts/`; a widget can be moved to any panel; stricter than a theme — an error sets the screen aside, only what is declared and never used is a warning; rows and columns with no size take their content's |
 | Step 3f-4d | A size code or a layout file sets on a widget is kept when a theme is applied |
 | Step 3f-5a | The theme read again in a running editor with Ctrl+R, applied at the start of the next frame; a file that cannot be used keeps the theme on screen |
+| Step 3f-5b | The theme author's development option, `-PthemeWatch` for now: saving the theme file applies it, through a small watcher of the editor's own |
 
 ### The plan ahead
 
@@ -147,8 +148,8 @@ installation are made by the shell's designer. This step builds the machinery an
 guide that lets the designer work without reading the code; the files that test the loader
 are test files, and do not ship.
 
-Five parts, in order, with `layout.json` brought forward from Phase 4 — **we stopped after
-part 4**:
+Five parts, in order, with `layout.json` brought forward from Phase 4 — **all five are
+done**:
 
 | # | Part | What it delivers | Visible check |
 |---|---|---|---|
@@ -156,7 +157,7 @@ part 4**:
 | 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
 | 3 ✅ | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
 | 4 ✅ | Layout | `layout.json` read by screens; panels and their widgets registered by name in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
-| 5 (5a ✅) | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
+| 5 ✅ | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
 Then **a round of tests against the factory interface** — test themes and layouts that are
 missing, partial, broken, contradictory or out of date — to find the gaps before anyone else
@@ -270,8 +271,13 @@ theme. The editor asks for a reload with **Ctrl+R**, a development key until the
 exists, and runs it at the start of the next frame, so no frame is solved or drawn with half
 of each theme. Applying a theme again needs nothing else invalidated today: each widget's
 style is resolved anew and each widget refitted, keeping sizes code or a layout set (4d); the
-text cache depends on the font, which no theme sets yet. **5b** — the development option's
-watcher: saving a theme file reloads it.
+text cache depends on the font, which no theme sets yet. **5b** ✅ — the development option:
+`ThemeWatcher`, in `:editor` and never `AssetWatcher`, watches the user's and the
+installation's `themes/` directories for the theme in use, waits until a save has been quiet
+for 200 ms — an editor saving through a temporary file raises several events — and only raises
+a flag, which the editor takes at the start of a frame and reloads there, as Ctrl+R does. Off
+unless `-PthemeWatch` turns it on, until the settings page carries the option; one save gives
+one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list. Planned, not started; each keyboard-operable like the rest.
@@ -1273,7 +1279,8 @@ nothing on this path — what the user sees only ever changes because they chose
 at once, so designing is a feedback loop rather than a build-and-restart cycle. This is a
 **development option**, off by default, in the same settings page, shown with a note that it
 is recommended for theme development only. An end user never has their interface change
-under them because a file was touched.
+under them because a file was touched. Until the settings page exists (Phase 4), a
+development run turns it on with `-PthemeWatch`.
 
 Both paths end in the same reload, and the reload is the hard part: switching a theme must
 invalidate everything resolved from the old one — the baked style table, cached text

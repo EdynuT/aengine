@@ -51,6 +51,11 @@ tasks.named('run') {
     if (project.hasProperty('themeFile')) {
         systemProperty 'aengine.theme', project.property('themeFile')
     }
+    // ./gradlew :editor:run -PthemeWatch turns on the theme author's development option:
+    // saving the theme file in use applies it to the running editor. Off otherwise.
+    if (project.hasProperty('themeWatch')) {
+        systemProperty 'aengine.themeWatch', 'true'
+    }
     // ./gradlew :editor:run -PlayoutFile=<name> reads layouts/<name>.json instead of
     // layouts/default.json — with -PtestShell, one of the test layouts, e.g. -PlayoutFile=moved.
     // Not -Playout: every Gradle project already has a "layout" property of its own, which

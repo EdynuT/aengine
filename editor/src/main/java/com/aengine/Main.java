@@ -80,6 +80,10 @@ public class Main extends Engine {
     private String  themeName;
     private boolean themeReloadAsked;
 
+    // Step 3f-5b: the theme author's development option — saving the theme file applies it.
+    // Null unless -PthemeWatch turned it on.
+    private com.aengine.editor.ThemeWatcher themeWatcher;
+
     // Colours as one named value each, rather than four floats spelled out at the call site.
     // A grouped colour is what the theme file will replace; a loose quartet is what has to be
     // hunted down first. New scaffolding colours go here from now on.
@@ -260,6 +264,13 @@ public class Main extends Engine {
         themeName = System.getProperty("aengine.theme", "dark");
         theme     = com.aengine.editor.ShellFiles.loadTheme(themeName);
         aegis.widgets().applyTheme(theme, layoutFrame);
+
+        // Step 3f-5b: with -PthemeWatch, saving the theme file applies it at once. Off by
+        // default: an end user's interface never changes because a file was touched. The
+        // watcher only raises a flag; the reload runs at the start of a frame, as Ctrl+R's does.
+        if (Boolean.getBoolean("aengine.themeWatch")) {
+            themeWatcher = com.aengine.editor.ThemeWatcher.start(themeName);
+        }
 
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
         
@@ -453,6 +464,7 @@ public class Main extends Engine {
         Renderer2D.cleanup();
         AudioDevice.cleanup();
 
+        if (themeWatcher != null) themeWatcher.close();
         if (aegis != null) aegis.cleanup();
     }
 
@@ -468,7 +480,10 @@ public class Main extends Engine {
         // so nothing this frame is solved or drawn with half of the old theme and half of the
         // new. reloadTheme() hands back the theme on screen itself when the file cannot be used
         // — a typo being fixed — and then there is nothing to apply.
-        if (themeReloadAsked) {
+        // The watcher's flag is taken every frame, even when Ctrl+R already asked, so one save
+        // never gives two reloads.
+        boolean themeSaved = themeWatcher != null && themeWatcher.takeChange();
+        if (themeReloadAsked || themeSaved) {
             themeReloadAsked = false;
             com.aengine.aegis.AegisTheme reloaded = com.aengine.editor.ShellFiles.reloadTheme(themeName, theme);
             if (reloaded != theme) {
