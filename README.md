@@ -196,7 +196,7 @@ Confirm with `glxinfo -B`: the renderer must read `llvmpipe` and the core profil
 1. Download the latest `mesa3d-<version>-release-msvc.7z` from the [mesa-dist-win releases](https://github.com/pal1000/mesa-dist-win/releases) and extract it (Windows 10/11 `tar -xf file.7z` works, or use 7-Zip).
 2. From the extracted **`x64`** folder take `opengl32.dll` and `libgallium_wgl.dll`.
 3. Put them next to `java.exe` of the JDK that runs the engine. Pick one:
-   * **With administrator rights:** copy both files into `C:\Program Files\Java\jdk-25\bin`. To undo, delete them.
+   * **With administrator rights:** copy both files into the `bin` folder of your JDK 25 (for example `C:\Program Files\Java\jdk-25\bin`). To undo, delete them.
    * **Without administrator rights:** copy the whole JDK folder to a user folder (for example `%USERPROFILE%\jdk25-mesa`), then copy the two DLLs into its `bin` folder. Create `%USERPROFILE%\mesa-run.init.gradle` containing:
      ```groovy
      allprojects { tasks.withType(JavaExec).configureEach { executable = 'C:/Users/<you>/jdk25-mesa/bin/java.exe' } }
@@ -213,4 +213,4 @@ Confirm with `glxinfo -B`: the renderer must read `llvmpipe` and the core profil
 
 The line `MESA: error: ZINK: vkCreateInstance failed (VK_ERROR_INCOMPATIBLE_DRIVER)` is harmless: Mesa tried Vulkan first and fell back to llvmpipe.
 
-`gradlew.bat` selects the JDK from a fixed path; if your JDK 25 is installed elsewhere, adjust the `JAVA_HOME` line in it or the paths above accordingly.
+`gradlew.bat` uses the JDK from the `JAVA_HOME` environment variable (or `java` on the `PATH` when it is unset), so it must point to a JDK 25 installation. The init script above only changes which `java.exe` runs the engine; Gradle itself still starts from `JAVA_HOME`.
