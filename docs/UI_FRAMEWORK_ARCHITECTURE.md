@@ -47,6 +47,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-4b | `layout.json` read and checked into a description per screen — five node types, strict types, a screen that cannot form a tree set aside alone — reported like a theme; nothing built from it yet |
 | Step 3f-4c | Screens built from layouts: widgets named as they are made, panels registered by code (`aegis.screens()`), the chain user → installation → factory per screen in `ShellFiles`, layouts in `layouts/`; a widget can be moved to any panel; stricter than a theme — an error sets the screen aside, only what is declared and never used is a warning; rows and columns with no size take their content's |
 | Step 3f-4d | A size code or a layout file sets on a widget is kept when a theme is applied |
+| Step 3f-5a | The theme read again in a running editor with Ctrl+R, applied at the start of the next frame; a file that cannot be used keeps the theme on screen |
 
 ### The plan ahead
 
@@ -155,7 +156,7 @@ part 4**:
 | 2 ✅ | Load and resolve | `theme.json` parsed; `global`, local variables and scoped rules (one widget, panel and kind) resolved once into a style per node — nodes without a rule of their own share the global one; no file found, the factory theme | A test theme changes the widgets' colours; a scoped rule turns the Stop button red and leaves Play and Pause alone |
 | 3 ✅ | Validation | A file with three mistakes reports all three, naming file, line and what was expected; value errors fall back, structural errors set the file aside for the next in line | A deliberately broken file produces three precise warnings and the editor still opens |
 | 4 ✅ | Layout | `layout.json` read by screens; panels and their widgets registered by name in code and placed by the file — panels in the screen, widgets inside their panel; the chain user → installation → factory per screen; the factory layout in code | The scaffolding's frame built from a layout file; changing a width in it moves a pane, and reordering a panel's widgets moves them |
-| 5 | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
+| 5 (5a ✅) | Reload | One in-place reload that invalidates everything resolved from the old theme; the development option's watcher drives it on save; a structural error keeps the last valid theme | With the option on, saving a colour changes the running editor; saving a broken file keeps the old theme and reports why |
 
 Then **a round of tests against the factory interface** — test themes and layouts that are
 missing, partial, broken, contradictory or out of date — to find the gaps before anyone else
@@ -258,8 +259,19 @@ growing or stretching parent may still make it larger.
 A panel's widgets, for the layout, are its direct children as code made them. Code sets a
 panel's inside — padding, the gap between its widgets, their alignment — and the layout its
 size and place; what the layout also writes on a panel replaces code's value. Building twice
-would leave the first build's rows and columns behind, since the layout frees no nodes: the
-reload step (3f-5) has to settle that.
+would leave the first build's rows and columns behind, since the layout frees no nodes. Part 5
+does not meet it, since a layout is not reloaded while running (*Changing the theme*, §7);
+Phase 4 does, with *Restore default layout*, and settles it there.
+
+**Part 5, in two steps** — **5a** ✅ — `ShellFiles.reloadTheme(name, current)` reads the theme
+again, found as at startup; a file that cannot be used keeps the theme on screen, with a
+warning, where startup would take the next in line, and a file gone falls to the factory
+theme. The editor asks for a reload with **Ctrl+R**, a development key until the settings page
+exists, and runs it at the start of the next frame, so no frame is solved or drawn with half
+of each theme. Applying a theme again needs nothing else invalidated today: each widget's
+style is resolved anew and each widget refitted, keeping sizes code or a layout set (4d); the
+text cache depends on the font, which no theme sets yet. **5b** — the development option's
+watcher: saving a theme file reloads it.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list. Planned, not started; each keyboard-operable like the rest.

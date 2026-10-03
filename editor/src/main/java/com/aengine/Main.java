@@ -73,6 +73,13 @@ public class Main extends Engine {
     // -------------------------------------------------------------------------------------
     private com.aengine.aegis.Aegis aegis;
 
+    // Step 3f-5: the theme on screen, the name it was asked for by, and whether a reload has
+    // been asked for. The reload itself runs at the start of the next frame, before anything is
+    // solved or drawn — see drawUiFirstLight().
+    private com.aengine.aegis.AegisTheme theme;
+    private String  themeName;
+    private boolean themeReloadAsked;
+
     // Colours as one named value each, rather than four floats spelled out at the call site.
     // A grouped colour is what the theme file will replace; a loose quartet is what has to be
     // hunted down first. New scaffolding colours go here from now on.
@@ -249,8 +256,9 @@ public class Main extends Engine {
         // the catalogue's defaults, compiled in — so there is always one. Applied after the
         // tree is built and its nodes are named, because a theme finds widgets by their paths.
         // "dark" unless -PthemeFile=<name> says otherwise; -PtestShell uses the test themes.
-        com.aengine.aegis.AegisTheme theme =
-            com.aengine.editor.ShellFiles.loadTheme(System.getProperty("aengine.theme", "dark"));
+        // Both are kept in fields, so the theme can be read again while running (3f-5).
+        themeName = System.getProperty("aengine.theme", "dark");
+        theme     = com.aengine.editor.ShellFiles.loadTheme(themeName);
         aegis.widgets().applyTheme(theme, layoutFrame);
 
         imguiLayer.setAfterImGui(this::drawUiFirstLight);
@@ -456,6 +464,19 @@ public class Main extends Engine {
      * dynamic mesh to shader to screen. Deleted once the framework draws real panels.</p>
      */
     private void drawUiFirstLight() {
+        // Step 3f-5: a theme reload asked for last frame happens here, at the start of a frame,
+        // so nothing this frame is solved or drawn with half of the old theme and half of the
+        // new. reloadTheme() hands back the theme on screen itself when the file cannot be used
+        // — a typo being fixed — and then there is nothing to apply.
+        if (themeReloadAsked) {
+            themeReloadAsked = false;
+            com.aengine.aegis.AegisTheme reloaded = com.aengine.editor.ShellFiles.reloadTheme(themeName, theme);
+            if (reloaded != theme) {
+                theme = reloaded;
+                aegis.widgets().applyTheme(theme, layoutFrame);
+            }
+        }
+
         int w = getWindow().getWidth();
         int h = getWindow().getHeight();
 
@@ -720,12 +741,19 @@ public class Main extends Engine {
                         TYPED.appendCodePoint(Input.eventCode(i));
                         if (TYPED.length() > TYPED_KEEP) TYPED.delete(0, TYPED.length() - TYPED_KEEP);
                     }
-                    case KEY_PRESS -> {
+                    case KEY_PRESS   -> {
                         keyPresses++;
+                        // Step 3f-5: Ctrl+R reads the theme again — a development key until the
+                        // settings page exists. It only asks; the reload runs at the start of
+                        // the next frame. Not handed to the widgets: it is the editor's.
+                        if (Input.eventCode(i) == Keys.R && (Input.eventMods(i) & Keys.MOD_CONTROL) != 0) {
+                            themeReloadAsked = true;
+                            continue;
+                        }
                         ae.key(Input.eventCode(i), Input.eventMods(i), false);
                         if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);
                     }
-                    case KEY_REPEAT -> {
+                    case KEY_REPEAT  -> {
                         keyRepeats++;
                         ae.key(Input.eventCode(i), Input.eventMods(i), true);
                         if (Input.eventCode(i) == Keys.BACKSPACE && TYPED.length() > 0) TYPED.setLength(TYPED.length() - 1);

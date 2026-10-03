@@ -92,6 +92,45 @@ public final class ShellFiles {
     }
 
     /**
+     * The theme called {@code name}, read again for a running editor — step 3f part 5.
+     *
+     * <p>The file is found as {@link #loadTheme} finds it: the user's, else the installation's.
+     * What differs is a file that cannot be used — not JSON, not an object: at startup the next
+     * in line is taken, but here <b>the theme already on screen is kept</b>, and the log says
+     * why. Falling to another theme would repaint the editor under the hands of whoever is
+     * editing the file, because of a typo they are about to fix. A file that can be used but
+     * has wrong values is used, each wrong value at its default, exactly as at startup.</p>
+     *
+     * <p>When neither directory has the file any more, the factory theme is used, as at
+     * startup.</p>
+     *
+     * @param name    the theme's file name without {@code .json}, e.g. {@code "dark"}
+     * @param current the theme on screen now, kept if the file cannot be used
+     * @return the theme read again; {@code current} itself when the file cannot be used
+     */
+    public static AegisTheme reloadTheme(String name, AegisTheme current) {
+        String file = name + ".json";
+        for (Path candidate : new Path[] {
+                userDir().resolve("themes").resolve(file),
+                installDir().resolve("themes").resolve(file) }) {
+            if (!Files.exists(candidate)) continue;
+            try {
+                AegisTheme theme = AegisTheme.read(candidate);
+                Logger.info(Logger.System.UI, "Theme \"%s\" reloaded from %s.", theme.name(), candidate);
+                return theme;
+            } catch (IOException e) {
+                Logger.warn(Logger.System.UI, "%s cannot be read (%s); keeping the theme on screen, \"%s\".",
+                    candidate, e.getMessage(), current.name());
+            } catch (AegisTheme.Unusable e) {
+                Logger.warn(Logger.System.UI, "%s; keeping the theme on screen, \"%s\".", e.getMessage(), current.name());
+            }
+            return current;
+        }
+        Logger.info(Logger.System.UI, "No theme \"%s\" found any more; using the factory theme.", name);
+        return AegisTheme.factory();
+    }
+
+    /**
      * The layouts to build screens from, in the order they are tried: the user's
      * {@code layouts/<name>.json}, the installation's, and the factory layout, which is always last
      * and always there. A screen is taken from the first of them that describes it usably
