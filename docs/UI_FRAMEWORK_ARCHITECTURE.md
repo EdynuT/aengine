@@ -50,6 +50,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-5a | The theme read again in a running editor with Ctrl+R, applied at the start of the next frame; a file that cannot be used keeps the theme on screen |
 | Step 3f-5b | The theme author's development option, `-PthemeWatch` for now: saving the theme file applies it, through a small watcher of the editor's own |
 | Step 3g-1 | Label and separator; the format stays 1 until release |
+| Step 3f-4e | `"hidden": true` on any layout node: checked, but kept out of the tree — not drawn, no room, no focus |
 
 ### The plan ahead
 
@@ -1201,6 +1202,16 @@ Sizes and spacing are the layout's own: `width`, `height`, `grow`, and on rows a
 `gap`, `padding`, `alignX`, `alignY` (`start`, `center`, `end`, `stretch`). The `"type"` is
 always written, so the four kinds read plainly.
 
+**Any node can be hidden** with `"hidden": true` — `false`, the default, may be written or not.
+A hidden node is checked like any other — its name must exist and be placed once, its values
+must be right — but nothing of it is built: it is not drawn, takes no room, and neither the
+pointer nor Tab reaches it. Hiding a row or a panel hides everything in it. A hidden widget
+counts as placed, so it does not go back to the end of its panel; code holding its handle
+notices nothing, except that it is never activated. It belongs to the layout, not the theme:
+the theme says how something looks, the layout where and whether it appears. Hiding a panel
+shows the same as not placing it, but keeps its arrangement written, ready to come back by
+turning `true` to `false`. The root of a screen cannot be hidden.
+
 **Panel names are unique across the whole engine**, not per screen, so a theme path stays
 `panel.widget` — `settingsGeneral.fontSize.border` — with no screen in it; a panel belongs to
 one screen. **Widget names are unique across the engine too**, since a layout names a widget
@@ -1234,7 +1245,7 @@ settings that could fix the problem.
 |---|---|---|
 | File missing | — | The next in line — installation, then factory — with no warning for the user's, which is normally absent |
 | JSON does not parse | structure | The next in line, with a warning |
-| A layout screen with an **error** — anything wrong with the tree (`"type": "diagonal"`, `children` not a list, a panel inside a panel, a widget outside one, a panel or widget placed twice, a `panel` name code does not register) or a wrong value (`"width": -40`, `"width": "240"`, `"alignY": "middle"`) | structure | That screen from the next in line, with an **error** listing every one found; the file's other screens still apply |
+| A layout screen with an **error** — anything wrong with the tree (`"type": "diagonal"`, `children` not a list, a panel inside a panel, a widget outside one, a panel or widget placed twice, a `panel` name code does not register) or a wrong value (`"width": -40`, `"width": "240"`, `"alignY": "middle"`, `"hidden": "yes"`), or a hidden root | structure | That screen from the next in line, with an **error** listing every one found; the file's other screens still apply |
 | Invalid value — `"bleu"` for a colour | value | Default, with a warning |
 | Unknown property name — `button.fil` | value | Ignored, with a warning; the intended property falls to its default |
 | A path that matches no widget — a name changed in code | value | Ignored, with a warning |

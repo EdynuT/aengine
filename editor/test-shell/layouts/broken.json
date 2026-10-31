@@ -1,6 +1,6 @@
 {
   "name":        "Test - broken on purpose",
-  "description": "Test layout, does not ship: one of each mistake a layout can hold. The editor screen still builds from it; the settings screen is set aside.",
+  "description": "Test layout, does not ship: one of each mistake a layout can hold. Both screens have errors and are set aside; the editor screen comes from the factory layout.",
   "format":      1,
 
   "screens": {
@@ -14,7 +14,7 @@
           { "type": "panel", "panel": "inspector", "width": -300, "children": [
             { "type": "widget", "widget": "nameField" },
             { "type": "widget", "widget": "nameField" },
-            { "type": "widget", "widget": "stopButton" }
+            { "type": "widget", "widget": "stopButton", "hidden": "yes" }
           ]},
           { "type": "panel", "panel": "hierarchy", "width": 100 }
         ]}

@@ -44,7 +44,8 @@ import java.util.Set;
  *       wrong with the tree — a node that is not an object, an unknown {@code "type"},
  *       {@code "children"} that is not a list, a panel inside a panel, a widget outside one, a
  *       panel or a widget placed twice — and any wrong value — a size or a spacing that is not
- *       a number of 0 or more, an alignment that is not one of the four. Building adds one
+ *       a number of 0 or more, an alignment that is not one of the four, a {@code "hidden"} that is
+ *       not {@code true} or {@code false} — and a hidden root. Building adds one
  *       more: a panel code does not register. Every error of a screen is reported, not only
  *       the first.</li>
  *   <li><b>A warning drops what is declared and never used</b>, and the screen is still used: a
@@ -94,6 +95,7 @@ public final class AegisLayoutFile {
         private final List<Node>   children = new ArrayList<>();
         private final List<String> tabs     = new ArrayList<>();
         private boolean hasChildren;      // a panel with "children" rearranges its widgets
+        private boolean hidden;           // "hidden": true — checked, but kept out of the tree
 
         float width = Float.NaN, height = Float.NaN, grow = Float.NaN, gap = Float.NaN, padding = Float.NaN;
         AegisLayout.Align alignX, alignY;
@@ -118,6 +120,9 @@ public final class AegisLayoutFile {
 
         /** @return whether a panel's {@code "children"} rearranges its widgets; false keeps code's order */
         public boolean hasChildren() { return hasChildren; }
+
+        /** @return whether the file hides it: checked like any node, but not built into the screen */
+        public boolean hidden() { return hidden; }
 
         /** @return a tabs node's panels, in tab order; empty for the others */
         public List<String> tabs() { return Collections.unmodifiableList(tabs); }
@@ -326,6 +331,9 @@ public final class AegisLayoutFile {
             } else {
                 path.add("root");
                 root = readNode(rootElement, path, null);
+                if (root != null && root.hidden) {
+                    error(root.line, "the root of screen \"" + screen + "\" is hidden; the screen would be empty");
+                }
                 if (root != null && root.type == Type.WIDGET) {
                     error(root.line, "the root of screen \"" + screen + "\" is a widget; a widget belongs inside a panel");
                 }
@@ -428,6 +436,13 @@ public final class AegisLayoutFile {
                 } else {
                     if (type == Type.PANEL) node.hasChildren = true;
                     readChildren(node, value.getAsJsonArray(), path, type == Type.PANEL ? node : panel);
+                }
+            } else if (key.equals("hidden")) {
+                // Any node may be hidden; strictly a JSON boolean, as every value is typed.
+                if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()) {
+                    node.hidden = value.getAsBoolean();
+                } else {
+                    error(keyLine, node.label() + ": hidden is true or false, written without quotes; got " + value);
                 }
             } else if (key.equals("panels") && type == Type.TABS) {
                 readTabs(node, value, path, keyLine);

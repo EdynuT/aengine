@@ -40,6 +40,10 @@ import java.util.Set;
  * widgets are its direct children as code made them, and their names are unique across every
  * panel, since the file names a widget without its panel.</p>
  *
+ * <p>A node the file marks {@code "hidden": true} is checked like any other but not built: it
+ * is not drawn, takes no room, and neither the pointer nor Tab reaches it. A widget hidden
+ * counts as placed, so it does not go back to the end of its panel.</p>
+ *
  * <p>Before anything is built, the screen is checked against what code registered: a panel
  * name no code registers is an error, and the screen is then built from the next file in line
  * instead, leaving nothing of the failed attempt behind. A widget name no panel has is a
@@ -268,6 +272,10 @@ public final class AegisScreens {
         }
 
         private int place(AegisLayoutFile.Node node, int parent) {
+            if (node.hidden()) {
+                hide(node);
+                return AegisLayout.NONE;
+            }
             return switch (node.type()) {
                 case ROW, COLUMN -> {
                     int made = node.type() == AegisLayoutFile.Type.ROW ? layout.row(parent) : layout.column(parent);
@@ -293,6 +301,24 @@ public final class AegisScreens {
                     yield widget;
                 }
             };
+        }
+
+        /**
+         * A node the file hides: nothing of it is built. A hidden panel stays where code made
+         * it, hanging nowhere; every widget named under a hidden node comes out of the tree
+         * and counts as placed, so it does not go back to the end of its panel. Out of the
+         * tree, it is not drawn, takes no room, and neither the pointer nor Tab reaches it;
+         * code holding its handle notices nothing, except that it is never activated.
+         */
+        private void hide(AegisLayoutFile.Node node) {
+            if (node.type() == AegisLayoutFile.Type.WIDGET) {
+                Integer widget = widgets.get(node.name());
+                if (widget == null) return;   // warned about in check()
+                layout.detach(widget);
+                placed.add(widget);
+                return;
+            }
+            for (AegisLayoutFile.Node child : node.children()) hide(child);
         }
 
         /**

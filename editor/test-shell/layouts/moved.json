@@ -1,6 +1,6 @@
 {
   "name":        "Test - moved",
-  "description": "Test layout, does not ship: toolbar taller with the Stop button moved into it and made 140 wide, a size the theme must keep, inspector on the left and wider with its checkboxes side by side on top, hierarchy on the right. notesField and fieldA are left out on purpose, to go to the end of the inspector with a warning.",
+  "description": "Test layout, does not ship: toolbar taller with the Stop button moved into it and made 140 wide, a size the theme must keep, inspector on the left and wider with its checkboxes side by side on top, hierarchy on the right, the Pause button hidden. notesField and fieldA are left out on purpose, to go to the end of the inspector with a warning.",
   "format":      1,
 
   "screens": {
@@ -25,7 +25,7 @@
             { "type": "widget", "widget": "nameField" }
           ]},
           { "type": "panel", "panel": "viewport", "grow": 1, "children": [
-            { "type": "widget", "widget": "pauseButton" },
+            { "type": "widget", "widget": "pauseButton", "hidden": true },
             { "type": "widget", "widget": "playButton" },
             { "type": "widget", "widget": "descriptionBox" }
           ]},
