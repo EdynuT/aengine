@@ -29,12 +29,13 @@ public final class FactoryLayout {
     private static final String TEXT = """
         {
           "name":        "Factory",
-          "description": "Toolbar on top; hierarchy, viewport and inspector below.",
+          "description": "Menu bar and toolbar on top; hierarchy, viewport and inspector below.",
           "format":      1,
 
           "screens": {
             "editor": {
               "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
+                { "type": "panel", "panel": "menu",    "height": 30 },
                 { "type": "panel", "panel": "toolbar", "height": 84 },
                 { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
                   { "type": "panel", "panel": "hierarchy", "width": 240 },

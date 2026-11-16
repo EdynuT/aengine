@@ -106,6 +106,7 @@ public class Main extends Engine {
     // from the layout. Handles into aegis.layout(), built once in buildLayoutScaffolding() and
     // solved every frame in drawUiFirstLight().
     private int layoutFrame;        // the screen's root, from the layout
+    private int layoutMenu;         // the menu panel, holding the menu bar (step 3g-10)
     private int layoutRow;          // the toolbar panel
     private int layoutBoxA;
     private int layoutBoxB;
@@ -129,6 +130,12 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int fileMenu;           // step 3g-10: a menu bar and its menus, from ae.menuBar(), ae.menu(), ae.menuItem()
+    private int saveItem;
+    private int quitItem;
+    private int aboutItem;
+    private int gridMenuItem;
+    private String lastMenuChoice = "-";
     private int shadingCombo;       // step 3g-9: a combo box, from ae.comboBox()
     private int showPopupButton;    // step 3g-7: a popup on the overlay layer, from ae.showPopup()
     private int examplePopup;
@@ -716,7 +723,7 @@ public class Main extends Engine {
         // and the toolbar's B and C, the viewport pane and the inspector's fields all follow.
         com.aengine.aegis.AegisLayout layout = aegis.layout();
 
-        final float frameHeight = 300.0f;
+        final float frameHeight = 340.0f;   // 3g-10: room for the menu bar
         final float frameWidth  = w - 80.0f;   // the window's width, less 40 each side
         final float frameTop    = h - frameHeight - 24.0f;
 
@@ -821,6 +828,13 @@ public class Main extends Engine {
             nameConfirmed.setLength(0);
             nameConfirmed.append(ae.text(nameField));
         }
+
+        // Step 3g-10: what the menus chose. Quit only says so here: the scaffolding is not the
+        // place to close the editor.
+        if (ae.wasActivated(saveItem))     lastMenuChoice = "Save";
+        if (ae.wasActivated(quitItem))     lastMenuChoice = "Quit";
+        if (ae.wasActivated(aboutItem))    lastMenuChoice = "About";
+        if (ae.wasActivated(gridMenuItem)) lastMenuChoice = ae.isChecked(gridMenuItem) ? "Show grid on" : "Show grid off";
 
         // Step 3g-7: the popup opens just below the button that asks for it.
         if (ae.wasActivated(showPopupButton)) {
@@ -1057,6 +1071,16 @@ public class Main extends Engine {
                .append("   confirmed ").append(descriptionConfirms);
         aegis.addTextTop(textX, textY + line * 12, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
+        // Step 3g, the visible check: what each new widget reports.
+        UI_TEXT.setLength(0);
+        UI_TEXT.append("3g - spinner ").append(ae.spinnerValue(gridSizeSpinner))
+               .append("   tab ").append(ae.selectedTab(sceneTabs))
+               .append("   divider ").append(Math.round(ae.dividerLocation(viewSplit)))
+               .append("   tree item ").append(ae.selectedTreeItem(sceneTree))
+               .append("   combo ").append(ae.comboItem(shadingCombo, ae.comboChosen(shadingCombo)))
+               .append("   menu ").append(lastMenuChoice);
+        aegis.addTextTop(textX, textY + line * 13, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
+
         aegis.end();   // closes the draw list and presents it
     }
 
@@ -1104,6 +1128,32 @@ public class Main extends Engine {
         // panel is, and where, is the layout's: none of them is given a size here.
 
         // The toolbar: the 3c-2 row, now a panel. Its height comes from the layout.
+        // Step 3g-10: a menu bar, in a panel of its own above the toolbar. ae.menu() puts a
+        // title on the bar and returns its menu, to which items are added; ae.subMenu() is an
+        // item opening a menu of its own; ae.separator() works in a menu as in any column. A
+        // press on a title opens its menu; F10 opens the first from the keyboard, then the
+        // arrows, Enter and Esc. The shortcut text is only shown — Ctrl+S is not bound here.
+        // ae.wasActivated(item) reports the choice; a check item also flips isChecked().
+        layoutMenu = screens.rowPanel("menu");
+        layout.setPadding(layoutMenu, 2.0f);
+        layout.setAlignY(layoutMenu, com.aengine.aegis.AegisLayout.Align.STRETCH);
+        int mainMenu = ae.menuBar(layoutMenu, "mainMenu");
+        fileMenu = ae.menu(mainMenu, "fileMenu", "File");
+        ae.menuItem(fileMenu, "newSceneItem", "New scene", "Ctrl+N");
+        ae.menuItem(fileMenu, "openSceneItem", "Open scene...", "Ctrl+O");
+        saveItem = ae.menuItem(fileMenu, "saveItem", "Save", "Ctrl+S");
+        ae.separator(fileMenu, "fileSeparator1");
+        int recentMenu = ae.subMenu(fileMenu, "recentItem", "Recent scenes");
+        ae.menuItem(recentMenu, "recentSandbox", "Sandbox");
+        ae.menuItem(recentMenu, "recentArena", "Test arena");
+        ae.separator(fileMenu, "fileSeparator2");
+        quitItem = ae.menuItem(fileMenu, "quitItem", "Quit");
+        int viewMenu = ae.menu(mainMenu, "viewMenu", "View");
+        gridMenuItem = ae.menuCheckItem(viewMenu, "showGridItem", "Show grid");
+        ae.menuCheckItem(viewMenu, "showStatsItem", "Show stats");
+        int helpMenu = ae.menu(mainMenu, "helpMenu", "Help");
+        aboutItem = ae.menuItem(helpMenu, "aboutItem", "About Aegis...");
+
         layoutRow = screens.rowPanel("toolbar");
         layout.setPadding(layoutRow, 12.0f);   // clear space inside the row's edges
         layout.setGap(layoutRow, 8.0f);        // space between one box and the next

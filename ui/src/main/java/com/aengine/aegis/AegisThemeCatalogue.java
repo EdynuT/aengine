@@ -260,6 +260,17 @@ public final class AegisThemeCatalogue {
         size  ("combo.radius",         "4",  (s, v) -> s.comboRadius = v);
         size  ("combo.arrow.width",    "20", (s, v) -> s.comboArrowWidth = v);
 
+        // ── Menus: a bar's titles, and the items of its menus ─────────────────────────
+        colour("menu.text",           "@global.text",          s -> s.menuText);
+        colour("menu.text.dim",       "@global.text.dim",      s -> s.menuTextDim);         // shortcuts, submenu arrows
+        colour("menu.highlight",      "@global.accent",        s -> s.menuHighlight);       // the item pointed at, the open title
+        colour("menu.highlight.text", "#FFFFFF",               s -> s.menuHighlightText);
+        colour("menu.title.hover",    "@global.surface.hover", s -> s.menuTitleHover);
+        size  ("menu.padding.x",      "10", (s, v) -> s.menuPaddingX = v);
+        size  ("menu.padding.y",      "4",  (s, v) -> s.menuPaddingY = v);
+        size  ("menu.gap",            "28", (s, v) -> s.menuGap = v);                       // text to shortcut
+        size  ("menu.check.width",    "18", (s, v) -> s.menuCheckWidth = v);
+
         // ── Tooltip. Global values only: it belongs to no panel. ─────────────────────────
         colour("tooltip.fill",    "#1A1C26",        s -> s.tooltipFill);
         colour("tooltip.border",  "@global.border", s -> s.tooltipBorder);

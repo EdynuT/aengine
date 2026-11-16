@@ -266,6 +266,27 @@ public final class AegisStyle {
     /** The room the arrow takes. */
     public float         comboArrowWidth    = 20.0f;
 
+    // ── Menus: the bar's titles and the menus' items ───────────────────────
+
+    /** An item's or a title's text. */
+    public final float[] menuText          = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** A shortcut written at an item's right, and a submenu's arrow. */
+    public final float[] menuTextDim       = { 0.50f, 0.54f, 0.62f, 1.0f };
+    /** Behind the item pointed at, and the title whose menu is open. */
+    public final float[] menuHighlight     = { 0.36f, 0.62f, 0.94f, 1.0f };
+    /** The text on it. */
+    public final float[] menuHighlightText = { 1.00f, 1.00f, 1.00f, 1.0f };
+    /** Behind a title under the pointer, no menu being open. */
+    public final float[] menuTitleHover    = { 0.27f, 0.31f, 0.39f, 1.0f };
+    /** Space left and right of a title's or an item's text. */
+    public float         menuPaddingX      = 10.0f;
+    /** Space above and below it. */
+    public float         menuPaddingY      = 4.0f;
+    /** Space between an item's text and its shortcut. */
+    public float         menuGap           = 28.0f;
+    /** The room at an item's left where a tick shows. */
+    public float         menuCheckWidth    = 18.0f;
+
     // ── Tooltip ─────────────────────────────────────────────────────────────
 
     /** Its background. */

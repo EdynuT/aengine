@@ -6,6 +6,7 @@
   "screens": {
     "editor": {
       "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "menu", "height": 30 },
         { "type": "panel", "panel": "toolbar", "height": 100, "children": [
           { "type": "widget", "widget": "boxA" },
           { "type": "widget", "widget": "toolbarSeparator" },

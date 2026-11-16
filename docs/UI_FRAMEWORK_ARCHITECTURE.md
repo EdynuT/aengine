@@ -60,6 +60,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-7 | The overlay layer: roots drawn above everything and given the pointer first; `ae.showPopup`, closed by a press outside or Esc; modal ones for dialogs |
 | Step 3g-8 | Tooltips: `ae.setTooltip` on any node; after the pointer rests, at once moving on from one, Ctrl+F1 from the keyboard |
 | Step 3g-9 | Combo box: `ae.comboBox`, its list dropped down on the overlay layer; chosen by pointer, press-and-release, the arrows, letters |
+| Step 3g-10 | Menu bar and menus: `ae.menuBar`, `menu`, `menuItem`, `menuCheckItem`, `subMenu`; by pointer, press-and-release, and F10 with the arrows |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -293,7 +294,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-9.**
+3g-10.**
 
 | Group | Widgets |
 |---|---|
@@ -308,7 +309,7 @@ separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by whe
 **3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** ✅ split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** ✅ tree; **3g-7** ✅ the overlay layer; **3g-8** ✅
-tooltip; **3g-9** ✅ combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
+tooltip; **3g-9** ✅ combo box; **3g-10** ✅ menu bar and menus; **3g-11** dialog. The third group
 waits for the panels that ask for it, in Phase 4.
 
 **The format stays 1 until release.** Theme and layout files keep `"format": 1` while the
@@ -451,6 +452,27 @@ unchanged. Pressing the list leaves focus on the box. `comboChosen`, `setComboCh
 `combo.fill`, `.fill.hover`, `.border`, `.text`, `.arrow`, `.highlight`, `.highlight.text`,
 `.padding.x`, `.padding.y`, `.radius`, `.arrow.width`. An editable combo — a text field with a
 list — waits for a panel that asks for one.
+
+**3g-10, menu bar and menus.** `ae.menuBar(parent, name)`; `ae.menu(bar, name, title)` puts a
+title on it and returns its menu — a column hanging nowhere, shown as a popup — to which
+`menuItem(menu, name, text[, shortcut])`, `menuCheckItem` (a `JCheckBoxMenuItem`: it ticks each
+time it is chosen, read with `isChecked`), `subMenu` (an item opening a menu beside it, to the
+left when there is no room on the right) and the ordinary `ae.separator` add. As `JMenuBar`: a
+press on a title opens its menu and another closes it; with one open, moving over another
+title opens that one; the pointer points at items, opening a submenu as it reaches one and
+closing a deeper one as it leaves; a click, or letting go over an item after pressing a title,
+activates it and closes the menus. From the keyboard **F10** opens the first bar's first menu —
+the titles are not stops of Tab, as in Swing — then Up and Down move through the items, passing
+separators and going around, Right opens a submenu or goes to the next menu, Left closes a
+submenu or goes to the menu before, Enter or Space activate, Esc closes one level, F10 closes
+all. While a menu is open the keys are the menus', whatever has focus, and focus is never
+moved: the text field being typed into is still focused when the menu closes. The shortcut is
+text only — binding it is the caller's, as with Swing's accelerator text. `wasActivated(item)`;
+`isMenuOpen`. Theme entries: `menu.text`, `.text.dim`, `.highlight`, `.highlight.text`,
+`.title.hover`, `.padding.x`, `.padding.y`, `.gap`, `.check.width`; a menu's items are reached
+by the title's name — `fileMenu.saveItem`. Mnemonics (Alt+F) wait for localisation, since the
+underlined letter depends on the language. The factory layout gains a `menu` panel above the
+toolbar, holding the scaffolding's bar.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

@@ -81,6 +81,11 @@ public final class AegisWidgets {
     private static final byte COMBO_BOX    = 14;  // step 3g-9: a choice of items, from a list that drops down
     private static final byte COMBO_LIST   = 15;  //            the list, a root shown as a popup
 
+    private static final byte MENU_BAR     = 16;  // step 3g-10: a row of titles
+    private static final byte MENU_TITLE   = 17;  //             a title on it, which opens its menu
+    private static final byte MENU         = 18;  //             a menu: a column shown as a popup
+    private static final byte MENU_ITEM    = 19;  //             an item in a menu
+
     /** "No item" — the parent of a tree's top level, and what is selected in a tree with none. */
     public static final int NO_ITEM = -1;
 
@@ -193,6 +198,27 @@ public final class AegisWidgets {
     private final int[]      comboList;
     private final int[]      listOwner;
     private final int[]      listHighlight;
+
+    // Menus: what a title opens, what opened a menu (a title, or an item for a submenu), the
+    // submenu an item opens, whether an item ticks, what it says at its right, and the item a
+    // menu points at.
+    private final int[]     titleMenu;
+    private final int[]     menuOwner;
+    private final int[]     itemSubMenu;
+    private final boolean[] itemChecks;
+    private final String[]  itemShortcut;
+    private final int[]     menuPointed;
+
+    /** The first menu bar made: the one F10 opens. */
+    private int firstMenuBar = AegisLayout.NONE;
+    /** The item or title the pointer was over at the last update, so hovering acts on a change only. */
+    private int lastMenuHover = AegisLayout.NONE;
+
+    // Keys taken while a menu is open: they belong to the menus, not to the focused widget.
+    private int     menuLines;      // Up, Down
+    private int     menuSteps;      // Left, Right
+    private boolean menuEnter;      // Enter, Space
+    private boolean pendingF10;
 
     /** Alt+Down or F4 this frame: open the focused combo box's list. */
     private boolean pendingOpenList;
@@ -395,6 +421,12 @@ public final class AegisWidgets {
         this.itemsOf         = new TreeItems[capacity];
         this.tooltip         = new String[capacity];
         this.comboItems      = new String[capacity][];
+        this.titleMenu       = new int[capacity];
+        this.menuOwner       = new int[capacity];
+        this.itemSubMenu     = new int[capacity];
+        this.itemChecks      = new boolean[capacity];
+        this.itemShortcut    = new String[capacity];
+        this.menuPointed     = new int[capacity];
         this.comboChosen     = new int[capacity];
         this.comboList       = new int[capacity];
         this.listOwner       = new int[capacity];
@@ -471,6 +503,9 @@ public final class AegisWidgets {
         }
         // A tabbed pane's panels that are not shown hang nowhere; they are dressed all the same,
         // so switching to one shows it in the theme.
+        // A bar's menus, and an item's submenu, hang nowhere until opened: dressed all the same.
+        if (kind[node] == MENU_TITLE) dressSubtree(theme, titleMenu[node]);
+        if (kind[node] == MENU_ITEM && itemSubMenu[node] != AegisLayout.NONE) dressSubtree(theme, itemSubMenu[node]);
         if (kind[node] == TABBED_PANE) {
             TabSet tabs = tabsOf[node];
             for (int i = 0; i < tabs.count; i++) {
@@ -497,6 +532,7 @@ public final class AegisWidgets {
             case DIVIDER              -> "split";
             case TREE_VIEW            -> "tree";
             case COMBO_BOX            -> "combo";
+            case MENU_TITLE, MENU_ITEM -> "menu";
             default                   -> "";
         };
     }
@@ -525,6 +561,14 @@ public final class AegisWidgets {
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
             case TREE_VIEW -> fitTree(node, style);
+            case MENU_TITLE -> fit(node, (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f,
+                line + style.menuPaddingY * 2.0f);
+            case MENU_ITEM -> {
+                float w = style.menuCheckWidth + (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f;
+                if (itemShortcut[node] != null) w += style.menuGap + (float) Math.ceil(aegis.measure(itemShortcut[node]));
+                if (itemSubMenu[node] != AegisLayout.NONE) w += style.menuGap;
+                fit(node, w, line + style.menuPaddingY * 2.0f);
+            }
             case COMBO_BOX -> {
                 float widest = 0.0f;
                 for (String item : comboItems[node]) widest = Math.max(widest, (float) Math.ceil(aegis.measure(item)));
@@ -1998,6 +2042,320 @@ public final class AegisWidgets {
     }
 
     // -----------------------------------------------------------------------------------
+    // Menus — step 3g-10
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A menu bar: a row of titles, each opening a menu below it — added to {@code parent}.
+     * Starts empty; see {@link #menu}.
+     *
+     * <p>It works as Swing's {@code JMenuBar} does. A press on a title opens its menu, and
+     * another press closes it; while one is open, moving the pointer over another title opens
+     * that one instead. In a menu, the pointer points at items, opening a submenu as it reaches
+     * one, and a click — or letting go over an item after pressing a title — activates it and
+     * closes the menus. From the keyboard, <strong>F10</strong> opens the first menu of the
+     * first bar made; then Up and Down move through the items, Right opens a submenu or goes to
+     * the next menu, Left closes a submenu or goes to the menu before, Enter or Space
+     * activates, Esc closes one level, F10 closes them all. The titles are not stops of Tab:
+     * the menus are reached by F10, as in Swing, and focus stays where it was.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "mainMenu"}
+     * @return its handle, a row
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int menuBar(int parent, String name) {
+        AegisLayout.checkNodeName(name);
+        int bar = layout.row(parent);
+        layout.setNodeName(bar, name);
+        layout.setAlignY(bar, AegisLayout.Align.STRETCH);
+        kind[bar] = MENU_BAR;
+        if (firstMenuBar == AegisLayout.NONE) firstMenuBar = bar;
+        return bar;
+    }
+
+    /**
+     * A menu: a title on a menu bar, and the menu it opens. Add items to the handle returned.
+     *
+     * @param bar   the menu bar
+     * @param name  the title's name, which a theme writes — {@code "fileMenu"}; the menu's items
+     *              are reached as {@code fileMenu.saveItem}
+     * @param title what the title says — {@code "File"}; kept
+     * @return the menu, a column hanging nowhere until it is opened: give it to
+     *         {@link #menuItem}, {@link #menuCheckItem}, {@link #subMenu} or {@link #separator}
+     */
+    public int menu(int bar, String name, String title) {
+        int node = namedBox(bar, name);
+        tree.setInteractive(node, true);
+        tree.setKeepsFocus(node, true);
+        kind[node]  = MENU_TITLE;
+        label[node] = title;
+        styleOf[node] = null;
+        fitToContent(node);
+
+        int menu = newMenu(name, node);
+        titleMenu[node] = menu;
+        return menu;
+    }
+
+    /** A menu's column, hanging nowhere: what a title or a submenu item opens. */
+    private int newMenu(String name, int owner) {
+        int menu = layout.column(AegisLayout.NONE);
+        layout.setNodeName(menu, name);
+        layout.setPadding(menu, 4.0f);
+        layout.setAlignX(menu, AegisLayout.Align.STRETCH);
+        kind[menu]        = MENU;
+        menuOwner[menu]   = owner;
+        menuPointed[menu] = AegisLayout.NONE;
+        return menu;
+    }
+
+    /**
+     * An item in a menu. {@link #wasActivated} reports it on the frame it is chosen.
+     *
+     * @param menu the menu
+     * @param name its name — {@code "saveItem"}
+     * @param text what it says — {@code "Save"}; kept
+     * @return its handle
+     */
+    public int menuItem(int menu, String name, String text) {
+        return menuItem(menu, name, text, null);
+    }
+
+    /**
+     * An item in a menu, with a shortcut written at its right — {@code "Ctrl+S"}. The text is
+     * only shown: the key itself is the caller's to handle, as with Swing's accelerator text.
+     *
+     * @param menu     the menu
+     * @param name     its name
+     * @param text     what it says; kept
+     * @param shortcut what it says at its right, or {@code null}; kept
+     * @return its handle
+     */
+    public int menuItem(int menu, String name, String text, String shortcut) {
+        int node = namedBox(menu, name);
+        tree.setInteractive(node, true);
+        tree.setKeepsFocus(node, true);
+        kind[node]         = MENU_ITEM;
+        label[node]        = text;
+        itemShortcut[node] = shortcut;
+        itemSubMenu[node]  = AegisLayout.NONE;
+        itemChecks[node]   = false;
+        styleOf[node] = null;
+        fitToContent(node);
+        return node;
+    }
+
+    /**
+     * An item that ticks and unticks each time it is chosen, as {@code JCheckBoxMenuItem}. Read
+     * and set it with {@link #isChecked} and {@link #setChecked}; it starts unticked.
+     *
+     * @param menu the menu
+     * @param name its name
+     * @param text what it says; kept
+     * @return its handle
+     */
+    public int menuCheckItem(int menu, String name, String text) {
+        int node = menuItem(menu, name, text, null);
+        itemChecks[node] = true;
+        checked[node]    = false;
+        return node;
+    }
+
+    /**
+     * An item that opens a menu of its own beside it.
+     *
+     * @param menu the menu
+     * @param name the item's name
+     * @param text what it says; kept
+     * @return the submenu, to add items to
+     */
+    public int subMenu(int menu, String name, String text) {
+        int item = menuItem(menu, name, text, null);
+        int sub = newMenu(name, item);
+        itemSubMenu[item] = sub;
+        fitToContent(item);
+        return sub;
+    }
+
+    /** The title a top-level menu hangs from, for tests. */
+    int menuTitle(int menu) { return menuOwner[menu]; }
+
+    /** Whether a menu is open. */
+    public boolean isMenuOpen(int menu) { return isOverlayOpen(menu); }
+
+    /** The item a menu points at, or NONE; for tests. */
+    int menuPointedAt(int menu) { return menuPointed[menu]; }
+
+    /** Whether any menu is open: the keys then belong to the menus. */
+    private boolean anyMenuOpen() {
+        for (int i = 0; i < overlayCount; i++) if (kind[overlayNode[i]] == MENU) return true;
+        return false;
+    }
+
+    private void closeAllMenus() {
+        for (int i = 0; i < overlayCount; i++) {
+            if (kind[overlayNode[i]] == MENU) {
+                closeOverlaysFrom(i);
+                return;
+            }
+        }
+    }
+
+    /** The topmost open menu, or NONE. */
+    private int topMenu() {
+        for (int i = overlayCount - 1; i >= 0; i--) if (kind[overlayNode[i]] == MENU) return overlayNode[i];
+        return AegisLayout.NONE;
+    }
+
+    /** The first item of a menu from {@code from} on, going {@code step} at a time and around; separators passed by. */
+    private int nextMenuItem(int menu, int from, int step) {
+        int count = 0;
+        for (int c = layout.firstChild(menu); c != AegisLayout.NONE; c = layout.nextSibling(c)) count++;
+        if (count == 0) return AegisLayout.NONE;
+        int index = -1;
+        int i = 0;
+        for (int c = layout.firstChild(menu); c != AegisLayout.NONE; c = layout.nextSibling(c), i++) if (c == from) index = i;
+        for (int k = 1; k <= count; k++) {
+            int at = from == AegisLayout.NONE ? (step > 0 ? k - 1 : count - k) : Math.floorMod(index + k * step, count);
+            int c = layout.firstChild(menu);
+            for (int j = 0; j < at; j++) c = layout.nextSibling(c);
+            if (kind[c] == MENU_ITEM) return c;
+        }
+        return AegisLayout.NONE;
+    }
+
+    /** Opens a bar's menu below its title, closing any other; pointing at its first item when the keyboard opened it. */
+    private void openTopMenu(int title, boolean byKeyboard) {
+        closeAllMenus();
+        int menu = titleMenu[title];
+        openOverlay(menu, layout.x(title), layout.y(title) + layout.height(title), false, title);
+        menuPointed[menu] = byKeyboard ? nextMenuItem(menu, AegisLayout.NONE, 1) : AegisLayout.NONE;
+    }
+
+    /** Opens an item's submenu beside it — to the right, or to the left with no room — closing deeper ones. */
+    private void openSubMenu(int item, boolean byKeyboard) {
+        int sub = itemSubMenu[item];
+        int menu = layout.parent(item);
+        int at = overlayIndex(menu);
+        if (at >= 0 && at + 1 < overlayCount && overlayNode[at + 1] != sub) closeOverlaysFrom(at + 1);
+        if (isOverlayOpen(sub)) return;
+        float w = layout.naturalWidth(sub);
+        float x = layout.x(menu) + layout.width(menu) - 2.0f;
+        if (boundsW() > 0.0f && x + w > boundsW()) x = layout.x(menu) - w + 2.0f;
+        openOverlay(sub, x, layout.y(item) - layout.padding(sub), false, item);
+        menuPointed[sub] = byKeyboard ? nextMenuItem(sub, AegisLayout.NONE, 1) : AegisLayout.NONE;
+    }
+
+    /** Chooses an item: a submenu opens; anything else is activated, ticked if it ticks, and the menus close. */
+    private void chooseMenuItem(int item, boolean byKeyboard) {
+        if (itemSubMenu[item] != AegisLayout.NONE) {
+            openSubMenu(item, byKeyboard);
+            return;
+        }
+        if (itemChecks[item]) checked[item] = !checked[item];
+        activated = item;
+        activatedByKeyboard = byKeyboard;
+        closeAllMenus();
+    }
+
+    /** The menu bar a menu belongs to, through the titles and items that opened it. */
+    private int barOf(int menu) {
+        int owner = menuOwner[menu];
+        return kind[owner] == MENU_TITLE ? layout.parent(owner) : barOf(layout.parent(owner));
+    }
+
+    /** The title next to this one on its bar, going around. */
+    private int titleBeside(int title, int step) {
+        int bar = layout.parent(title);
+        int count = 0, index = 0;
+        for (int c = layout.firstChild(bar); c != AegisLayout.NONE; c = layout.nextSibling(c)) {
+            if (c == title) index = count;
+            count++;
+        }
+        int at = Math.floorMod(index + step, count);
+        int c = layout.firstChild(bar);
+        for (int j = 0; j < at; j++) c = layout.nextSibling(c);
+        return c;
+    }
+
+    /** The menus' pointer and keys for this frame. */
+    private void updateMenus(int pressed) {
+        // F10 opens the first bar's first menu, or closes the menus.
+        if (pendingF10) {
+            if (anyMenuOpen()) closeAllMenus();
+            else if (firstMenuBar != AegisLayout.NONE && layout.firstChild(firstMenuBar) != AegisLayout.NONE) {
+                openTopMenu(layout.firstChild(firstMenuBar), true);
+            }
+        }
+
+        // A press on a title opens its menu, or closes it — unless that same press just closed it.
+        if (pressed != AegisLayout.NONE && kind[pressed] == MENU_TITLE && pressed != lastPressed) {
+            if (isOverlayOpen(titleMenu[pressed]))  closeAllMenus();
+            else if (dismissedOwner != pressed)     openTopMenu(pressed, false);
+        }
+
+        // Let go over an item — pressed on it, or on a title and dragged here — chooses it.
+        int hovered = tree.hovered();
+        if (lastPressed != AegisLayout.NONE && pressed == AegisLayout.NONE
+                && (kind[lastPressed] == MENU_TITLE || kind[lastPressed] == MENU_ITEM)
+                && hovered != AegisLayout.NONE && kind[hovered] == MENU_ITEM) {
+            chooseMenuItem(hovered, false);
+        }
+
+        // The pointer, moving: over an item it points at it, opening its submenu or closing a
+        // deeper one; over another title of a bar whose menu is open, that menu opens instead.
+        if (hovered != lastMenuHover && hovered != AegisLayout.NONE) {
+            if (kind[hovered] == MENU_ITEM && isOverlayOpen(layout.parent(hovered))) {
+                int menu = layout.parent(hovered);
+                menuPointed[menu] = hovered;
+                if (itemSubMenu[hovered] != AegisLayout.NONE) {
+                    openSubMenu(hovered, false);
+                } else {
+                    int at = overlayIndex(menu);
+                    if (at + 1 < overlayCount && kind[overlayNode[at + 1]] == MENU) closeOverlaysFrom(at + 1);
+                }
+            } else if (kind[hovered] == MENU_TITLE && anyMenuOpen() && !isOverlayOpen(titleMenu[hovered])
+                    && barOf(topMenu()) == layout.parent(hovered)) {
+                openTopMenu(hovered, false);
+            }
+        }
+        lastMenuHover = hovered;
+
+        // The keys, while a menu is open.
+        int menu = topMenu();
+        if (menu != AegisLayout.NONE) {
+            int pointed = menuPointed[menu];
+            if (menuLines != 0) {
+                int item = pointed;
+                for (int k = 0; k < Math.abs(menuLines); k++) item = nextMenuItem(menu, item, Integer.signum(menuLines));
+                menuPointed[menu] = item;
+            }
+            if (menuSteps > 0) {
+                if (pointed != AegisLayout.NONE && itemSubMenu[pointed] != AegisLayout.NONE) {
+                    openSubMenu(pointed, true);
+                } else {
+                    openTopMenu(titleBeside(menuOwner[firstOpenMenu()], +1), true);
+                }
+            } else if (menuSteps < 0) {
+                if (kind[menuOwner[menu]] == MENU_ITEM) closeOverlay(menu);
+                else openTopMenu(titleBeside(menuOwner[menu], -1), true);
+            }
+            if (menuEnter && pointed != AegisLayout.NONE) chooseMenuItem(pointed, true);
+        }
+        menuLines  = 0;
+        menuSteps  = 0;
+        menuEnter  = false;
+        pendingF10 = false;
+    }
+
+    /** The bottom open menu: the one a bar's title opened. */
+    private int firstOpenMenu() {
+        for (int i = 0; i < overlayCount; i++) if (kind[overlayNode[i]] == MENU) return overlayNode[i];
+        return AegisLayout.NONE;
+    }
+
+    // -----------------------------------------------------------------------------------
     // Tooltips — step 3g-8
     // -----------------------------------------------------------------------------------
 
@@ -2180,7 +2538,7 @@ public final class AegisWidgets {
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
      * box, a label, a separator, a spinner, a tabbed pane or its bar, a split pane or its
-     * divider, a tree, or a combo box or its list.
+     * divider, a tree, a combo box or its list, or a menu bar, title, menu or item.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -2244,6 +2602,22 @@ public final class AegisWidgets {
             return;
         }
         pendingAnyKey = true;
+
+        // While a menu is open the keys are the menus', whatever has focus.
+        if (anyMenuOpen()) {
+            if (key == Keys.DOWN)                                menuLines++;
+            else if (key == Keys.UP)                             menuLines--;
+            else if (key == Keys.RIGHT)                          menuSteps++;
+            else if (key == Keys.LEFT)                           menuSteps--;
+            else if (!repeat && (key == Keys.ENTER || key == Keys.SPACE)) menuEnter = true;
+            else if (!repeat && key == Keys.ESCAPE)              pendingEscape = true;
+            else if (!repeat && key == Keys.F10)                 pendingF10 = true;
+            return;
+        }
+        if (!repeat && key == Keys.F10 && mods == 0) {
+            pendingF10 = true;
+            return;
+        }
         int focused = tree.focused();
         if (isText(focused) && editKey(focused, key, mods, repeat)) {
             return;
@@ -2302,6 +2676,7 @@ public final class AegisWidgets {
      * @param codepoint the Unicode code point typed, as from {@link com.aengine.core.Input#eventCode}
      */
     public void character(int codepoint) {
+        if (anyMenuOpen()) return;   // the menus take keys, not typing
         int focused = tree.focused();
         if (isText(focused)) {
             insert(focused, codepoint);
@@ -2835,6 +3210,7 @@ public final class AegisWidgets {
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
         updateCombo(pressed, focused);
+        updateMenus(pressed);
 
         // A tree pressed selects, opens and closes, on the press.
         if (pressed != AegisLayout.NONE && kind[pressed] == TREE_VIEW && pressed != lastPressed) {
@@ -3395,6 +3771,7 @@ public final class AegisWidgets {
                     activatedByKeyboard = true;
                 }
             }
+            case MENU_ITEM -> { }   // chosen in updateMenus(), on the release
             case COMBO_BOX -> {
                 if (!byKeyboard) break;
                 int list = comboList[node];
@@ -3481,6 +3858,8 @@ public final class AegisWidgets {
         if (kind[root] == TREE_VIEW)  drawTree(root);
         if (kind[root] == COMBO_BOX)  drawCombo(root);
         if (kind[root] == COMBO_LIST) drawComboList(root);
+        if (kind[root] == MENU_TITLE) drawMenuTitle(root);
+        if (kind[root] == MENU_ITEM)  drawMenuItem(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -3805,6 +4184,52 @@ public final class AegisWidgets {
             textY, arrowText, a[0], a[1], a[2], a[3]);
 
         if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.comboRadius);
+    }
+
+    /** A title on a menu bar: highlighted while its menu is open, lighter under the pointer. */
+    private void drawMenuTitle(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        boolean open = isOverlayOpen(titleMenu[node]);
+        if (open || tree.isHovered(node)) {
+            float[] fill = open ? style.menuHighlight : style.menuTitleHover;
+            aegis.addRoundedRect(x, y, w, h, 3.0f, fill[0], fill[1], fill[2], fill[3]);
+        }
+        float[] ink = open ? style.menuHighlightText : style.menuText;
+        aegis.addTextTop(x + style.menuPaddingX, y + (h - aegis.lineHeight()) * 0.5f, label[node], ink[0], ink[1], ink[2], ink[3]);
+    }
+
+    /**
+     * An item in a menu: filled when pointed at; a tick at its left when it ticks and is
+     * ticked; its text; its shortcut at the right, dimmed; an arrow when it opens a submenu.
+     */
+    private void drawMenuItem(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        int menu = layout.parent(node);
+        boolean lit = menu != AegisLayout.NONE && menuPointed[menu] == node;
+        if (lit) {
+            float[] hl = style.menuHighlight;
+            aegis.addRoundedRect(x, y, w, h, 3.0f, hl[0], hl[1], hl[2], hl[3]);
+        }
+        float[] ink = lit ? style.menuHighlightText : style.menuText;
+        float[] dim = lit ? style.menuHighlightText : style.menuTextDim;
+        float textY = y + (h - aegis.lineHeight()) * 0.5f;
+        if (itemChecks[node] && checked[node]) {
+            arrowText.setLength(0);
+            arrowText.append(AegisFont.CHECK_MARK);
+            aegis.addTextTop(x + style.menuPaddingX * 0.5f, textY, arrowText, ink[0], ink[1], ink[2], ink[3]);
+        }
+        aegis.addTextTop(x + style.menuPaddingX + style.menuCheckWidth, textY, label[node], ink[0], ink[1], ink[2], ink[3]);
+        if (itemShortcut[node] != null) {
+            float sw = aegis.measure(itemShortcut[node]);
+            aegis.addTextTop(x + w - style.menuPaddingX - sw, textY, itemShortcut[node], dim[0], dim[1], dim[2], dim[3]);
+        }
+        if (itemSubMenu[node] != AegisLayout.NONE) {
+            arrowText.setLength(0);
+            arrowText.append(AegisFont.ARROW_RIGHT);
+            aegis.addTextTop(x + w - style.menuPaddingX - aegis.measure(arrowText), textY, arrowText, dim[0], dim[1], dim[2], dim[3]);
+        }
     }
 
     /** A combo box's open list, on its overlay background: a row per item, the one pointed at filled. */
