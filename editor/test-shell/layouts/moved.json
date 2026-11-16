@@ -1,6 +1,6 @@
 {
   "name":        "Test - moved",
-  "description": "Test layout, does not ship: toolbar taller with the Stop button moved into it and made 140 wide, a size the theme must keep, inspector on the left and wider with its checkboxes side by side on top, hierarchy on the right, the Pause button hidden. notesField and fieldA are left out on purpose, to go to the end of the inspector with a warning.",
+  "description": "Test layout, does not ship: toolbar taller with the Stop button moved into it and made 140 wide, a size the theme must keep, inspector on the left and wider with its checkboxes side by side on top, hierarchy on the right, the Pause button hidden. fieldNotes and boxStretch are left out on purpose, to go to the end of the inspector with a warning.",
   "format":      1,
 
   "screens": {
@@ -9,8 +9,8 @@
         { "type": "panel", "panel": "menu", "height": 30 },
         { "type": "panel", "panel": "toolbar", "height": 100, "children": [
           { "type": "widget", "widget": "boxA" },
-          { "type": "widget", "widget": "toolbarSeparator" },
-          { "type": "widget", "widget": "stopButton", "width": 140 },
+          { "type": "widget", "widget": "separatorToolbar" },
+          { "type": "widget", "widget": "buttonStop", "width": 140 },
           { "type": "widget", "widget": "boxB" },
           { "type": "widget", "widget": "boxC" },
           { "type": "widget", "widget": "boxD" }
@@ -18,27 +18,27 @@
         { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
           { "type": "panel", "panel": "inspector", "width": 420, "children": [
             { "type": "row", "gap": 24, "children": [
-              { "type": "widget", "widget": "snapCheckbox" },
-              { "type": "widget", "widget": "showGridCheckbox" }
+              { "type": "widget", "widget": "checkboxSnap" },
+              { "type": "widget", "widget": "checkboxShowGrid" }
             ]},
             { "type": "row", "gap": 8, "children": [
-              { "type": "widget", "widget": "gridSizeLabel" },
-              { "type": "widget", "widget": "gridSizeSpinner", "width": 90 }
+              { "type": "widget", "widget": "labelGridSize" },
+              { "type": "widget", "widget": "spinnerGridSize", "width": 90 }
             ]},
-            { "type": "widget", "widget": "inspectorSeparator" },
-            { "type": "widget", "widget": "nameLabel" },
-            { "type": "widget", "widget": "nameField" },
+            { "type": "widget", "widget": "separatorInspector" },
+            { "type": "widget", "widget": "labelName" },
+            { "type": "widget", "widget": "fieldName" },
             { "type": "row", "gap": 8, "children": [
-              { "type": "widget", "widget": "shadingLabel" },
-              { "type": "widget", "widget": "shadingCombo" }
+              { "type": "widget", "widget": "labelShading" },
+              { "type": "widget", "widget": "comboShading" }
             ]},
-            { "type": "widget", "widget": "showPopupButton" }
+            { "type": "widget", "widget": "buttonShowPopup" }
           ]},
           { "type": "panel", "panel": "viewport", "grow": 1, "children": [
-            { "type": "widget", "widget": "pauseButton", "hidden": true },
-            { "type": "widget", "widget": "playButton" },
-            { "type": "widget", "widget": "descriptionBox" },
-            { "type": "widget", "widget": "viewSplit" }
+            { "type": "widget", "widget": "buttonPause", "hidden": true },
+            { "type": "widget", "widget": "buttonPlay" },
+            { "type": "widget", "widget": "fieldDescription" },
+            { "type": "widget", "widget": "splitView" }
           ]},
           { "type": "panel", "panel": "hierarchy", "width": 240 }
         ]}

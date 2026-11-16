@@ -18,19 +18,19 @@ class AegisDialogTest {
     private final AegisLayout  layout = shell.layout;
     private final AegisWidgets ae     = shell.ae;
 
-    private int outside, dialog, titleBar, noteField, okButton, cancelButton;
+    private int outside, dialog, titleBar, fieldNote, buttonOk, buttonCancel;
 
     /** A button outside; a dialog with a field and OK / Cancel in a row, OK the default. */
     private void build() {
-        outside = ae.button(shell.root, "outsideButton", "Outside");
-        dialog = ae.dialog("noteDialog", "Leave a note");
+        outside = ae.button(shell.root, "buttonOutside", "Outside");
+        dialog = ae.dialog("dialogNote", "Leave a note");
         titleBar = layout.firstChild(dialog);
-        noteField = ae.textField(dialog, "noteField");
+        fieldNote = ae.textField(dialog, "fieldNote");
         int buttons = layout.row(dialog);
         layout.setGap(buttons, 8.0f);
-        okButton = ae.button(buttons, "okButton", "OK");
-        cancelButton = ae.button(buttons, "cancelButton", "Cancel");
-        ae.setDefaultButton(dialog, okButton);
+        buttonOk = ae.button(buttons, "buttonOk", "OK");
+        buttonCancel = ae.button(buttons, "buttonCancel", "Cancel");
+        ae.setDefaultButton(dialog, buttonOk);
         shell.frame();
         shell.tab();
         assertEquals(outside, shell.tree.focused());
@@ -43,7 +43,7 @@ class AegisDialogTest {
         shell.frame();
         assertTrue(ae.isDialogOpen(dialog));
         assertEquals(400.0f, layout.x(dialog) + layout.width(dialog) * 0.5f, 1.0f, "centred across");
-        assertEquals(noteField, shell.tree.focused());
+        assertEquals(fieldNote, shell.tree.focused());
     }
 
     @Test
@@ -54,7 +54,7 @@ class AegisDialogTest {
         shell.click(outside);
         assertFalse(ae.wasActivated(outside));
         assertTrue(ae.isDialogOpen(dialog), "a press outside a dialog does not close it");
-        assertEquals(noteField, shell.tree.focused(), "nor does it take focus");
+        assertEquals(fieldNote, shell.tree.focused(), "nor does it take focus");
     }
 
     @Test
@@ -63,11 +63,11 @@ class AegisDialogTest {
         ae.openDialog(dialog);
         shell.frame();
         shell.tab();
-        assertEquals(okButton, shell.tree.focused());
+        assertEquals(buttonOk, shell.tree.focused());
         shell.tab();
-        assertEquals(cancelButton, shell.tree.focused());
+        assertEquals(buttonCancel, shell.tree.focused());
         shell.tab();
-        assertEquals(noteField, shell.tree.focused(), "around, never out to the window");
+        assertEquals(fieldNote, shell.tree.focused(), "around, never out to the window");
     }
 
     @Test
@@ -77,7 +77,7 @@ class AegisDialogTest {
         shell.frame();
         shell.type("hello");
         shell.key(Keys.ENTER);
-        assertTrue(ae.wasActivated(okButton));
+        assertTrue(ae.wasActivated(buttonOk));
         ae.closeDialog(dialog);
         shell.frame();
         assertFalse(ae.isDialogOpen(dialog));
@@ -116,7 +116,7 @@ class AegisDialogTest {
         shell.frame();
         assertEquals(x + 40.0f, layout.x(dialog));
         assertEquals(y + 20.0f, layout.y(dialog));
-        assertEquals(noteField, shell.tree.focused(), "dragging it keeps focus inside");
+        assertEquals(fieldNote, shell.tree.focused(), "dragging it keeps focus inside");
 
         shell.pointerAt(layout.x(titleBar) + layout.width(titleBar) - 4.0f, layout.y(titleBar) + 5.0f);
         shell.frame();
@@ -131,9 +131,9 @@ class AegisDialogTest {
     @Test
     void f10DoesNotReachTheMenusBehindADialog() {
         build();
-        int bar = ae.menuBar(shell.root, "mainMenu");
-        int file = ae.menu(bar, "fileMenu", "File");
-        ae.menuItem(file, "newItem", "New");
+        int bar = ae.menuBar(shell.root, "menuBarMain");
+        int file = ae.menu(bar, "menuFile", "File");
+        ae.menuItem(file, "menuItemNew", "New");
         shell.frame();
         ae.openDialog(dialog);
         shell.frame();
@@ -146,8 +146,8 @@ class AegisDialogTest {
     void aThemeDressesADialogThatIsNotOpen() throws Exception {
         build();
         ae.applyTheme(AegisTheme.parse(new StringReader("""
-            { "name": "Test", "format": 1, "noteDialog.button.fill": "#FF0000" }
+            { "name": "Test", "format": 1, "dialogNote.button.fill": "#FF0000" }
             """), "test"), shell.root);
-        assertArrayEquals(new float[] { 1.0f, 0.0f, 0.0f, 1.0f }, ae.styleOf(okButton).buttonFill, 0.001f);
+        assertArrayEquals(new float[] { 1.0f, 0.0f, 0.0f, 1.0f }, ae.styleOf(buttonOk).buttonFill, 0.001f);
     }
 }

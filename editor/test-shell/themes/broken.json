@@ -18,9 +18,9 @@
   "loopA": "@loopB",
   "loopB": "@loopA",
 
-  "viewport.stopButton.fill":  "@danger",
-  "viewport.pauseButton.fill": "@loopA",
-  "viewport.playButton.fill":  "@global.surface.raised",
+  "viewport.buttonStop.fill":  "@danger",
+  "viewport.buttonPause.fill": "@loopA",
+  "viewport.buttonPlay.fill":  "@global.surface.raised",
   "inspector.field.fill":  "@missing",
   "inspector.field.glow":  "#FFFFFF",
   "hierarchy.oldButton.fill":  "#FFFFFF"

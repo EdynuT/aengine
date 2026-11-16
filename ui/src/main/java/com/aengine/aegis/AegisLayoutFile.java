@@ -148,7 +148,7 @@ public final class AegisLayoutFile {
         /** @return the alignment across Y, or {@code null} */
         public AegisLayout.Align alignY() { return alignY; }
 
-        /** {@code panel "inspector"}, {@code widget "nameField"}, {@code row}: how messages name it. */
+        /** {@code panel "inspector"}, {@code widget "fieldName"}, {@code row}: how messages name it. */
         String label() {
             return name != null ? type.name().toLowerCase() + " \"" + name + "\"" : type.name().toLowerCase();
         }

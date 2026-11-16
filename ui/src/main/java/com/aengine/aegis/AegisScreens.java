@@ -22,7 +22,7 @@ import java.util.Set;
  * <pre>{@code
  * AegisScreens screens = aegis.screens();
  * int inspector = screens.columnPanel("inspector");    // made by code, placed by the file
- * nameField = ae.textField(inspector, "nameField", 64);
+ * fieldName = ae.textField(inspector, "fieldName", 64);
  * ...
  * int root = screens.build("editor", layoutFiles);
  * for (AegisLayoutFile f : layoutFiles) f.report();

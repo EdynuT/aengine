@@ -389,7 +389,7 @@ public final class Aegis {
      *
      * <pre>{@code
      * AegisWidgets ae = aegis.widgets();
-     * int play = ae.button(toolbar, "playButton", "Play");
+     * int play = ae.button(toolbar, "buttonPlay", "Play");
      * }</pre>
      *
      * @return the widgets, the same instance for this object's lifetime

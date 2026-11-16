@@ -18,7 +18,7 @@ class AegisWidgetsTest {
 
     @Test
     void aButtonIsActivatedByAClickAndByEnter() {
-        int play = ae.button(shell.root, "playButton", "Play");
+        int play = ae.button(shell.root, "buttonPlay", "Play");
 
         shell.click(play);
         assertTrue(ae.wasActivated(play));
@@ -34,7 +34,7 @@ class AegisWidgetsTest {
 
     @Test
     void aPressDraggedOffAButtonDoesNotActivateIt() {
-        int play = ae.button(shell.root, "playButton", "Play");
+        int play = ae.button(shell.root, "buttonPlay", "Play");
         shell.frame();
         shell.pointerOn(play);
         shell.press();
@@ -47,7 +47,7 @@ class AegisWidgetsTest {
 
     @Test
     void aCheckboxFlipsBySpaceAndReportsTheChange() {
-        int snap = ae.checkbox(shell.root, "snapCheckbox", "Snap to grid");
+        int snap = ae.checkbox(shell.root, "checkboxSnap", "Snap to grid");
         shell.tab();
         shell.key(Keys.SPACE);
         assertTrue(ae.isChecked(snap));
@@ -60,10 +60,10 @@ class AegisWidgetsTest {
 
     @Test
     void tabStepsThroughWidgetsPassingLabelsAndSeparators() {
-        int first = ae.button(shell.root, "firstButton", "First");
-        ae.label(shell.root, "nameLabel", "Name");
-        ae.separator(shell.root, "aSeparator");
-        int second = ae.button(shell.root, "secondButton", "Second");
+        int first = ae.button(shell.root, "buttonFirst", "First");
+        ae.label(shell.root, "labelName", "Name");
+        ae.separator(shell.root, "separatorA");
+        int second = ae.button(shell.root, "buttonSecond", "Second");
 
         shell.tab();
         assertEquals(first, shell.tree.focused());
@@ -77,7 +77,7 @@ class AegisWidgetsTest {
 
     @Test
     void aSliderMovesByKeysAndStaysInRange() {
-        int slider = ae.slider(shell.root, "opacitySlider", 0.0f, 100.0f, 50.0f);
+        int slider = ae.slider(shell.root, "sliderOpacity", 0.0f, 100.0f, 50.0f);
         shell.tab();
 
         shell.key(Keys.RIGHT);
@@ -96,7 +96,7 @@ class AegisWidgetsTest {
 
     @Test
     void aTextFieldTakesTypingKeepsItsLimitAndUndoes() {
-        int field = ae.textField(shell.root, "nameField", 8);
+        int field = ae.textField(shell.root, "fieldName", 8);
         shell.tab();
 
         shell.type("Player");
@@ -117,7 +117,7 @@ class AegisWidgetsTest {
 
     @Test
     void aTextFieldRefusesControlCharacters() {
-        int field = ae.textField(shell.root, "nameField");
+        int field = ae.textField(shell.root, "fieldName");
         shell.tab();
         ae.character(0x1B);
         ae.character(0x202E);
@@ -128,7 +128,7 @@ class AegisWidgetsTest {
 
     @Test
     void aLabelIsSizedToItsTextAndAgainWhenItChanges() {
-        int label = ae.label(shell.root, "countLabel", "1");
+        int label = ae.label(shell.root, "labelCount", "1");
         float narrow = layout.requestedWidth(label);
         ae.setLabel(label, "One hundred");
         assertTrue(layout.requestedWidth(label) > narrow);
@@ -136,7 +136,7 @@ class AegisWidgetsTest {
 
     @Test
     void aSizeSetByCodeSurvivesBeingFittedAgain() {
-        int stop = ae.button(shell.root, "stopButton", "Stop");
+        int stop = ae.button(shell.root, "buttonStop", "Stop");
         float fittedHeight = layout.requestedHeight(stop);
         layout.setWidth(stop, 140.0f);
 
@@ -150,6 +150,26 @@ class AegisWidgetsTest {
     void aNameAThemeCouldNotWriteIsRefused() {
         assertThrows(IllegalArgumentException.class, () -> ae.button(shell.root, "stop.button", "Stop"));
         assertEquals(AegisLayout.NONE, layout.firstChild(shell.root), "nothing half-built is left behind");
+    }
+
+    @Test
+    void aWidgetsNameStartsWithItsKind() {
+        assertThrows(IllegalArgumentException.class, () -> ae.button(shell.root, "stopButton", "Stop"));
+        assertThrows(IllegalArgumentException.class, () -> ae.button(shell.root, "button", "Stop"), "the prefix alone says nothing");
+        assertThrows(IllegalArgumentException.class, () -> ae.button(shell.root, "buttonstop", "Stop"), "a capital after the prefix");
+        assertThrows(IllegalArgumentException.class, () -> ae.textField(shell.root, "textFieldName"));
+        assertEquals(AegisLayout.NONE, layout.firstChild(shell.root), "nothing half-built is left behind");
+
+        ae.button(shell.root, "buttonStop", "Stop");
+        ae.button(shell.root, "button2", "Two");
+        ae.textField(shell.root, "fieldName");
+
+        int bar = ae.menuBar(shell.root, "menuBarMain");
+        assertThrows(IllegalArgumentException.class, () -> ae.menu(bar, "menuItemFile", "File"), "an item's prefix, not a menu's");
+        int file = ae.menu(bar, "menuFile", "File");
+        ae.menuItem(file, "menuItemSave", "Save");
+        ae.subMenu(file, "menuRecent", "Recent");
+        assertThrows(IllegalArgumentException.class, () -> ae.menuItem(file, "menuQuit", "Quit"));
     }
 
     @Test
@@ -250,7 +270,7 @@ class AegisWidgetsTest {
         layout.setSize(pane, 300.0f, 100.0f);
         layout.setScrollable(pane, true);
         shell.tree.setFocusable(pane, true);
-        for (int i = 0; i < 20; i++) ae.label(pane, "line" + i, "Line " + i);
+        for (int i = 0; i < 20; i++) ae.label(pane, "labelLine" + i, "Line " + i);
 
         shell.tab();
         assertEquals(pane, shell.tree.focused());
@@ -265,7 +285,7 @@ class AegisWidgetsTest {
 
     @Test
     void aSpinnerStepsByKeysWithinItsRange() {
-        int count = ae.spinner(shell.root, "countSpinner", 0.0f, 10.0f, 5.0f, 1.0f);
+        int count = ae.spinner(shell.root, "spinnerCount", 0.0f, 10.0f, 5.0f, 1.0f);
         assertEquals("5", ae.text(count).toString());
         shell.tab();
 
@@ -284,7 +304,7 @@ class AegisWidgetsTest {
 
     @Test
     void aSpinnerTakesATypedNumberOnEnterAndDropsWhatIsNotOne() {
-        int size = ae.spinner(shell.root, "sizeSpinner", -100.0f, 100.0f, 1.0f, 0.25f);
+        int size = ae.spinner(shell.root, "spinnerSize", -100.0f, 100.0f, 1.0f, 0.25f);
         assertEquals("1.00", ae.text(size).toString(), "as many decimals as the step has");
         shell.tab();                       // arriving by Tab selects the number
 
@@ -311,8 +331,8 @@ class AegisWidgetsTest {
 
     @Test
     void aSpinnerTakesWhatWasTypedWhenFocusLeavesAndGivesItUpOnEsc() {
-        int first  = ae.spinner(shell.root, "firstSpinner", 0.0f, 100.0f, 1.0f, 1.0f);
-        int second = ae.spinner(shell.root, "secondSpinner", 0.0f, 100.0f, 2.0f, 1.0f);
+        int first  = ae.spinner(shell.root, "spinnerFirst", 0.0f, 100.0f, 1.0f, 1.0f);
+        int second = ae.spinner(shell.root, "spinnerSecond", 0.0f, 100.0f, 2.0f, 1.0f);
         shell.tab();
         shell.type("42");
         shell.tab();
@@ -328,7 +348,7 @@ class AegisWidgetsTest {
 
     @Test
     void aSpinnersArrowsStepItAndSteppingByTenthsStaysExact() {
-        int opacity = ae.spinner(shell.root, "opacitySpinner", 0.0f, 1.0f, 0.0f, 0.1f);
+        int opacity = ae.spinner(shell.root, "spinnerOpacity", 0.0f, 1.0f, 0.0f, 0.1f);
         shell.frame();
         float x = layout.x(opacity) + layout.width(opacity) - 5.0f;
 
@@ -403,7 +423,7 @@ class AegisWidgetsTest {
         assertEquals(0, ae.selectedTab(pane));
 
         shell.tab();
-        assertEquals("sceneButton", layout.nodeName(shell.tree.focused()), "then into the shown panel only");
+        assertEquals("buttonScene", layout.nodeName(shell.tree.focused()), "then into the shown panel only");
         shell.tab();
         assertEquals(bar, shell.tree.focused(), "the panels put away are not stops");
     }
@@ -414,7 +434,7 @@ class AegisWidgetsTest {
         int bar = layout.firstChild(pane);
         shell.tab();
         shell.tab();
-        assertEquals("sceneButton", layout.nodeName(shell.tree.focused()));
+        assertEquals("buttonScene", layout.nodeName(shell.tree.focused()));
 
         shell.key(Keys.TAB, Keys.MOD_CONTROL);
         assertEquals(1, ae.selectedTab(pane));
@@ -449,12 +469,12 @@ class AegisWidgetsTest {
 
     /** Three tabs — Scene, Assets, Log — each a column with one button. */
     private int tabbedPane() {
-        int pane = ae.tabbedPane(shell.root, "sideTabs");
+        int pane = ae.tabbedPane(shell.root, "tabsSide");
         layout.setSize(pane, 400.0f, 300.0f);
         String[] titles = { "Scene", "Assets", "Log" };
         for (String title : titles) {
             int column = layout.column(AegisLayout.NONE);
-            ae.button(column, title.toLowerCase() + "Button", title + " button");
+            ae.button(column, "button" + title, title + " button");
             ae.addTab(pane, title, column);
             if (title.equals("Scene")) sceneColumn = column;
         }
@@ -470,14 +490,14 @@ class AegisWidgetsTest {
     @Test
     void everyKindDrawsWithoutAWindow() {
         tabbedPane();
-        ae.spinner(shell.root, "aSpinner", 0.0f, 10.0f, 5.0f, 0.5f);
-        ae.button(shell.root, "aButton", "Button");
-        ae.checkbox(shell.root, "aCheckbox", "Checkbox");
-        ae.slider(shell.root, "aSlider", 0.0f, 10.0f, 5.0f);
-        ae.label(shell.root, "aLabel", "Label");
-        ae.separator(shell.root, "aSeparator");
-        int field = ae.textField(shell.root, "aField");
-        int box   = ae.textBox(shell.root, "aBox", 3);
+        ae.spinner(shell.root, "spinnerA", 0.0f, 10.0f, 5.0f, 0.5f);
+        ae.button(shell.root, "buttonA", "Button");
+        ae.checkbox(shell.root, "checkboxA", "Checkbox");
+        ae.slider(shell.root, "sliderA", 0.0f, 10.0f, 5.0f);
+        ae.label(shell.root, "labelA", "Label");
+        ae.separator(shell.root, "separatorA");
+        int field = ae.textField(shell.root, "fieldA");
+        int box   = ae.textBox(shell.root, "fieldBox", 3);
         ae.setText(field, "text");
         ae.setText(box, "first line\nsecond line");
         scrollingPane();

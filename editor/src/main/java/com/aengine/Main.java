@@ -115,39 +115,39 @@ public class Main extends Engine {
     private int layoutHierarchy;
     private int layoutTreeItemA;
     private int layoutTreeItemB;
-    private int opacitySlider;      // step 3e-5: a slider, in the hierarchy pane
+    private int sliderOpacity;      // step 3e-5: a slider, in the hierarchy pane
     private int layoutViewport;
-    private int playButton;         // step 3e-3: three buttons from the one ae.button() method
-    private int pauseButton;
-    private int stopButton;
+    private int buttonPlay;         // step 3e-3: three buttons from the one ae.button() method
+    private int buttonPause;
+    private int buttonStop;
     private int layoutInspector;
     private int layoutFieldA;
-    private int nameField;          // step 3e-6: a text field, from the one ae.textField() method
-    private int notesField;         // step 3e-7: a text field with no length limit
-    private int descriptionBox;     // step 3e-9: a text box, from the one ae.textBox() method
-    private int nameLabel;          // step 3g-1: a label, from ae.label()
-    private int inspectorSeparator; // step 3g-1: separators, from ae.separator() — flat in a column,
-    private int toolbarSeparator;   //            upright in a row
-    private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
-    private int snapCheckbox;
-    private int fileMenu;           // step 3g-10: a menu bar and its menus, from ae.menuBar(), ae.menu(), ae.menuItem()
-    private int saveItem;
-    private int quitItem;
-    private int aboutItem;
+    private int fieldName;          // step 3e-6: a text field, from the one ae.textField() method
+    private int fieldNotes;         // step 3e-7: a text field with no length limit
+    private int fieldDescription;   // step 3e-9: a text box, from the one ae.textBox() method
+    private int labelName;          // step 3g-1: a label, from ae.label()
+    private int separatorInspector; // step 3g-1: separators, from ae.separator() — flat in a column,
+    private int separatorToolbar;   //            upright in a row
+    private int checkboxShowGrid;   // step 3e-4: two checkboxes from the one ae.checkbox() method
+    private int checkboxSnap;
+    private int menuFile;           // step 3g-10: a menu bar and its menus, from ae.menuBar(), ae.menu(), ae.menuItem()
+    private int menuItemSave;
+    private int menuItemQuit;
+    private int menuItemAbout;
     private int gridMenuItem;
     private String lastMenuChoice = "-";
-    private int aboutDialog;        // step 3g-11: a dialog, from ae.dialog(), opened by Help > About
-    private int aboutOkButton;
-    private int aboutCancelButton;
-    private int shadingCombo;       // step 3g-9: a combo box, from ae.comboBox()
-    private int showPopupButton;    // step 3g-7: a popup on the overlay layer, from ae.showPopup()
+    private int dialogAbout;        // step 3g-11: a dialog, from ae.dialog(), opened by Help > About
+    private int buttonOk;
+    private int buttonCancel;
+    private int comboShading;       // step 3g-9: a combo box, from ae.comboBox()
+    private int buttonShowPopup;    // step 3g-7: a popup on the overlay layer, from ae.showPopup()
     private int examplePopup;
-    private int closePopupButton;
-    private int sceneTree;          // step 3g-6: a tree, from ae.treeView() and ae.addTreeItem()
-    private int viewSplit;          // step 3g-5: a split pane, from ae.splitPane()
-    private int sceneTabs;          // step 3g-4: a tabbed pane, from ae.tabbedPane() and ae.addTab()
-    private int gridSizeLabel;      // step 3g-3: a spinner, from ae.spinner(), with its label
-    private int gridSizeSpinner;
+    private int buttonClosePopup;
+    private int treeScene;          // step 3g-6: a tree, from ae.treeView() and ae.addTreeItem()
+    private int splitView;          // step 3g-5: a split pane, from ae.splitPane()
+    private int tabsScene;          // step 3g-4: a tabbed pane, from ae.tabbedPane() and ae.addTab()
+    private int labelGridSize;      // step 3g-3: a spinner, from ae.spinner(), with its label
+    private int spinnerGridSize;
 
     // SCAFFOLDING — step 3d-2: clicks each interactive box has received, drawn inside it.
     private int clicksA;
@@ -808,53 +808,53 @@ public class Main extends Engine {
         // Pointer and keys applied: now the widgets know what was activated this frame.
         ae.update(layoutFrame);
 
-        if (ae.wasActivated(playButton))  { playPresses++;  lastActivated = "Play"; }
-        if (ae.wasActivated(pauseButton)) { pausePresses++; lastActivated = "Pause"; }
-        if (ae.wasActivated(stopButton))  { stopPresses++;  lastActivated = "Stop"; }
-        if (ae.wasActivated(playButton) || ae.wasActivated(pauseButton) || ae.wasActivated(stopButton)) {
+        if (ae.wasActivated(buttonPlay))  { playPresses++;  lastActivated = "Play"; }
+        if (ae.wasActivated(buttonPause)) { pausePresses++; lastActivated = "Pause"; }
+        if (ae.wasActivated(buttonStop))  { stopPresses++;  lastActivated = "Stop"; }
+        if (ae.wasActivated(buttonPlay) || ae.wasActivated(buttonPause) || ae.wasActivated(buttonStop)) {
             lastActivatedBy = ae.activatedByKeyboard() ? "keyboard" : "mouse";
         }
 
         // A checkbox reports its state with isChecked() at any time, and wasChanged() on the
         // one frame the user flipped it — the setChecked() at build time is not counted.
-        if (ae.wasChanged(showGridCheckbox) || ae.wasChanged(snapCheckbox)) checkboxChanges++;
+        if (ae.wasChanged(checkboxShowGrid) || ae.wasChanged(checkboxSnap)) checkboxChanges++;
 
         // A slider reports on every frame its value moves — each frame of a drag, each step.
-        if (ae.wasChanged(opacitySlider)) sliderChanges++;
+        if (ae.wasChanged(sliderOpacity)) sliderChanges++;
 
         // A text field reports wasChanged() on every frame the user typed or deleted in it, and
         // wasActivated() when Enter confirmed it. text() is the field's own buffer, read here
         // without making a String.
-        if (ae.wasChanged(nameField)) nameEdits++;
-        if (ae.wasActivated(nameField)) {
+        if (ae.wasChanged(fieldName)) nameEdits++;
+        if (ae.wasActivated(fieldName)) {
             nameConfirms++;
             nameConfirmed.setLength(0);
-            nameConfirmed.append(ae.text(nameField));
+            nameConfirmed.append(ae.text(fieldName));
         }
 
         // Step 3g-10: what the menus chose. Quit only says so here: the scaffolding is not the
         // place to close the editor.
-        if (ae.wasActivated(saveItem))     lastMenuChoice = "Save";
-        if (ae.wasActivated(quitItem))     lastMenuChoice = "Quit";
-        if (ae.wasActivated(aboutItem)) {
+        if (ae.wasActivated(menuItemSave)) lastMenuChoice = "Save";
+        if (ae.wasActivated(menuItemQuit)) lastMenuChoice = "Quit";
+        if (ae.wasActivated(menuItemAbout)) {
             lastMenuChoice = "About";
-            ae.openDialog(aboutDialog);
+            ae.openDialog(dialogAbout);
         }
         // Step 3g-11: the dialog's buttons close it; Esc and its × close it by themselves.
-        if (ae.wasActivated(aboutOkButton))     { ae.closeDialog(aboutDialog); lastMenuChoice = "About: OK"; }
-        if (ae.wasActivated(aboutCancelButton)) { ae.closeDialog(aboutDialog); lastMenuChoice = "About: Cancel"; }
-        if (ae.wasCancelled(aboutDialog))       lastMenuChoice = "About: cancelled";
+        if (ae.wasActivated(buttonOk))     { ae.closeDialog(dialogAbout); lastMenuChoice = "About: OK"; }
+        if (ae.wasActivated(buttonCancel)) { ae.closeDialog(dialogAbout); lastMenuChoice = "About: Cancel"; }
+        if (ae.wasCancelled(dialogAbout))  lastMenuChoice = "About: cancelled";
         if (ae.wasActivated(gridMenuItem)) lastMenuChoice = ae.isChecked(gridMenuItem) ? "Show grid on" : "Show grid off";
 
         // Step 3g-7: the popup opens just below the button that asks for it.
-        if (ae.wasActivated(showPopupButton)) {
-            ae.showPopup(examplePopup, layout.x(showPopupButton),
-                layout.y(showPopupButton) + layout.height(showPopupButton) + 4.0f);
+        if (ae.wasActivated(buttonShowPopup)) {
+            ae.showPopup(examplePopup, layout.x(buttonShowPopup),
+                layout.y(buttonShowPopup) + layout.height(buttonShowPopup) + 4.0f);
         }
-        if (ae.wasActivated(closePopupButton)) ae.closeOverlay(examplePopup);
+        if (ae.wasActivated(buttonClosePopup)) ae.closeOverlay(examplePopup);
 
         // A text box reports the same way; wasActivated() comes from Ctrl+Enter.
-        if (ae.wasActivated(descriptionBox)) descriptionConfirms++;
+        if (ae.wasActivated(fieldDescription)) descriptionConfirms++;
 
         // Step 3c-4, the visible check, beside the text cache's counter and read the same way:
         // "solved" is 1 after the first frame and then STOPS moving, because neither the tree
@@ -1035,8 +1035,8 @@ public class Main extends Engine {
         // how many times the user has flipped one. Snap starts on, from setChecked(), with the
         // change count still 0.
         UI_TEXT.setLength(0);
-        UI_TEXT.append("checkboxes - Show grid ").append(ae.isChecked(showGridCheckbox) ? "on" : "off")
-               .append("   Snap ").append(ae.isChecked(snapCheckbox) ? "on" : "off")
+        UI_TEXT.append("checkboxes - Show grid ").append(ae.isChecked(checkboxShowGrid) ? "on" : "off")
+               .append("   Snap ").append(ae.isChecked(checkboxSnap) ? "on" : "off")
                .append("   changes ").append(checkboxChanges);
         aegis.addTextTop(textX, textY + line * 8, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
@@ -1044,17 +1044,17 @@ public class Main extends Engine {
         // precision — rounded to a whole number it is what the slider draws beside its track —
         // and how many frames it moved on.
         UI_TEXT.setLength(0);
-        UI_TEXT.append("slider - value ").append(ae.sliderValue(opacitySlider))
+        UI_TEXT.append("slider - value ").append(ae.sliderValue(sliderOpacity))
                .append("   changes ").append(sliderChanges);
         aegis.addTextTop(textX, textY + line * 9, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         // Step 3e-6 and 3e-7, the visible check: the field's text as text() reports it. With
         // nothing selected, a bar marks where caret() says the caret is; with a selection,
         // brackets mark selectionStart() and selectionEnd().
-        CharSequence name = ae.text(nameField);
-        int nameCaret = ae.caret(nameField);
-        int selStart  = ae.selectionStart(nameField);
-        int selEnd    = ae.selectionEnd(nameField);
+        CharSequence name = ae.text(fieldName);
+        int nameCaret = ae.caret(fieldName);
+        int selStart  = ae.selectionStart(fieldName);
+        int selEnd    = ae.selectionEnd(fieldName);
         UI_TEXT.setLength(0);
         UI_TEXT.append("text field - \"");
         if (selStart == selEnd) {
@@ -1077,20 +1077,20 @@ public class Main extends Engine {
         // Step 3e-9, the visible check: the text box's length, caret and selection, and how
         // many times Ctrl+Enter confirmed it. Its text is on screen in the box itself.
         UI_TEXT.setLength(0);
-        UI_TEXT.append("text box - length ").append(ae.text(descriptionBox).length())
-               .append("   caret ").append(ae.caret(descriptionBox))
-               .append("   selection ").append(ae.selectionStart(descriptionBox))
-               .append('-').append(ae.selectionEnd(descriptionBox))
+        UI_TEXT.append("text box - length ").append(ae.text(fieldDescription).length())
+               .append("   caret ").append(ae.caret(fieldDescription))
+               .append("   selection ").append(ae.selectionStart(fieldDescription))
+               .append('-').append(ae.selectionEnd(fieldDescription))
                .append("   confirmed ").append(descriptionConfirms);
         aegis.addTextTop(textX, textY + line * 12, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
         // Step 3g, the visible check: what each new widget reports.
         UI_TEXT.setLength(0);
-        UI_TEXT.append("3g - spinner ").append(ae.spinnerValue(gridSizeSpinner))
-               .append("   tab ").append(ae.selectedTab(sceneTabs))
-               .append("   divider ").append(Math.round(ae.dividerLocation(viewSplit)))
-               .append("   tree item ").append(ae.selectedTreeItem(sceneTree))
-               .append("   combo ").append(ae.comboItem(shadingCombo, ae.comboChosen(shadingCombo)))
+        UI_TEXT.append("3g - spinner ").append(ae.spinnerValue(spinnerGridSize))
+               .append("   tab ").append(ae.selectedTab(tabsScene))
+               .append("   divider ").append(Math.round(ae.dividerLocation(splitView)))
+               .append("   tree item ").append(ae.selectedTreeItem(treeScene))
+               .append("   combo ").append(ae.comboItem(comboShading, ae.comboChosen(comboShading)))
                .append("   menu ").append(lastMenuChoice);
         aegis.addTextTop(textX, textY + line * 13, UI_TEXT, 0.55f, 0.75f, 0.55f, 1.0f);
 
@@ -1150,22 +1150,22 @@ public class Main extends Engine {
         layoutMenu = screens.rowPanel("menu");
         layout.setPadding(layoutMenu, 2.0f);
         layout.setAlignY(layoutMenu, com.aengine.aegis.AegisLayout.Align.STRETCH);
-        int mainMenu = ae.menuBar(layoutMenu, "mainMenu");
-        fileMenu = ae.menu(mainMenu, "fileMenu", "File");
-        ae.menuItem(fileMenu, "newSceneItem", "New scene", "Ctrl+N");
-        ae.menuItem(fileMenu, "openSceneItem", "Open scene...", "Ctrl+O");
-        saveItem = ae.menuItem(fileMenu, "saveItem", "Save", "Ctrl+S");
-        ae.separator(fileMenu, "fileSeparator1");
-        int recentMenu = ae.subMenu(fileMenu, "recentItem", "Recent scenes");
-        ae.menuItem(recentMenu, "recentSandbox", "Sandbox");
-        ae.menuItem(recentMenu, "recentArena", "Test arena");
-        ae.separator(fileMenu, "fileSeparator2");
-        quitItem = ae.menuItem(fileMenu, "quitItem", "Quit");
-        int viewMenu = ae.menu(mainMenu, "viewMenu", "View");
-        gridMenuItem = ae.menuCheckItem(viewMenu, "showGridItem", "Show grid");
-        ae.menuCheckItem(viewMenu, "showStatsItem", "Show stats");
-        int helpMenu = ae.menu(mainMenu, "helpMenu", "Help");
-        aboutItem = ae.menuItem(helpMenu, "aboutItem", "About Aegis...");
+        int menuBarMain = ae.menuBar(layoutMenu, "menuBarMain");
+        menuFile = ae.menu(menuBarMain, "menuFile", "File");
+        ae.menuItem(menuFile, "menuItemNewScene", "New scene", "Ctrl+N");
+        ae.menuItem(menuFile, "menuItemOpenScene", "Open scene...", "Ctrl+O");
+        menuItemSave = ae.menuItem(menuFile, "menuItemSave", "Save", "Ctrl+S");
+        ae.separator(menuFile, "separatorFile1");
+        int recentMenu = ae.subMenu(menuFile, "menuRecent", "Recent scenes");
+        ae.menuItem(recentMenu, "menuItemRecentSandbox", "Sandbox");
+        ae.menuItem(recentMenu, "menuItemRecentArena", "Test arena");
+        ae.separator(menuFile, "separatorFile2");
+        menuItemQuit = ae.menuItem(menuFile, "menuItemQuit", "Quit");
+        int menuView = ae.menu(menuBarMain, "menuView", "View");
+        gridMenuItem = ae.menuCheckItem(menuView, "menuItemShowGrid", "Show grid");
+        ae.menuCheckItem(menuView, "menuItemShowStats", "Show stats");
+        int menuHelp = ae.menu(menuBarMain, "menuHelp", "Help");
+        menuItemAbout = ae.menuItem(menuHelp, "menuItemAbout", "About Aegis...");
 
         // Step 3g-11: a dialog. ae.dialog() makes it closed, hanging nowhere: what it holds is
         // added to it like to any column, its widgets stretched across, so the buttons go in a
@@ -1173,16 +1173,16 @@ public class Main extends Engine {
         // outside it can be pointed at, Tab stays inside, its title bar drags it, and Esc or
         // its × cancel it — ae.wasCancelled(). OK is the default button: Enter in the field
         // activates it. Help > About opens it, from the frame loop.
-        aboutDialog = ae.dialog("aboutDialog", "About Aegis");
-        ae.label(aboutDialog, "aboutLine1", "Aegis, the AEngine interface.");
-        ae.label(aboutDialog, "aboutLine2", "Every widget of step 3g, from the keyboard too.");
-        int aboutNote = ae.textField(aboutDialog, "aboutNoteField", 40);
+        dialogAbout = ae.dialog("dialogAbout", "About Aegis");
+        ae.label(dialogAbout, "labelLine1", "Aegis, the AEngine interface.");
+        ae.label(dialogAbout, "labelLine2", "Every widget of step 3g, from the keyboard too.");
+        int aboutNote = ae.textField(dialogAbout, "fieldNote", 40);
         ae.setPlaceholder(aboutNote, "Leave a note, then Enter");
-        int aboutButtons = layout.row(aboutDialog);
+        int aboutButtons = layout.row(dialogAbout);
         layout.setGap(aboutButtons, 8.0f);
-        aboutOkButton     = ae.button(aboutButtons, "aboutOkButton", "OK");
-        aboutCancelButton = ae.button(aboutButtons, "aboutCancelButton", "Cancel");
-        ae.setDefaultButton(aboutDialog, aboutOkButton);
+        buttonOk     = ae.button(aboutButtons, "buttonOk", "OK");
+        buttonCancel = ae.button(aboutButtons, "buttonCancel", "Cancel");
+        ae.setDefaultButton(dialogAbout, buttonOk);
 
         layoutRow = screens.rowPanel("toolbar");
         layout.setPadding(layoutRow, 12.0f);   // clear space inside the row's edges
@@ -1195,7 +1195,7 @@ public class Main extends Engine {
         // Step 3g-1: a separator between A and B. The toolbar is a row, so the line stands
         // upright and runs the toolbar's height; it takes only its thickness and margins of the
         // row's width. Put in a column, the same call gives a horizontal line.
-        toolbarSeparator = ae.separator(layoutRow, "toolbarSeparator");
+        separatorToolbar = ae.separator(layoutRow, "separatorToolbar");
 
         // Grows: asks for 0 wide, so its width is its share of the spare space and nothing else.
         layoutBoxB = layout.box(layoutRow);
@@ -1230,55 +1230,55 @@ public class Main extends Engine {
         // to mean something. It asks for 200 pixels of the pane's 224 and, the pane being START
         // on X, gets exactly that. One small step is a hundredth of the range by default — 1
         // here — and Shift makes it ten.
-        opacitySlider = ae.slider(layoutHierarchy, "opacitySlider", 0.0f, 100.0f, 50.0f);
+        sliderOpacity = ae.slider(layoutHierarchy, "sliderOpacity", 0.0f, 100.0f, 50.0f);
 
         // Step 3g-4: a tabbed pane — several panels in one place, one shown at a time. The pane
         // is made first, then each tab is a title and an ordinary row or column, built with
         // NONE as its parent since addTab() takes it over; the first tab added is the one
         // shown. A press on a tab shows it; with the bar focused, Left and Right move between
         // tabs; from inside the pane, Ctrl+Tab and Ctrl+PageDown go to the next. Which is shown
-        // is read with ae.selectedTab(sceneTabs), and ae.wasChanged(sceneTabs) is true on the
+        // is read with ae.selectedTab(tabsScene), and ae.wasChanged(tabsScene) is true on the
         // frame the user switched.
-        sceneTabs = ae.tabbedPane(layoutHierarchy, "sceneTabs");
-        layout.setSize(sceneTabs, 220.0f, 96.0f);
+        tabsScene = ae.tabbedPane(layoutHierarchy, "tabsScene");
+        layout.setSize(tabsScene, 220.0f, 96.0f);
 
         int entitiesTab = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(entitiesTab, 6.0f);
-        ae.label(entitiesTab, "entitiesHint", "Entities go here");
-        ae.button(entitiesTab, "addEntityButton", "Add entity");
-        ae.addTab(sceneTabs, "Entities", entitiesTab);
+        ae.label(entitiesTab, "labelEntitiesHint", "Entities go here");
+        ae.button(entitiesTab, "buttonAddEntity", "Add entity");
+        ae.addTab(tabsScene, "Entities", entitiesTab);
 
         int layersTab = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(layersTab, 6.0f);
-        ae.label(layersTab, "layersHint", "Layers go here");
-        ae.checkbox(layersTab, "lockLayersCheckbox", "Lock layers");
-        ae.addTab(sceneTabs, "Layers", layersTab);
+        ae.label(layersTab, "labelLayersHint", "Layers go here");
+        ae.checkbox(layersTab, "checkboxLockLayers", "Lock layers");
+        ae.addTab(tabsScene, "Layers", layersTab);
 
         // Step 3g-6: a tree — the scene's hierarchy. Items are added under a parent item, or
         // under NO_ITEM for the top level, and start closed; World is opened from code. Press
         // an item to select it, its arrow (or a double click) to open or close it. From the
         // keyboard: Up and Down, Right to open or go in, Left to close or go out, Home, End, a
-        // letter to jump, Enter to activate. ae.selectedTreeItem(sceneTree) reads the
-        // selection, ae.wasChanged(sceneTree) and ae.wasActivated(sceneTree) report the user.
+        // letter to jump, Enter to activate. ae.selectedTreeItem(treeScene) reads the
+        // selection, ae.wasChanged(treeScene) and ae.wasActivated(treeScene) report the user.
         // The tree asks for the room its open items take, so the hierarchy now scrolls.
         layout.setScrollable(layoutHierarchy, true);
-        sceneTree = ae.treeView(layoutHierarchy, "sceneTree");
-        int world  = ae.addTreeItem(sceneTree, com.aengine.aegis.AegisWidgets.NO_ITEM, "World");
-        ae.addTreeItem(sceneTree, world, "Main Camera");
-        int lights = ae.addTreeItem(sceneTree, world, "Lights");
-        ae.addTreeItem(sceneTree, lights, "Sun");
-        ae.addTreeItem(sceneTree, lights, "Fill light");
-        int player = ae.addTreeItem(sceneTree, com.aengine.aegis.AegisWidgets.NO_ITEM, "Player");
-        ae.addTreeItem(sceneTree, player, "Mesh");
-        ae.addTreeItem(sceneTree, player, "Collider");
-        ae.setTreeItemExpanded(sceneTree, world, true);
+        treeScene = ae.treeView(layoutHierarchy, "treeScene");
+        int world  = ae.addTreeItem(treeScene, com.aengine.aegis.AegisWidgets.NO_ITEM, "World");
+        ae.addTreeItem(treeScene, world, "Main Camera");
+        int lights = ae.addTreeItem(treeScene, world, "Lights");
+        ae.addTreeItem(treeScene, lights, "Sun");
+        ae.addTreeItem(treeScene, lights, "Fill light");
+        int player = ae.addTreeItem(treeScene, com.aengine.aegis.AegisWidgets.NO_ITEM, "Player");
+        ae.addTreeItem(treeScene, player, "Mesh");
+        ae.addTreeItem(treeScene, player, "Collider");
+        ae.setTreeItemExpanded(treeScene, world, true);
 
         // Step 3g-8: tooltips. Any node can have one; rest the pointer on it for a moment, or
         // Tab to it and press Ctrl+F1. A node without one shows the nearest one above it — the
         // hierarchy's covers the plain boxes in it.
-        ae.setTooltip(sceneTree, "The scene: press an arrow to open an item, double-click to open and activate.");
+        ae.setTooltip(treeScene, "The scene: press an arrow to open an item, double-click to open and activate.");
         ae.setTooltip(layoutHierarchy, "The hierarchy panel.");
-        ae.setTooltip(opacitySlider, "Drag, or Tab here and use the arrows (Shift: ten steps).");
+        ae.setTooltip(sliderOpacity, "Drag, or Tab here and use the arrows (Shift: ten steps).");
 
         // Viewport: centres what it holds on both axes — one call per axis. A row panel, so its
         // buttons sit side by side: CENTER on X moves the three of them together into the
@@ -1292,41 +1292,41 @@ public class Main extends Engine {
         // Step 3e-3: three real buttons. Each call makes the layout node, sizes it to its label,
         // makes it clickable and reachable with Tab, and records that it is a button — nothing
         // else to wire. ae is the widgets object, declared at the top of this method.
-        // Every widget is named as it is made — the second argument, "playButton" — and the
+        // Every widget is named as it is made — the second argument, "buttonPlay" — and the
         // name is what a theme or a layout file writes to reach it; the third is the label the
         // user sees. The name is for files and stays put; the label is for people and may be
         // translated.
-        playButton  = ae.button(layoutViewport, "playButton",  "Play");
-        pauseButton = ae.button(layoutViewport, "pauseButton", "Pause");
-        stopButton  = ae.button(layoutViewport, "stopButton",  "Stop");
+        buttonPlay  = ae.button(layoutViewport, "buttonPlay",  "Play");
+        buttonPause = ae.button(layoutViewport, "buttonPause", "Pause");
+        buttonStop  = ae.button(layoutViewport, "buttonStop",  "Stop");
 
         // Step 3e-9: a text box beside them, four lines tall, with no length limit. Lines wrap
         // at its width; Enter breaks a line and Ctrl+Enter confirms. setText() fills it with
         // enough text to scroll — the "\n" in it are line breaks the box shows as such.
-        descriptionBox = ae.textBox(layoutViewport, "descriptionBox", 4);
-        ae.setText(descriptionBox,
+        fieldDescription = ae.textBox(layoutViewport, "fieldDescription", 4);
+        ae.setText(fieldDescription,
             "A text box wraps long lines at its own width, so this sentence carries on below.\n"
             + "Enter starts a new line; Ctrl+Enter confirms.\n"
             + "Up and Down keep the caret's place across lines.\n"
             + "The wheel scrolls it too.");
-        ae.setPlaceholder(descriptionBox, "Description");
+        ae.setPlaceholder(fieldDescription, "Description");
 
         // Step 3g-5: a split pane — two sides and a divider between them. Each side is an
         // ordinary column, built with NONE as its parent since splitPane() takes it over; true
         // puts them side by side, and 110 is how wide the left one starts. Drag the divider, or
         // Tab to it and use Left and Right (Shift: ten times as far), Home and End. Pressing
-        // it leaves focus where it was. ae.dividerLocation(viewSplit) reads where it is, and
-        // ae.wasChanged(viewSplit) is true on each frame the user moved it.
+        // it leaves focus where it was. ae.dividerLocation(splitView) reads where it is, and
+        // ae.wasChanged(splitView) is true on each frame the user moved it.
         int splitLeft = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(splitLeft, 6.0f);
-        ae.label(splitLeft, "splitLeftLabel", "Left");
+        ae.label(splitLeft, "labelSplitLeft", "Left");
         int splitRight = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(splitRight, 6.0f);
-        ae.label(splitRight, "splitRightLabel", "Right side");
-        viewSplit = ae.splitPane(layoutViewport, "viewSplit", true, splitLeft, splitRight, 110.0f);
-        layout.setSize(viewSplit, 300.0f, 90.0f);
-        ae.setTooltip(playButton, "Starts the scene.");
-        ae.setTooltip(stopButton, "Stops the scene and puts every entity back where it was.");
+        ae.label(splitRight, "labelSplitRight", "Right side");
+        splitView = ae.splitPane(layoutViewport, "splitView", true, splitLeft, splitRight, 110.0f);
+        layout.setSize(splitView, 300.0f, 90.0f);
+        ae.setTooltip(buttonPlay, "Starts the scene.");
+        ae.setTooltip(buttonStop, "Stops the scene and puts every entity back where it was.");
 
         // Inspector: STRETCH on X makes every field as wide as the pane, so the fields ask only
         // for a height. Its width comes from the layout.
@@ -1356,20 +1356,20 @@ public class Main extends Engine {
         // pane's STRETCH makes it as wide as the pane. It starts empty, so the placeholder
         // shows: dimmed text behind the field that is not part of its text, gone as soon as
         // something is typed and back when the field is emptied again. To start it with a real
-        // value instead — an entity's current name — call ae.setText(nameField, "Main Camera"),
+        // value instead — an entity's current name — call ae.setText(fieldName, "Main Camera"),
         // which fills it from code without counting as an edit.
         // Step 3g-1: a label says what the field below it is. Text and nothing to act on: Tab
         // passes it by. setLabel() would show other text later, sized again to fit.
-        nameLabel = ae.label(layoutInspector, "nameLabel", "Name");
+        labelName = ae.label(layoutInspector, "labelName", "Name");
 
-        nameField = ae.textField(layoutInspector, "nameField", 64);
-        ae.setPlaceholder(nameField, "Typing text here");
+        fieldName = ae.textField(layoutInspector, "fieldName", 64);
+        ae.setPlaceholder(fieldName, "Typing text here");
 
         // Step 3e-7: a second field, made with the form that takes no limit — its buffer grows
         // as needed. Start it with a sentence long enough to scroll, to have something to
         // select, copy and paste between the two fields.
-        notesField = ae.textField(layoutInspector, "notesField");
-        ae.setText(notesField, "No limit here: select with Shift+arrows or by dragging, then Ctrl+C, Ctrl+X, Ctrl+V");
+        fieldNotes = ae.textField(layoutInspector, "fieldNotes");
+        ae.setText(fieldNotes, "No limit here: select with Shift+arrows or by dragging, then Ctrl+C, Ctrl+X, Ctrl+V");
 
         // Step 3e-7: copy, cut and paste use the system clipboard, through the window. Handed in
         // once, like the pointer and the keys every frame: the interface uses only what it is given.
@@ -1381,44 +1381,44 @@ public class Main extends Engine {
         // ticked through setChecked(), which sets it without counting as the user's change.
         // Step 3g-1: a separator sets the settings apart from the fields. The inspector is a
         // column, so the line lies flat and spans the pane from edge to edge.
-        inspectorSeparator = ae.separator(layoutInspector, "inspectorSeparator");
+        separatorInspector = ae.separator(layoutInspector, "separatorInspector");
 
-        showGridCheckbox = ae.checkbox(layoutInspector, "showGridCheckbox", "Show grid");
-        snapCheckbox     = ae.checkbox(layoutInspector, "snapCheckbox",     "Snap to grid");
-        ae.setChecked(snapCheckbox, true);
+        checkboxShowGrid = ae.checkbox(layoutInspector, "checkboxShowGrid", "Show grid");
+        checkboxSnap     = ae.checkbox(layoutInspector, "checkboxSnap",     "Snap to grid");
+        ae.setChecked(checkboxSnap, true);
 
         // Step 3g-3: a spinner — a number that is typed or stepped, the inspector's widget for
         // a size, a count, a position. From 0.25 to 16, starting at 1, in steps of 0.25; the
         // step having two decimals, so does what it shows: 1.00. Up and Down or the arrows step
         // it (Shift: ten steps); a typed number becomes the value on Enter or when focus
-        // leaves, and gridSizeSpinner reports it then through ae.wasChanged(), read with
+        // leaves, and spinnerGridSize reports it then through ae.wasChanged(), read with
         // ae.spinnerValue(). A label says what it is, as for the name field.
-        gridSizeLabel   = ae.label(layoutInspector, "gridSizeLabel", "Grid size");
-        gridSizeSpinner = ae.spinner(layoutInspector, "gridSizeSpinner", 0.25f, 16.0f, 1.0f, 0.25f);
+        labelGridSize   = ae.label(layoutInspector, "labelGridSize", "Grid size");
+        spinnerGridSize = ae.spinner(layoutInspector, "spinnerGridSize", 0.25f, 16.0f, 1.0f, 0.25f);
 
         // Step 3g-9: a combo box — one item chosen from several, from a list that drops down.
         // A press opens the list, a press on an item chooses it. From the keyboard: Up and
         // Down (or a letter) choose at once; Enter, Space, Alt+Down or F4 open the list, which
         // the same keys then move through, Enter choosing and Esc closing it unchanged.
-        // ae.comboChosen(shadingCombo) reads the choice; ae.wasChanged(shadingCombo) reports
+        // ae.comboChosen(comboShading) reads the choice; ae.wasChanged(comboShading) reports
         // the user's.
-        ae.label(layoutInspector, "shadingLabel", "Shading");
-        shadingCombo = ae.comboBox(layoutInspector, "shadingCombo", "Lit", "Unlit", "Wireframe", "Normals");
+        ae.label(layoutInspector, "labelShading", "Shading");
+        comboShading = ae.comboBox(layoutInspector, "comboShading", "Lit", "Unlit", "Wireframe", "Normals");
 
         // Step 3g-7: a popup — anything built under a root, shown above everything else with
         // ae.showPopup(root, x, y). Built once here, with NONE as its parent; shown when the
         // button is activated (see the frame loop). A press outside it or Esc closes it, and
         // it is given the pointer before whatever lies under it. ae.closeOverlay() closes it
         // from code, as its own Close button does.
-        showPopupButton = ae.button(layoutInspector, "showPopupButton", "Show a popup");
-        ae.setTooltip(showPopupButton, "Shows a popup on the overlay layer.");
-        ae.setTooltip(gridSizeSpinner, "Type a number, or step it with the arrows or Up and Down.");
+        buttonShowPopup = ae.button(layoutInspector, "buttonShowPopup", "Show a popup");
+        ae.setTooltip(buttonShowPopup, "Shows a popup on the overlay layer.");
+        ae.setTooltip(spinnerGridSize, "Type a number, or step it with the arrows or Up and Down.");
         examplePopup = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(examplePopup, 10.0f);
         layout.setGap(examplePopup, 8.0f);
-        ae.label(examplePopup, "popupLabel", "A popup, above everything.");
-        ae.label(examplePopup, "popupHint", "A press outside or Esc closes it.");
-        closePopupButton = ae.button(examplePopup, "closePopupButton", "Close");
+        ae.label(examplePopup, "labelPopup", "A popup, above everything.");
+        ae.label(examplePopup, "labelPopupHint", "A press outside or Esc closes it.");
+        buttonClosePopup = ae.button(examplePopup, "buttonClosePopup", "Close");
 
         // Step 3f-4c: the scaffolding's plain boxes are not widgets, so nothing names them as
         // they are made. Named here with setNodeName, so a layout file can move them like the
@@ -1427,9 +1427,9 @@ public class Main extends Engine {
         layout.setNodeName(layoutBoxB,      "boxB");
         layout.setNodeName(layoutBoxC,      "boxC");
         layout.setNodeName(layoutBoxD,      "boxD");
-        layout.setNodeName(layoutTreeItemA, "treeItemA");
-        layout.setNodeName(layoutTreeItemB, "treeItemB");
-        layout.setNodeName(layoutFieldA,    "fieldA");
+        layout.setNodeName(layoutTreeItemA, "boxItemA");
+        layout.setNodeName(layoutTreeItemB, "boxItemB");
+        layout.setNodeName(layoutFieldA,    "boxStretch");
 
         // Step 3f-4c: the screen. ShellFiles hands over the layouts in the order they are
         // tried — the user's layouts/default.json, the installation's, and the factory layout, compiled
@@ -1442,7 +1442,7 @@ public class Main extends Engine {
         // a panel the layout names that code never registered, say.
         //
         // A theme's paths are made of names, and the layout's rows and columns have none, so
-        // they stay what they were: viewport.stopButton, inspector.nameField...
+        // they stay what they were: viewport.buttonStop, inspector.fieldName...
         // "default" unless -PlayoutFile=<name> says otherwise; -PtestShell uses the test layouts.
         com.aengine.aegis.AegisLayoutFile[] layouts =
             com.aengine.editor.ShellFiles.loadLayouts(System.getProperty("aengine.layout", "default"));

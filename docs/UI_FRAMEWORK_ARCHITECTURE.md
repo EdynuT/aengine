@@ -231,7 +231,7 @@ the file read and validated into a description (`AegisLayoutFile`), with the sam
 strict types as a theme — the report's machinery now shared by both, in `AegisFindings` —
 nothing on screen yet;
 **4c** — screens built from it, in two parts: **4c-1** ✅ — every widget named as it is made
-(`ae.button(viewport, "stopButton", "Stop")`), panels registered by code
+(`ae.button(viewport, "buttonStop", "Stop")`), panels registered by code
 (`aegis.screens().columnPanel("inspector")`, `rowPanel`), and the editor screen built from the
 factory layout (`FactoryLayout`, the format's own text, compiled into the editor) by
 `screens.build("editor", files...)` — the screen looks as it did, but its outer column and
@@ -256,14 +256,14 @@ removes or moves to another panel is a warning, never a lost layout. The user's 
 rewritten or deleted for an error: it is only not used that run, and the log says where and
 why — and which layout comes instead, as it happens: `Screen "editor" in …/default.json has
 errors, listed in its report; trying to apply <the installation's>`, or `applying factory
-layout` when the factory is next. A name placed twice says both lines: `widget "nameField" on
+layout` when the factory is next. A name placed twice says both lines: `widget "fieldName" on
 line 16 was already declared on line 15`.
 
 **A widget can be placed in any panel**, not only the one code made it in — the Stop button in
 the toolbar — by naming it in that panel's `"children"`. It is the same handle, so code that
-asks `ae.wasActivated(stopButton)` notices nothing; Tab follows its new place. Widget names are
+asks `ae.wasActivated(buttonStop)` notices nothing; Tab follows its new place. Widget names are
 therefore unique across panels, which `build` checks. A widget is **dressed by the panel code
-made it in** — `viewport.stopButton` wherever it stands — so moving it in a layout never
+made it in** — `viewport.buttonStop` wherever it stands — so moving it in a layout never
 changes its look, and a theme and a layout stay independent.
 
 **A row or column given no size takes its content's**: its children and the gaps between
@@ -470,7 +470,7 @@ moved: the text field being typed into is still focused when the menu closes. Th
 text only — binding it is the caller's, as with Swing's accelerator text. `wasActivated(item)`;
 `isMenuOpen`. Theme entries: `menu.text`, `.shortcut.text`, `.fill.selected`, `.text.selected`,
 `.title.fill.hover`, `.padding.x`, `.padding.y`, `.gap`, `.check.width`; a menu's items are reached
-by the title's name — `fileMenu.saveItem`. Mnemonics (Alt+F) wait for localisation, since the
+by the title's name — `menuFile.menuItemSave`. Mnemonics (Alt+F) wait for localisation, since the
 underlined letter depends on the language. The factory layout gains a `menu` panel above the
 toolbar, holding the scaffolding's bar.
 
@@ -1074,12 +1074,12 @@ at a time — so it allocates nothing.
 *Widgets* are `AegisWidgets` (step 3e), handed out by `aegis.widgets()`. What is worth
 recording:
 
-**One generic call per kind, not one per use.** `ae.button(parent, "playButton", "Play")`
+**One generic call per kind, not one per use.** `ae.button(parent, "buttonPlay", "Play")`
 creates a layout node, names it, marks it interactive and focusable, and records its kind and
 label in the widgets' own arrays — the same handle again. The caller asks
-`ae.wasActivated(playButton)` each frame; there are no callbacks and no object per widget.
+`ae.wasActivated(buttonPlay)` each frame; there are no callbacks and no object per widget.
 
-**Every widget is named as it is made.** The name — `"playButton"` — is what a theme or a
+**Every widget is named as it is made.** The name — `"buttonPlay"` — is what a theme or a
 layout file writes to reach it, and the label — `"Play"` — is what the user reads; the first
 stays put, the second may be translated. Making the name an argument rather than a later
 `setNodeName` means a widget cannot be left without one, so every widget can be dressed and
@@ -1263,7 +1263,7 @@ theme that loads — tolerance, not a feature the shipped themes use.
   "danger": "#C04040",
 
   "inspector.field.fill":     "#1A1D26",
-  "viewport.stopButton.fill": "@danger"
+  "viewport.buttonStop.fill": "@danger"
 }
 ```
 
@@ -1274,7 +1274,7 @@ A theme holds four kinds of entry:
 | Metadata | `name`, `description`, `format` | What the theme list shows, and which catalogue version the theme was written against. Not colours. |
 | Global | inside `"global"` | Applies everywhere: the **palette** (`accent`, `surface`, `text`…) and the look of each **kind** of widget (`button.fill` — every button). |
 | Local variable | a key **without** a dot, outside `global` | Paints nothing by itself; takes effect only where referenced as `@name`. |
-| Scoped rule | a key **with** a dot, outside `global` | A path of names, then a property. `panel.kind.property` — `inspector.field.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetName.property` — `viewport.stopButton.fill` — styles one widget. |
+| Scoped rule | a key **with** a dot, outside `global` | A path of names, then a property. `panel.kind.property` — `inspector.field.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetName.property` — `viewport.buttonStop.fill` — styles one widget. |
 
 The dot is what tells a local variable from a scoped rule, which is why local variables are
 one word (`danger`, `warning`). References say where they point: `@global.accent` reads the
@@ -1282,7 +1282,7 @@ global, `@danger` a local variable.
 
 **Precedence:** one widget's own rule > panel and kind > global > the catalogue's default.
 
-**Paths are made of names given in code** — `layout.setNodeName(stopButton, "stopButton")` —
+**Paths are made of names given in code** — `layout.setNodeName(buttonStop, "buttonStop")` —
 never of handles, which shift whenever a widget is added before another. A name is chosen by
 whoever writes the code, not generated, so it reads as what the thing is and stays the same
 from one run to the next. Containers without a name are left out of the path, so wrapping
@@ -1326,10 +1326,10 @@ hang.
           { "type": "panel", "panel": "hierarchy", "width": 240 },
           { "type": "panel", "panel": "viewport",  "grow": 1 },
           { "type": "panel", "panel": "inspector", "width": 300, "children": [
-            { "type": "widget", "widget": "nameField" },
+            { "type": "widget", "widget": "fieldName" },
             { "type": "row", "gap": 12, "children": [
-              { "type": "widget", "widget": "showGridCheckbox" },
-              { "type": "widget", "widget": "snapCheckbox" }
+              { "type": "widget", "widget": "checkboxShowGrid" },
+              { "type": "widget", "widget": "checkboxSnap" }
             ]}
           ]}
         ]}
@@ -1363,7 +1363,7 @@ Five kinds of node, mirroring `AegisLayout`:
 | `row` | Children side by side, left to right |
 | `column` | Children stacked, top to bottom |
 | `panel` | One panel's slot, by the name its code registered — `"panel": "inspector"`. Optionally `"children"`: how the panel's own widgets are ordered and grouped |
-| `widget` | Inside a panel's `"children"` only: a widget, by its name — `"widget": "nameField"` — one of that panel's, or one moved in from another panel |
+| `widget` | Inside a panel's `"children"` only: a widget, by its name — `"widget": "fieldName"` — one of that panel's, or one moved in from another panel |
 | `tabs` | Several panels sharing a slot, one shown at a time, in the order listed |
 
 **Inside a panel, the file arranges and code creates.** A panel's widgets are made in code,
@@ -1639,7 +1639,8 @@ spaces in the files that ship. File names are lower case with hyphens between wo
 `dark.json`, `default.json`, `high-contrast.json`. Locale files are the exception, named by
 their BCP 47 tag, the form Java's `Locale.toLanguageTag()` gives: `en-US.json`, `pt-BR.json`.
 
-**Names given in code.** Letters and digits only, camelCase, starting with a letter.
+**Names given in code.** ASCII letters and digits only, camelCase, starting with a letter;
+the layout refuses anything else.
 
 - A **panel** is named for what it shows, one word where one will do: `hierarchy`,
   `inspector`, `assetBrowser`.
@@ -1666,6 +1667,9 @@ their BCP 47 tag, the form Java's `Locale.toLanguageTag()` gives: `en-US.json`, 
 | Menu, or a submenu | `menu` | `menuFile`, `menuRecent` | `menu.*` |
 | Menu item, or a check item | `menuItem` | `menuItemSave` | `menu.*` |
 | Dialog | `dialog` | `dialogAbout` | `dialog.*` |
+
+A plain box the code draws itself, not a widget, is named the same way with `box` —
+`boxStretch` — though nothing checks it.
 
 A kind is one lower-case word and a widget's name never is, so a scoped rule can tell them
 apart: `inspector.button.fill` dresses every button in the inspector, `inspector.buttonSave.fill`

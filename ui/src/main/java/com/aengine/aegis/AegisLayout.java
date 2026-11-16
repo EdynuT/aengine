@@ -518,7 +518,7 @@ public final class AegisLayout {
      * Names a node, so a theme can reach it.
      *
      * <p>A theme finds a widget by the path of names from the top of the tree down to it —
-     * {@code viewport.stopButton} — never by handle, since handles shift whenever a node is
+     * {@code viewport.buttonStop} — never by handle, since handles shift whenever a node is
      * added before another. Nodes without a name are left out of the path: wrapping part of a
      * panel in a new row changes no path, so no theme breaks.</p>
      *
@@ -526,8 +526,8 @@ public final class AegisLayout {
      * every theme rule that named it; do it as deliberately as renaming a public method.</p>
      *
      * @param node the handle
-     * @param name letters, digits and underscores, starting with a letter — no dots, since a
-     *             dot is what separates the parts of a path
+     * @param name ASCII letters and digits, starting with a letter, in camelCase — no dots,
+     *             since a dot is what separates the parts of a path
      * @throws IllegalArgumentException for a name that could not appear in a path
      */
     public void setNodeName(int node, String name) {
@@ -539,8 +539,8 @@ public final class AegisLayout {
     static void checkNodeName(String name) {
         if (!isValidNodeName(name)) {
             throw new IllegalArgumentException(
-                "\"" + name + "\" cannot be a node name: use letters, digits and underscores, "
-                + "starting with a letter. A dot would split it into two parts of a theme path.");
+                "\"" + name + "\" cannot be a node name: use ASCII letters and digits, starting with a letter, "
+                + "in camelCase. A dot would split it into two parts of a theme path.");
         }
     }
 
@@ -553,18 +553,23 @@ public final class AegisLayout {
     public String nodeName(int node) { return name[node]; }
 
     /**
-     * Whether a name is usable as a node's name: a letter, then letters, digits or underscores.
+     * Whether a name is usable as a node's name: an ASCII letter, then ASCII letters or digits.
+     * The same names in every file, so a theme, a layout and a locale write them alike.
      *
      * @param name the candidate
      * @return {@code true} if {@link #setNodeName} would accept it
      */
     public static boolean isValidNodeName(String name) {
-        if (name == null || name.isEmpty() || !Character.isLetter(name.charAt(0))) return false;
+        if (name == null || name.isEmpty() || !isAsciiLetter(name.charAt(0))) return false;
         for (int i = 1; i < name.length(); i++) {
             char c = name.charAt(i);
-            if (!Character.isLetterOrDigit(c) && c != '_') return false;
+            if (!isAsciiLetter(c) && (c < '0' || c > '9')) return false;
         }
         return true;
+    }
+
+    private static boolean isAsciiLetter(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
     }
 
     /**

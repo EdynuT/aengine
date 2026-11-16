@@ -142,7 +142,7 @@ public final class AegisWidgets {
 
     /**
      * The path a theme reaches each widget by, ending in its own name: the names above it when
-     * it was made — {@code viewport, stopButton}. Kept from creation rather than read from the
+     * it was made — {@code viewport, buttonStop}. Kept from creation rather than read from the
      * tree, so a layout that moves the widget to another panel does not change how it is dressed.
      */
     private final List<String>[] themePath;
@@ -484,7 +484,7 @@ public final class AegisWidgets {
      * field.</p>
      *
      * <p>A widget is reached by the path it was made with — the panel code made it in, then its
-     * name: {@code viewport.stopButton} — wherever a layout file has since moved it. A theme
+     * name: {@code viewport.buttonStop} — wherever a layout file has since moved it. A theme
      * and a layout are thereby independent: moving the Stop button to the toolbar keeps it red,
      * and the toolbar's {@code toolbar.button} rules do not reach it.</p>
      *
@@ -644,13 +644,14 @@ public final class AegisWidgets {
      * A font must already be loaded, since the label is measured here.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "stopButton"};
+     * @param name   its name, which a theme or a layout file writes — {@code "buttonStop"};
      *               see {@link AegisLayout#setNodeName}
      * @param text   the label; kept, so pass a string that does not change
      * @return its handle — a layout node, usable with the layout and the tree like any other
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int button(int parent, String name, String text) {
+        checkWidgetName(name, "button", "a button");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
@@ -671,13 +672,14 @@ public final class AegisWidgets {
      * the line height plus {@code checkboxPaddingY} above and below. Interactive and focusable.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "snapCheckbox"};
+     * @param name   its name, which a theme or a layout file writes — {@code "checkboxSnap"};
      *               see {@link AegisLayout#setNodeName}
      * @param text   the label; kept, so pass a string that does not change
      * @return its handle
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int checkbox(int parent, String name, String text) {
+        checkWidgetName(name, "checkbox", "a checkbox");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
@@ -716,7 +718,7 @@ public final class AegisWidgets {
      * checkbox line up in a row.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "nameLabel"};
+     * @param name   its name, which a theme or a layout file writes — {@code "labelName"};
      *               see {@link AegisLayout#setNodeName}
      * @param text   the text; kept, so pass a string that does not change, and use
      *               {@link #setLabel} to show another
@@ -724,6 +726,7 @@ public final class AegisWidgets {
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int label(int parent, String name, String text) {
+        checkWidgetName(name, "label", "a label");
         int node = namedBox(parent, name);
         kind[node]    = LABEL;
         label[node]   = text;
@@ -753,12 +756,13 @@ public final class AegisWidgets {
      * parent stacks, and nothing across. Neither clickable nor focusable.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "settingsSeparator"};
+     * @param name   its name, which a theme or a layout file writes — {@code "separatorSettings"};
      *               see {@link AegisLayout#setNodeName}
      * @return its handle
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int separator(int parent, String name) {
+        checkWidgetName(name, "separator", "a separator");
         int node = namedBox(parent, name);
         kind[node]    = SEPARATOR;
         styleOf[node] = null;
@@ -780,7 +784,7 @@ public final class AegisWidgets {
      * Shift + arrow moves {@value #LARGE_STEP} steps, Home and End go to the ends.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "opacitySlider"};
+     * @param name   its name, which a theme or a layout file writes — {@code "sliderOpacity"};
      *               see {@link AegisLayout#setNodeName}
      * @param min    the value at the left end
      * @param max    the value at the right end
@@ -789,6 +793,7 @@ public final class AegisWidgets {
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int slider(int parent, String name, float min, float max, float value) {
+        checkWidgetName(name, "slider", "a slider");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
@@ -846,7 +851,7 @@ public final class AegisWidgets {
      * says. Asks for {@code spinner.width} and a text field's height.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "countSpinner"};
+     * @param name   its name, which a theme or a layout file writes — {@code "spinnerCount"};
      *               see {@link AegisLayout#setNodeName}
      * @param min    the least it can be
      * @param max    the most it can be
@@ -980,7 +985,7 @@ public final class AegisWidgets {
      * editing then allocates nothing at all.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "notesField"};
+     * @param name   its name, which a theme or a layout file writes — {@code "fieldNotes"};
      *               see {@link AegisLayout#setNodeName}
      * @return its handle
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
@@ -1002,7 +1007,7 @@ public final class AegisWidgets {
      * in view. Interactive and focusable.</p>
      *
      * @param parent    the row or column to add it to
-     * @param name      its name, which a theme or a layout file writes — {@code "nameField"};
+     * @param name      its name, which a theme or a layout file writes — {@code "fieldName"};
      *                  see {@link AegisLayout#setNodeName}
      * @param maxLength the most characters it will hold
      * @return its handle
@@ -1027,7 +1032,7 @@ public final class AegisWidgets {
      * <p>Asks for {@code textFieldWidth} and that many lines' height plus padding.</p>
      *
      * @param parent       the row or column to add it to
-     * @param name         its name, which a theme or a layout file writes — {@code "descriptionBox"};
+     * @param name         its name, which a theme or a layout file writes — {@code "fieldDescription"};
      *                     see {@link AegisLayout#setNodeName}
      * @param visibleLines how many lines tall it is
      * @return its handle
@@ -1054,6 +1059,8 @@ public final class AegisWidgets {
 
     /** What every text field and text box form does: its kind, its height in lines, a limit, and the room the buffer starts with. */
     private int textWidget(int parent, String name, byte textKind, int visibleLines, int maxLength, int startCapacity) {
+        if (textKind == SPINNER) checkWidgetName(name, "spinner", "a spinner");
+        else                     checkWidgetName(name, "field", "a text field");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
@@ -1068,6 +1075,30 @@ public final class AegisWidgets {
         styleOf[node]           = null;
         fitToContent(node);
         return node;
+    }
+
+    /**
+     * Refuses a widget's name that does not start with its kind — {@code buttonStop}, never
+     * {@code stopButton} or {@code button} alone; see "Conventions" in §7 of
+     * {@code docs/UI_FRAMEWORK_ARCHITECTURE.md}. The prefix is the word a theme dresses the
+     * kind by, so the name says which entries dress it. Checked before anything is made.
+     */
+    private static void checkWidgetName(String name, String prefix, String what) {
+        AegisLayout.checkNodeName(name);
+        boolean fits = startsWithPrefix(name, prefix);
+        // A menu's name may not read as one of the two kinds that share its prefix.
+        if (fits && prefix.equals("menu")) fits = !startsWithPrefix(name, "menuItem") && !startsWithPrefix(name, "menuBar");
+        if (!fits) {
+            throw new IllegalArgumentException("\"" + name + "\" cannot name " + what + ": its name starts with \""
+                + prefix + "\", then says what it is for with a capital — \"" + prefix + "Save\".");
+        }
+    }
+
+    /** Whether {@code name} is {@code prefix} followed by more, starting with a capital or a digit. */
+    private static boolean startsWithPrefix(String name, String prefix) {
+        int n = prefix.length();
+        return name.length() > n && name.startsWith(prefix)
+            && ((name.charAt(n) >= 'A' && name.charAt(n) <= 'Z') || (name.charAt(n) >= '0' && name.charAt(n) <= '9'));
     }
 
     /**
@@ -1111,14 +1142,14 @@ public final class AegisWidgets {
      * layout hides.</p>
      *
      * @param parent the row or column to add it to, or {@link AegisLayout#NONE}
-     * @param name   its name, which a theme writes — {@code "sceneTabs"}, dressed by
-     *               {@code hierarchy.sceneTabs.fill.selected} and the other {@code tabs}
+     * @param name   its name, which a theme writes — {@code "tabsScene"}, dressed by
+     *               {@code hierarchy.tabsScene.fill.selected} and the other {@code tabs}
      *               entries; see {@link AegisLayout#setNodeName}
      * @return its handle
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int tabbedPane(int parent, String name) {
-        AegisLayout.checkNodeName(name);
+        checkWidgetName(name, "tabs", "a tabbed pane");
         int pane = tabbedPane(parent);
         layout.setNodeName(pane, name);
         int bar = layout.firstChild(pane);
@@ -1281,8 +1312,8 @@ public final class AegisWidgets {
      * Where the divider is is kept in memory only; a layout file writing it back is Phase 4's.</p>
      *
      * @param parent     the row or column to add it to, or {@link AegisLayout#NONE}
-     * @param name       its name, which a theme writes — {@code "viewSplit"}, dressed by
-     *                   {@code viewport.viewSplit.line} and the other {@code split} entries;
+     * @param name       its name, which a theme writes — {@code "splitView"}, dressed by
+     *                   {@code viewport.splitView.line} and the other {@code split} entries;
      *                   see {@link AegisLayout#setNodeName}
      * @param sideBySide {@code true} for left and right, {@code false} for top and bottom
      * @param first      the left or top side: any row, column or box; taken from where it hangs
@@ -1292,7 +1323,7 @@ public final class AegisWidgets {
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int splitPane(int parent, String name, boolean sideBySide, int first, int second, float location) {
-        AegisLayout.checkNodeName(name);
+        checkWidgetName(name, "split", "a split pane");
         int split = sideBySide ? layout.row(parent) : layout.column(parent);
         layout.setNodeName(split, name);
         if (sideBySide) layout.setAlignY(split, AegisLayout.Align.STRETCH);
@@ -1394,11 +1425,12 @@ public final class AegisWidgets {
      * view as it moves.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "sceneTree"}
+     * @param name   its name, which a theme or a layout file writes — {@code "treeScene"}
      * @return its handle
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int treeView(int parent, String name) {
+        checkWidgetName(name, "tree", "a tree");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
@@ -1876,13 +1908,14 @@ public final class AegisWidgets {
      * <p>Sized to its longest item, plus room for its arrow.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "shadingCombo"}
+     * @param name   its name, which a theme or a layout file writes — {@code "comboShading"}
      * @param items  what can be chosen, in order; kept, so pass strings that do not change
      * @return its handle
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses,
      *                                  or no items
      */
     public int comboBox(int parent, String name, String... items) {
+        checkWidgetName(name, "combo", "a combo box");
         if (items.length == 0) throw new IllegalArgumentException("A combo box needs at least one item.");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
@@ -2079,12 +2112,12 @@ public final class AegisWidgets {
      * the menus are reached by F10, as in Swing, and focus stays where it was.</p>
      *
      * @param parent the row or column to add it to
-     * @param name   its name, which a theme or a layout file writes — {@code "mainMenu"}
+     * @param name   its name, which a theme or a layout file writes — {@code "menuBarMain"}
      * @return its handle, a row
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int menuBar(int parent, String name) {
-        AegisLayout.checkNodeName(name);
+        checkWidgetName(name, "menuBar", "a menu bar");
         int bar = layout.row(parent);
         layout.setNodeName(bar, name);
         layout.setAlignY(bar, AegisLayout.Align.STRETCH);
@@ -2097,13 +2130,14 @@ public final class AegisWidgets {
      * A menu: a title on a menu bar, and the menu it opens. Add items to the handle returned.
      *
      * @param bar   the menu bar
-     * @param name  the title's name, which a theme writes — {@code "fileMenu"}; the menu's items
-     *              are reached as {@code fileMenu.saveItem}
+     * @param name  the title's name, which a theme writes — {@code "menuFile"}; the menu's items
+     *              are reached as {@code menuFile.menuItemSave}
      * @param title what the title says — {@code "File"}; kept
      * @return the menu, a column hanging nowhere until it is opened: give it to
      *         {@link #menuItem}, {@link #menuCheckItem}, {@link #subMenu} or {@link #separator}
      */
     public int menu(int bar, String name, String title) {
+        checkWidgetName(name, "menu", "a menu");
         int node = namedBox(bar, name);
         tree.setInteractive(node, true);
         tree.setKeepsFocus(node, true);
@@ -2133,7 +2167,7 @@ public final class AegisWidgets {
      * An item in a menu. {@link #wasActivated} reports it on the frame it is chosen.
      *
      * @param menu the menu
-     * @param name its name — {@code "saveItem"}
+     * @param name its name — {@code "menuItemSave"}
      * @param text what it says — {@code "Save"}; kept
      * @return its handle
      */
@@ -2152,6 +2186,12 @@ public final class AegisWidgets {
      * @return its handle
      */
     public int menuItem(int menu, String name, String text, String shortcut) {
+        checkWidgetName(name, "menuItem", "a menu item");
+        return item(menu, name, text, shortcut);
+    }
+
+    /** An item of a menu, whatever its name says it is: an item, a check item, a submenu's. */
+    private int item(int menu, String name, String text, String shortcut) {
         int node = namedBox(menu, name);
         tree.setInteractive(node, true);
         tree.setKeepsFocus(node, true);
@@ -2175,7 +2215,8 @@ public final class AegisWidgets {
      * @return its handle
      */
     public int menuCheckItem(int menu, String name, String text) {
-        int node = menuItem(menu, name, text, null);
+        checkWidgetName(name, "menuItem", "a menu item");
+        int node = item(menu, name, text, null);
         itemChecks[node] = true;
         checked[node]    = false;
         return node;
@@ -2190,7 +2231,8 @@ public final class AegisWidgets {
      * @return the submenu, to add items to
      */
     public int subMenu(int menu, String name, String text) {
-        int item = menuItem(menu, name, text, null);
+        checkWidgetName(name, "menu", "a submenu");
+        int item = item(menu, name, text, null);
         int sub = newMenu(name, item);
         itemSubMenu[item] = sub;
         fitToContent(item);
@@ -2393,14 +2435,14 @@ public final class AegisWidgets {
      * <p>The handle is a column — the title bar first, then whatever is added — with its
      * widgets stretched across, so put buttons side by side in a row of their own.</p>
      *
-     * @param name  its name, which a theme writes — {@code "aboutDialog"}, dressed by
-     *              {@code aboutDialog.dialog.title} and {@code aboutDialog.button.fill}
+     * @param name  its name, which a theme writes — {@code "dialogAbout"}, dressed by
+     *              {@code dialogAbout.dialog.title.text} and {@code dialogAbout.button.fill}
      * @param title what its title bar says; kept
      * @return its handle, a column hanging nowhere
      * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
      */
     public int dialog(String name, String title) {
-        AegisLayout.checkNodeName(name);
+        checkWidgetName(name, "dialog", "a dialog");
         int dialog = layout.column(AegisLayout.NONE);
         layout.setNodeName(dialog, name);
         layout.setPadding(dialog, 12.0f);

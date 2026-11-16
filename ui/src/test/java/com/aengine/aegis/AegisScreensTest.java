@@ -29,9 +29,9 @@ class AegisScreensTest {
 
     private final int toolbar  = screens.rowPanel("toolbar");
     private final int viewport = screens.columnPanel("viewport");
-    private final int save     = ae.button(toolbar, "saveButton", "Save");
-    private final int play     = ae.button(viewport, "playButton", "Play");
-    private final int stop     = ae.button(viewport, "stopButton", "Stop");
+    private final int save     = ae.button(toolbar, "buttonSave", "Save");
+    private final int play     = ae.button(viewport, "buttonPlay", "Play");
+    private final int stop     = ae.button(viewport, "buttonStop", "Stop");
 
     @Test
     void aScreenIsBuiltFromTheFileWithThePanelsCodeMade() throws Exception {
@@ -49,8 +49,8 @@ class AegisScreensTest {
             { "name": "Moved", "format": 1,
               "screens": { "editor": { "root": { "type": "column", "children": [
                 { "type": "panel", "panel": "toolbar", "children": [
-                  { "type": "widget", "widget": "stopButton", "width": 140 },
-                  { "type": "widget", "widget": "saveButton" }
+                  { "type": "widget", "widget": "buttonStop", "width": 140 },
+                  { "type": "widget", "widget": "buttonSave" }
                 ]},
                 { "type": "panel", "panel": "viewport", "children": [ ] }
               ]}}}
@@ -72,8 +72,8 @@ class AegisScreensTest {
               "screens": { "editor": { "root": { "type": "column", "children": [
                 { "type": "panel", "panel": "toolbar" },
                 { "type": "panel", "panel": "viewport", "children": [
-                  { "type": "widget", "widget": "playButton", "hidden": true },
-                  { "type": "widget", "widget": "stopButton" }
+                  { "type": "widget", "widget": "buttonPlay", "hidden": true },
+                  { "type": "widget", "widget": "buttonStop" }
                 ]}
               ]}}}
             }

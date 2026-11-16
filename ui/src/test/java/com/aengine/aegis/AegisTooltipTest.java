@@ -16,9 +16,9 @@ class AegisTooltipTest {
     private int play, stop, plain;
 
     private void build() {
-        play  = ae.button(shell.root, "playButton", "Play");
-        stop  = ae.button(shell.root, "stopButton", "Stop");
-        plain = ae.button(shell.root, "plainButton", "No tooltip");
+        play  = ae.button(shell.root, "buttonPlay", "Play");
+        stop  = ae.button(shell.root, "buttonStop", "Stop");
+        plain = ae.button(shell.root, "buttonPlain", "No tooltip");
         ae.setTooltip(play, "Starts the scene");
         ae.setTooltip(stop, "Stops it, and puts every entity back where it was");
         shell.frame();
@@ -92,7 +92,7 @@ class AegisTooltipTest {
     void aNodeWithoutOneShowsTheNearestAbove() {
         int pane = layout.column(shell.root);
         ae.setTooltip(pane, "The inspector");
-        int inner = ae.label(pane, "innerLabel", "A label");
+        int inner = ae.label(pane, "labelInner", "A label");
         shell.frame();
         rest(inner, 800);
         assertEquals(pane, ae.tooltipShown());

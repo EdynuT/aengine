@@ -12,9 +12,9 @@
 
   "inspector.field.fill": "#141820",
 
-  "viewport.stopButton.fill":       "@danger",
-  "viewport.stopButton.fill.hover": "#D05858",
+  "viewport.buttonStop.fill":       "@danger",
+  "viewport.buttonStop.fill.hover": "#D05858",
 
-  "inspector.nameField.border":         "@violet",
-  "inspector.nameField.border.focused": "@violet"
+  "inspector.fieldName.border":         "@violet",
+  "inspector.fieldName.border.focused": "@violet"
 }

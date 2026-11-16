@@ -29,15 +29,15 @@ class AegisThemeTest {
     @Test
     void aScopedRuleDressesOnlyTheWidgetItNames() throws Exception {
         int viewport = screens.columnPanel("viewport");
-        int play = ae.button(viewport, "playButton", "Play");
-        int stop = ae.button(viewport, "stopButton", "Stop");
+        int play = ae.button(viewport, "buttonPlay", "Play");
+        int stop = ae.button(viewport, "buttonStop", "Stop");
         shell.layout.attach(viewport, shell.root);
 
         ae.applyTheme(theme("""
             { "name": "Test", "format": 1,
               "global": { "button.padding.x": 20 },
               "danger": "#FF0000",
-              "viewport.stopButton.fill": "@danger"
+              "viewport.buttonStop.fill": "@danger"
             }
             """), shell.root);
 
@@ -51,14 +51,14 @@ class AegisThemeTest {
     void aWidgetKeepsItsDressingWhenALayoutMovesIt() throws Exception {
         int viewport = screens.columnPanel("viewport");
         int toolbar  = screens.rowPanel("toolbar");
-        int stop = ae.button(viewport, "stopButton", "Stop");
+        int stop = ae.button(viewport, "buttonStop", "Stop");
         shell.layout.attach(viewport, shell.root);
         shell.layout.attach(toolbar, shell.root);
         shell.layout.attach(stop, toolbar);
 
         ae.applyTheme(theme("""
             { "name": "Test", "format": 1,
-              "viewport.stopButton.fill": "#FF0000",
+              "viewport.buttonStop.fill": "#FF0000",
               "toolbar.button.fill": "#00FF00"
             }
             """), shell.root);
@@ -68,7 +68,7 @@ class AegisThemeTest {
 
     @Test
     void aThemeWithMorePaddingMakesAButtonLarger() throws Exception {
-        int play = ae.button(shell.root, "playButton", "Play");
+        int play = ae.button(shell.root, "buttonPlay", "Play");
         float before = shell.layout.requestedWidth(play);
 
         ae.applyTheme(theme("""

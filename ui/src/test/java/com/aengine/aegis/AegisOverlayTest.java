@@ -20,10 +20,10 @@ class AegisOverlayTest {
 
     /** A button at the top left of the window, and a popup with a button of its own. */
     private void build() {
-        below = ae.button(shell.root, "belowButton", "Below the popup");
+        below = ae.button(shell.root, "buttonBelow", "Below the popup");
         popup = layout.column(AegisLayout.NONE);
         layout.setPadding(popup, 6.0f);
-        inPopup = ae.button(popup, "popupButton", "In the popup");
+        inPopup = ae.button(popup, "buttonPopup", "In the popup");
         shell.frame();
     }
 
@@ -60,7 +60,7 @@ class AegisOverlayTest {
     @Test
     void aPressOutsideClosesItAndStillReachesWhatItLandedOn() {
         build();
-        int far = ae.button(shell.root, "farButton", "Far");
+        int far = ae.button(shell.root, "buttonFar", "Far");
         layout.setSize(far, 100.0f, 30.0f);
         shell.frame();
         ae.showPopup(popup, 400.0f, 300.0f);
@@ -77,7 +77,7 @@ class AegisOverlayTest {
         shell.tab();
         assertEquals(below, shell.tree.focused());
         int second = layout.column(AegisLayout.NONE);
-        ae.label(second, "secondLabel", "On top");
+        ae.label(second, "labelSecond", "On top");
         ae.showPopup(popup, 100.0f, 100.0f);
         ae.showPopup(second, 150.0f, 150.0f);
         shell.frame();
@@ -94,7 +94,7 @@ class AegisOverlayTest {
     void closingOneClosesTheOnesOnTopOfIt() {
         build();
         int second = layout.column(AegisLayout.NONE);
-        ae.label(second, "secondLabel", "On top");
+        ae.label(second, "labelSecond", "On top");
         ae.showPopup(popup, 100.0f, 100.0f);
         ae.showPopup(second, 150.0f, 150.0f);
         ae.closeOverlay(popup);
@@ -107,7 +107,7 @@ class AegisOverlayTest {
         int pane = layout.column(shell.root);
         layout.setSize(pane, 300.0f, 100.0f);
         layout.setScrollable(pane, true);
-        for (int i = 0; i < 10; i++) ae.button(pane, "b" + i, "Button " + i);
+        for (int i = 0; i < 10; i++) ae.button(pane, "button" + i, "Button " + i);
         popup = layout.column(AegisLayout.NONE);
         layout.setSize(popup, 200.0f, 80.0f);
         shell.frame();

@@ -156,12 +156,14 @@ class AegisLayoutTest {
     }
 
     @Test
-    void namesAreLettersDigitsAndUnderscores() {
+    void namesAreAsciiLettersAndDigits() {
         int row = layout.row(AegisLayout.NONE);
-        layout.setNodeName(row, "tool_bar2");
-        assertEquals("tool_bar2", layout.nodeName(row));
+        layout.setNodeName(row, "toolBar2");
+        assertEquals("toolBar2", layout.nodeName(row));
         assertThrows(IllegalArgumentException.class, () -> layout.setNodeName(row, "tool.bar"));
         assertThrows(IllegalArgumentException.class, () -> layout.setNodeName(row, "2bar"));
+        assertThrows(IllegalArgumentException.class, () -> layout.setNodeName(row, "tool_bar"));
+        assertThrows(IllegalArgumentException.class, () -> layout.setNodeName(row, "barração"));
     }
 
     private int scrollingColumn() {

@@ -18,7 +18,7 @@ class AegisComboBoxTest {
     private int combo;
 
     private void build() {
-        combo = ae.comboBox(shell.root, "shadingCombo", "Lit", "Unlit", "Wireframe", "Normals");
+        combo = ae.comboBox(shell.root, "comboShading", "Lit", "Unlit", "Wireframe", "Normals");
         shell.frame();
     }
 
@@ -121,7 +121,7 @@ class AegisComboBoxTest {
     @Test
     void openTheKeysMoveThroughTheListAndEnterChooses() {
         build();
-        ae.button(shell.root, "otherButton", "Other");
+        ae.button(shell.root, "buttonOther", "Other");
         shell.tab();
         shell.key(Keys.DOWN, Keys.MOD_ALT);
         assertTrue(ae.isComboOpen(combo));

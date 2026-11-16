@@ -15,8 +15,8 @@ class AegisMenuTest {
     private final AegisLayout  layout = shell.layout;
     private final AegisWidgets ae     = shell.ae;
 
-    private int field, fileMenu, viewMenu, recentMenu;
-    private int newItem, saveItem, recentItem, sceneOne, quitItem, gridItem;
+    private int field, menuFile, menuView, recentMenu;
+    private int menuItemNew, menuItemSave, menuRecent, menuItemSceneOne, menuItemQuit, menuItemGrid;
 
     /**
      * File: New, Save (Ctrl+S), Recent ▸ [Scene one, Scene two], —, Quit
@@ -24,19 +24,19 @@ class AegisMenuTest {
      * and a text field below the bar, with focus.
      */
     private void build() {
-        int bar = ae.menuBar(shell.root, "mainMenu");
-        fileMenu   = ae.menu(bar, "fileMenu", "File");
-        newItem    = ae.menuItem(fileMenu, "newItem", "New");
-        saveItem   = ae.menuItem(fileMenu, "saveItem", "Save", "Ctrl+S");
-        recentMenu = ae.subMenu(fileMenu, "recentItem", "Recent");
-        recentItem = layout.lastChild(fileMenu);
-        sceneOne   = ae.menuItem(recentMenu, "sceneOne", "Scene one");
-        ae.menuItem(recentMenu, "sceneTwo", "Scene two");
-        ae.separator(fileMenu, "fileSeparator");
-        quitItem   = ae.menuItem(fileMenu, "quitItem", "Quit");
-        viewMenu   = ae.menu(bar, "viewMenu", "View");
-        gridItem   = ae.menuCheckItem(viewMenu, "gridItem", "Show grid");
-        field = ae.textField(shell.root, "nameField");
+        int bar = ae.menuBar(shell.root, "menuBarMain");
+        menuFile   = ae.menu(bar, "menuFile", "File");
+        menuItemNew    = ae.menuItem(menuFile, "menuItemNew", "New");
+        menuItemSave   = ae.menuItem(menuFile, "menuItemSave", "Save", "Ctrl+S");
+        recentMenu = ae.subMenu(menuFile, "menuRecent", "Recent");
+        menuRecent = layout.lastChild(menuFile);
+        menuItemSceneOne   = ae.menuItem(recentMenu, "menuItemSceneOne", "Scene one");
+        ae.menuItem(recentMenu, "menuItemSceneTwo", "Scene two");
+        ae.separator(menuFile, "separatorFile");
+        menuItemQuit   = ae.menuItem(menuFile, "menuItemQuit", "Quit");
+        menuView   = ae.menu(bar, "menuView", "View");
+        menuItemGrid   = ae.menuCheckItem(menuView, "menuItemGrid", "Show grid");
+        field = ae.textField(shell.root, "fieldName");
         shell.frame();
         shell.tab();
         assertEquals(field, shell.tree.focused());
@@ -53,73 +53,73 @@ class AegisMenuTest {
     @Test
     void aPressOnATitleOpensItsMenuBelowAndAClickActivatesAnItem() {
         build();
-        int file = ae.menuTitle(fileMenu);
+        int file = ae.menuTitle(menuFile);
         shell.pointerOn(file);
         pressAndRelease();
-        assertTrue(ae.isMenuOpen(fileMenu));
-        assertEquals(layout.y(file) + layout.height(file), layout.y(fileMenu));
+        assertTrue(ae.isMenuOpen(menuFile));
+        assertEquals(layout.y(file) + layout.height(file), layout.y(menuFile));
         assertEquals(field, shell.tree.focused(), "the menus leave focus where it was");
 
-        shell.pointerOn(saveItem);
+        shell.pointerOn(menuItemSave);
         shell.frame();
-        assertEquals(saveItem, ae.menuPointedAt(fileMenu));
+        assertEquals(menuItemSave, ae.menuPointedAt(menuFile));
         pressAndRelease();
-        assertFalse(ae.isMenuOpen(fileMenu));
+        assertFalse(ae.isMenuOpen(menuFile));
         assertEquals(field, shell.tree.focused());
     }
 
     @Test
     void pressingATitleAndLettingGoOverAnItemActivatesIt() {
         build();
-        shell.pointerOn(ae.menuTitle(fileMenu));
+        shell.pointerOn(ae.menuTitle(menuFile));
         shell.frame();
         shell.press();
         shell.frame();
-        shell.pointerOn(newItem);
+        shell.pointerOn(menuItemNew);
         shell.frame();
         shell.release();
         shell.frame();
-        assertTrue(ae.wasActivated(newItem));
-        assertFalse(ae.isMenuOpen(fileMenu));
+        assertTrue(ae.wasActivated(menuItemNew));
+        assertFalse(ae.isMenuOpen(menuFile));
     }
 
     @Test
     void aSecondPressClosesAndMovingToAnotherTitleSwitches() {
         build();
-        int file = ae.menuTitle(fileMenu);
+        int file = ae.menuTitle(menuFile);
         shell.pointerOn(file);
         pressAndRelease();
-        assertTrue(ae.isMenuOpen(fileMenu));
+        assertTrue(ae.isMenuOpen(menuFile));
 
-        shell.pointerOn(ae.menuTitle(viewMenu));
+        shell.pointerOn(ae.menuTitle(menuView));
         shell.frame();
-        assertTrue(ae.isMenuOpen(viewMenu));
-        assertFalse(ae.isMenuOpen(fileMenu));
+        assertTrue(ae.isMenuOpen(menuView));
+        assertFalse(ae.isMenuOpen(menuFile));
 
         pressAndRelease();
-        assertFalse(ae.isMenuOpen(viewMenu), "a press on the open menu's title closes it");
+        assertFalse(ae.isMenuOpen(menuView), "a press on the open menu's title closes it");
     }
 
     @Test
     void pointingAtASubmenuItemOpensItBeside() {
         build();
-        shell.pointerOn(ae.menuTitle(fileMenu));
+        shell.pointerOn(ae.menuTitle(menuFile));
         pressAndRelease();
-        shell.pointerOn(recentItem);
+        shell.pointerOn(menuRecent);
         shell.frame();
         assertTrue(ae.isMenuOpen(recentMenu));
-        assertTrue(layout.x(recentMenu) >= layout.x(fileMenu) + layout.width(fileMenu) - 2.0f);
+        assertTrue(layout.x(recentMenu) >= layout.x(menuFile) + layout.width(menuFile) - 2.0f);
 
-        shell.pointerOn(sceneOne);
+        shell.pointerOn(menuItemSceneOne);
         pressAndRelease();
-        assertFalse(ae.isMenuOpen(fileMenu));
+        assertFalse(ae.isMenuOpen(menuFile));
         assertFalse(ae.isMenuOpen(recentMenu));
 
-        shell.pointerOn(ae.menuTitle(fileMenu));
+        shell.pointerOn(ae.menuTitle(menuFile));
         pressAndRelease();
-        shell.pointerOn(recentItem);
+        shell.pointerOn(menuRecent);
         shell.frame();
-        shell.pointerOn(newItem);
+        shell.pointerOn(menuItemNew);
         shell.frame();
         assertFalse(ae.isMenuOpen(recentMenu), "pointing at another item closes the submenu");
     }
@@ -128,30 +128,30 @@ class AegisMenuTest {
     void f10AndTheArrowsWorkTheMenusFromTheKeyboard() {
         build();
         shell.key(Keys.F10);
-        assertTrue(ae.isMenuOpen(fileMenu));
-        assertEquals(newItem, ae.menuPointedAt(fileMenu), "opened by the keyboard, it points at the first item");
+        assertTrue(ae.isMenuOpen(menuFile));
+        assertEquals(menuItemNew, ae.menuPointedAt(menuFile), "opened by the keyboard, it points at the first item");
 
         shell.key(Keys.DOWN);
         shell.key(Keys.DOWN);
-        assertEquals(recentItem, ae.menuPointedAt(fileMenu));
+        assertEquals(menuRecent, ae.menuPointedAt(menuFile));
         shell.key(Keys.RIGHT);
         assertTrue(ae.isMenuOpen(recentMenu));
-        assertEquals(sceneOne, ae.menuPointedAt(recentMenu));
+        assertEquals(menuItemSceneOne, ae.menuPointedAt(recentMenu));
         shell.key(Keys.LEFT);
         assertFalse(ae.isMenuOpen(recentMenu), "Left closes the submenu");
-        assertTrue(ae.isMenuOpen(fileMenu));
+        assertTrue(ae.isMenuOpen(menuFile));
 
         shell.key(Keys.DOWN);
-        assertEquals(quitItem, ae.menuPointedAt(fileMenu), "the separator is passed by");
+        assertEquals(menuItemQuit, ae.menuPointedAt(menuFile), "the separator is passed by");
         shell.key(Keys.DOWN);
-        assertEquals(newItem, ae.menuPointedAt(fileMenu), "and past the last, around");
+        assertEquals(menuItemNew, ae.menuPointedAt(menuFile), "and past the last, around");
 
         shell.key(Keys.RIGHT);
-        assertTrue(ae.isMenuOpen(viewMenu), "Right on a plain item goes to the next menu");
+        assertTrue(ae.isMenuOpen(menuView), "Right on a plain item goes to the next menu");
         shell.key(Keys.ENTER);
-        assertTrue(ae.wasActivated(gridItem));
-        assertTrue(ae.isChecked(gridItem), "a ticking item ticks");
-        assertFalse(ae.isMenuOpen(viewMenu));
+        assertTrue(ae.wasActivated(menuItemGrid));
+        assertTrue(ae.isChecked(menuItemGrid), "a ticking item ticks");
+        assertFalse(ae.isMenuOpen(menuView));
         assertEquals("", ae.text(field).toString(), "Enter did not reach the field");
     }
 
@@ -166,29 +166,29 @@ class AegisMenuTest {
         shell.type("abc");
         shell.key(Keys.ESCAPE);
         assertFalse(ae.isMenuOpen(recentMenu));
-        assertTrue(ae.isMenuOpen(fileMenu));
+        assertTrue(ae.isMenuOpen(menuFile));
         shell.key(Keys.ESCAPE);
-        assertFalse(ae.isMenuOpen(fileMenu));
+        assertFalse(ae.isMenuOpen(menuFile));
         assertEquals("", ae.text(field).toString());
         assertEquals(field, shell.tree.focused());
 
         shell.key(Keys.F10);
         shell.key(Keys.F10);
-        assertFalse(ae.isMenuOpen(fileMenu), "F10 again closes them all");
+        assertFalse(ae.isMenuOpen(menuFile), "F10 again closes them all");
         assertDoesNotThrow(shell::draw);
     }
 
     @Test
     void aPressOutsideClosesTheMenus() {
         build();
-        shell.pointerOn(ae.menuTitle(fileMenu));
+        shell.pointerOn(ae.menuTitle(menuFile));
         pressAndRelease();
-        shell.pointerOn(recentItem);
+        shell.pointerOn(menuRecent);
         shell.frame();
         assertDoesNotThrow(shell::draw);
         shell.pointerAt(700.0f, 550.0f);
         pressAndRelease();
-        assertFalse(ae.isMenuOpen(fileMenu));
+        assertFalse(ae.isMenuOpen(menuFile));
         assertFalse(ae.isMenuOpen(recentMenu));
     }
 }

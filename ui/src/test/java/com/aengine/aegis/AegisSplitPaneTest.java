@@ -20,7 +20,7 @@ class AegisSplitPaneTest {
     private void sideBySide() {
         left  = layout.column(AegisLayout.NONE);
         right = layout.column(AegisLayout.NONE);
-        split = ae.splitPane(shell.root, "viewSplit", true, left, right, 120.0f);
+        split = ae.splitPane(shell.root, "splitView", true, left, right, 120.0f);
         layout.setSize(split, 400.0f, 200.0f);
         divider = layout.nextSibling(left);
         shell.frame();
@@ -70,7 +70,7 @@ class AegisSplitPaneTest {
 
     @Test
     void pressingTheDividerLeavesFocusInTheTextField() {
-        int field = ae.textField(shell.root, "nameField");
+        int field = ae.textField(shell.root, "fieldName");
         sideBySide();
         shell.tab();
         assertEquals(field, shell.tree.focused());
@@ -107,7 +107,7 @@ class AegisSplitPaneTest {
     void oneAboveTheOtherTheDividerLiesFlatAndTakesUpAndDown() {
         int top = layout.column(AegisLayout.NONE);
         int bottom = layout.column(AegisLayout.NONE);
-        int stacked = ae.splitPane(shell.root, "logSplit", false, top, bottom, 80.0f);
+        int stacked = ae.splitPane(shell.root, "splitLog", false, top, bottom, 80.0f);
         layout.setSize(stacked, 300.0f, 300.0f);
         shell.frame();
         assertEquals(80.0f, layout.height(top));

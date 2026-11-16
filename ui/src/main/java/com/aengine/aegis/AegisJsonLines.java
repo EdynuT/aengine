@@ -18,7 +18,7 @@ import java.util.Map;
  * line a key was written on, so a repeated key can be pointed out.</p>
  *
  * <p>A key is found by its path: {@code lines("global", "accent")} for {@code accent} inside
- * {@code "global"}, {@code lines("viewport.stopButton.fill")} for a key at the top. Dots
+ * {@code "global"}, {@code lines("viewport.buttonStop.fill")} for a key at the top. Dots
  * inside a key are part of the key, not a path. An element of a list is a step of its own,
  * written with its index in brackets: {@code lines("children", "[1]", "width")} for the
  * {@code width} of the second child, and {@code lines("panels", "[0]")} for the line the
