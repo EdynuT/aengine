@@ -163,6 +163,12 @@ public final class AegisWidgets {
      * for a text code set with {@link #setLabel}, which code composes and shows as given.
      */
     private final String[] labelEnglish;
+    /**
+     * A label's own text, once code sets it with {@link #setLabel} — step 4d: a buffer the label
+     * keeps and code writes into, so text that changes every frame allocates nothing. Shown in
+     * place of {@link #label} while set.
+     */
+    private final StringBuilder[] liveText;
     private final boolean[] checked; // checkboxes: ticked or not
 
     // Sliders and spinners: the value, its range, and how far one small step moves it.
@@ -471,6 +477,7 @@ public final class AegisWidgets {
         this.kind    = new byte[capacity];
         this.label   = new String[capacity];
         this.labelEnglish = new String[capacity];
+        this.liveText     = new StringBuilder[capacity];
         this.checked = new boolean[capacity];
 
         this.sliderValue = new float[capacity];
@@ -886,16 +893,38 @@ public final class AegisWidgets {
     }
 
     /**
-     * Shows other text in a label, and sizes it again to fit. For text that changes now and
-     * then — a count, a name — not every frame: it measures the text.
+     * Shows other text in a label — a count, a name, a frame rate — and sizes it again if the
+     * text changed. The text is copied into the label's own buffer, so a reused
+     * {@code StringBuilder} can be handed in every frame: nothing is allocated, and a text that
+     * did not change costs a comparison. Text set here is code's to compose, and a locale
+     * leaves it alone.
      *
      * @param node the label
-     * @param text the text; kept, as at creation
+     * @param text the text; copied, not kept
      */
-    public void setLabel(int node, String text) {
-        label[node] = text;
+    public void setLabel(int node, CharSequence text) {
+        StringBuilder own = liveText[node];
+        if (own == null) {
+            own = new StringBuilder(Math.max(16, text.length()));
+            liveText[node] = own;
+        } else if (sameText(own, text)) {
+            return;
+        }
+        own.setLength(0);
+        own.append(text);
         labelEnglish[node] = null;   // composed by code, shown as given: a locale leaves it alone
         fitToContent(node);
+    }
+
+    private static boolean sameText(CharSequence a, CharSequence b) {
+        if (a.length() != b.length()) return false;
+        for (int i = 0; i < a.length(); i++) if (a.charAt(i) != b.charAt(i)) return false;
+        return true;
+    }
+
+    /** What a button, toggle or label shows: the text code set, or the one it was made with. */
+    private CharSequence textOf(int node) {
+        return liveText[node] != null ? liveText[node] : label[node];
     }
 
     /**
@@ -2895,7 +2924,7 @@ public final class AegisWidgets {
     }
 
     /** What a widget's text says now, in the language shown; for tests. */
-    String shownText(int node) { return label[node]; }
+    String shownText(int node) { CharSequence t = textOf(node); return t == null ? null : t.toString(); }
 
     /** What a node's tooltip says now, in the language shown; for tests. */
     String shownTooltip(int node) { return tooltip[node]; }
@@ -3081,6 +3110,7 @@ public final class AegisWidgets {
         Arrays.fill(kind, NOT_A_WIDGET);
         Arrays.fill(label, null);
         Arrays.fill(labelEnglish, null);
+        Arrays.fill(liveText, null);
         Arrays.fill(checked, false);
         Arrays.fill(fieldText, null);
         Arrays.fill(themePath, null);
@@ -5464,7 +5494,7 @@ public final class AegisWidgets {
 
     /** The width of a widget's text and icon, plus its padding; an icon alone makes a square. */
     private float contentWidth(int node, float paddingX, float paddingY) {
-        String text = label[node];
+        CharSequence text = textOf(node);
         float textW = text == null || text.isEmpty() ? 0.0f : (float) Math.ceil(aegis.measure(text));
         AegisIcons set = aegis.icons();
         if (icon[node] == AegisIcons.NONE || set == null) return textW + paddingX * 2.0f;
@@ -5474,7 +5504,7 @@ public final class AegisWidgets {
 
     /** A widget's icon and text, side by side, centred in its box — or from its left edge. */
     private void drawContent(int node, float x, float y, float w, float h, float[] ink, float gap, boolean centred) {
-        String text = label[node];
+        CharSequence text = textOf(node);
         boolean hasText = text != null && !text.isEmpty();
         AegisIcons set = aegis.icons();
         boolean hasIcon = icon[node] != AegisIcons.NONE && set != null;

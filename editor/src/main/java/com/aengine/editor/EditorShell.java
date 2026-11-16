@@ -70,6 +70,11 @@ public final class EditorShell {
     private final int surfaceScene;
     private final int toggleSelect, toggleMove, toggleRotate, toggleScale;
     private final int togglePlay, togglePause, buttonStop;
+    private final int labelEditing, labelPlaying, labelPaused;
+    private final int labelFpsValue, labelEntitiesValue, labelProject;
+
+    /** Reused every frame to write the status bar's numbers into: §9, nothing allocated. */
+    private final StringBuilder statusText = new StringBuilder(16);
 
     // This frame's outcome.
     private boolean saveAsked;
@@ -161,7 +166,6 @@ public final class EditorShell {
         ae.setTooltip(buttonStop, "Stop and go back to the scene as it was (F5)");
         int spaceAfter = layout.box(toolbar);
         layout.setGrow(spaceAfter, 1.0f);
-        showPlayState(false, false);
 
         // The docks. Empty for now, each showing its title on its tab.
         emptyDock(screens, "hierarchy", "Hierarchy");
@@ -179,8 +183,29 @@ public final class EditorShell {
         layout.setGrow(surfaceScene, 1.0f);
         screens.setPanelTitle("viewport", "Viewport");
 
+        // Status bar (4d): what the scene is doing, the frame rate, how many entities, and the
+        // project. The words are labels of their own, so a locale translates them; the numbers
+        // are set every frame with setLabel, which copies into the label and allocates nothing.
+        // Of the three state words one is shown at a time: the others are hidden.
         int status = screens.rowPanel("status");
-        layout.setPadding(status, 4.0f);
+        layout.setPadding(status, 2.0f);
+        layout.setGap(status, 6.0f);
+        layout.setAlignY(status, AegisLayout.Align.CENTER);
+        labelEditing = ae.label(status, "labelEditing", "Editing");
+        labelPlaying = ae.label(status, "labelPlaying", "Playing");
+        labelPaused  = ae.label(status, "labelPaused",  "Paused");
+        ae.separator(status, "separatorState");
+        ae.label(status, "labelFps", "FPS");
+        labelFpsValue = ae.label(status, "labelFpsValue", "0");
+        ae.separator(status, "separatorFps");
+        ae.label(status, "labelEntities", "Entities");
+        labelEntitiesValue = ae.label(status, "labelEntitiesValue", "0");
+        ae.setLabel(labelFpsValue, "0");        // numbers are code's text from the start:
+        ae.setLabel(labelEntitiesValue, "0");   // nothing for a locale to translate
+        int statusSpace = layout.box(status);
+        layout.setGrow(statusSpace, 1.0f);
+        labelProject = ae.label(status, "labelProject", "");
+        showPlayState(false, false);
 
         // ── The screen, from the first layout in line that describes it usably.
         layoutName = System.getProperty("aengine.layout", "default");
@@ -386,11 +411,37 @@ public final class EditorShell {
      * @param paused  whether it is paused
      */
     public void showPlayState(boolean playing, boolean paused) {
+        layout.setHidden(labelEditing, playing);
+        layout.setHidden(labelPlaying, !playing || paused);
+        layout.setHidden(labelPaused,  !playing || !paused);
         ae.setChecked(togglePlay, playing);
         ae.setChecked(togglePause, playing && paused);
         ae.setEnabled(togglePause, playing);
         ae.setEnabled(buttonStop, playing);
     }
+
+    /**
+     * Shows the frame rate and the entity count on the status bar. Call every frame: nothing
+     * is allocated, and a number that did not change costs a comparison.
+     *
+     * @param fps      frames per second
+     * @param entities how many entities the scene holds
+     */
+    public void showStats(int fps, int entities) {
+        statusText.setLength(0);
+        statusText.append(fps);
+        ae.setLabel(labelFpsValue, statusText);
+        statusText.setLength(0);
+        statusText.append(entities);
+        ae.setLabel(labelEntitiesValue, statusText);
+    }
+
+    /**
+     * Shows the project being edited on the status bar.
+     *
+     * @param path the project's directory
+     */
+    public void showProject(String path) { ae.setLabel(labelProject, path); }
 
     /**
      * The tool chosen on the toolbar.

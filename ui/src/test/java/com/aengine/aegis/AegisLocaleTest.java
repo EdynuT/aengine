@@ -200,6 +200,27 @@ class AegisLocaleTest {
         assertThrows(IllegalArgumentException.class, () -> ae.addComboItem(combo, "flat_shaded", "Flat"));
     }
 
+    @Test
+    void setLabelCopiesTheTextAndRefitsOnlyWhenItChanges() {
+        int fps = ae.label(viewport, "labelFps", "0");
+        StringBuilder reused = new StringBuilder("210");
+        ae.setLabel(fps, reused);
+        reused.setLength(0);
+        reused.append("999999");
+        assertEquals("210", ae.shownText(fps), "copied, not kept");
+        float width = layout.requestedWidth(fps);
+
+        reused.setLength(0);
+        reused.append("210");
+        ae.setLabel(fps, reused);
+        assertEquals(width, layout.requestedWidth(fps), "the same text changes nothing");
+
+        reused.append("0");
+        ae.setLabel(fps, reused);
+        assertEquals("2100", ae.shownText(fps));
+        assertTrue(layout.requestedWidth(fps) > width, "a longer text, a wider label");
+    }
+
     private static AegisLocale locale(String json) throws AegisLocale.Unusable {
         return AegisLocale.parse(new StringReader(json), "test");
     }

@@ -68,6 +68,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 4a | The editor's own screen, arranged as Godot's and Unity's; the scene in an Aegis viewport that owns the camera's keys; the scaffolding deleted |
 | Step 4b | Icons by name from an icon font; toggle buttons and groups; disabled widgets; the toolbar's tools and Play, Pause, Stop |
 | Step 4c | Docks the user resizes by their edge or F8; panels closed and reopened from the View menu; the arrangement written to the user's `layout.json`; Restore default layout |
+| Step 4d | The status bar — scene state, frame rate, entities, project — and `setLabel` copying any text into the label, allocating nothing |
 
 ### The plan ahead
 
@@ -2170,10 +2171,18 @@ nothing else is left in it — and `screens.rebuild` builds the screen again fro
 line: the panels move to the new arrangement, back to what code gave them, and the old rows,
 columns and tabbed panes are dropped, then the theme and the language are applied again.
 
+**4d ✅ — the status bar, and text that changes every frame.** `ae.setLabel(node, text)`
+takes any `CharSequence` and copies it into the label's own buffer, so a reused
+`StringBuilder` can be handed in every frame with nothing allocated; a text that did not
+change costs a comparison and no layout. The status bar shows what the scene is doing —
+Editing, Playing or Paused, three translatable labels of which one is shown — the frame
+rate, the entity count, and the project. The words are labels of their own, so a locale
+translates them; the numbers are code's text.
+
 **Next**, in an order to be agreed:
 
 - **What any panel will need:** nodes removed and reused, for panels whose content changes; a
-  label updated without allocating; a context menu; undo and redo.
+  context menu; undo and redo.
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.

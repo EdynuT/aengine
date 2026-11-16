@@ -132,6 +132,7 @@ public class Main extends Engine {
         // The interface: panels registered, the screen built from the layouts in line, the
         // theme and the language applied. See EditorShell.
         shell = new com.aengine.editor.EditorShell(getWindow());
+        shell.showProject(activeProjectPath);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
         // Gray background for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
@@ -260,6 +261,7 @@ public class Main extends Engine {
         if (currentState == EngineState.PLAY && shell.pauseAsked() != playPaused) {
             playPaused = shell.pauseAsked();
             physicsThread.setPaused(playPaused);
+            shell.showPlayState(true, playPaused);
             Logger.info(Logger.System.CORE, playPaused ? "PLAY Mode paused." : "PLAY Mode resumed.");
         }
 
@@ -354,6 +356,7 @@ public class Main extends Engine {
         // The interface, drawn by Aegis. Dear ImGui still runs until Phase 5 removes it, but
         // opens no window any more; were one open, the pointer over it and the keys typed into
         // it would be ImGui's.
+        shell.showStats(FPSTracker.getCurrentFPS(), registry.getEntityCount());
         shell.frame(getWindow().getWidth(), getWindow().getHeight(), viewportTextureID,
             DebugOverlay.ENABLED && ImGui.getIO().getWantCaptureMouse(),
             DebugOverlay.ENABLED && ImGui.getIO().getWantCaptureKeyboard());

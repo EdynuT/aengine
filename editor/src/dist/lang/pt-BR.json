@@ -22,6 +22,12 @@
   "toolbar.togglePause.tooltip": "Pausar",
   "toolbar.buttonStop.tooltip": "Parar e voltar à cena como estava (F5)",
 
+  "status.labelEditing": "Editando",
+  "status.labelPlaying": "Executando",
+  "status.labelPaused": "Pausado",
+  "status.labelFps": "FPS",
+  "status.labelEntities": "Entidades",
+
   "hierarchy.title": "Hierarquia",
   "assets.title": "Assets",
   "viewport.title": "Viewport",
