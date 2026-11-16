@@ -10,7 +10,7 @@
   "danger": "#C04040",
   "violet": "#8A6CE0",
 
-  "inspector.textfield.fill": "#141820",
+  "inspector.field.fill": "#141820",
 
   "viewport.stopButton.fill":       "@danger",
   "viewport.stopButton.fill.hover": "#D05858",

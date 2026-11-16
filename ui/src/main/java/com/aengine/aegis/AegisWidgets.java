@@ -540,7 +540,7 @@ public final class AegisWidgets {
             case BUTTON               -> "button";
             case CHECKBOX             -> "checkbox";
             case SLIDER               -> "slider";
-            case TEXT_FIELD, TEXT_BOX -> "textfield";
+            case TEXT_FIELD, TEXT_BOX -> "field";
             case LABEL                -> "label";
             case SEPARATOR            -> "separator";
             case SPINNER              -> "spinner";
@@ -749,7 +749,7 @@ public final class AegisWidgets {
      *
      * <p>It follows its parent: a horizontal line in a column, a vertical one in a row, drawn
      * across the whole parent from one inner edge to the other. It takes
-     * {@code separator.thickness} plus {@code separator.margin} on each side along the way its
+     * {@code separator.line.width} plus {@code separator.margin} on each side along the way its
      * parent stacks, and nothing across. Neither clickable nor focusable.</p>
      *
      * @param parent the row or column to add it to
@@ -2605,10 +2605,10 @@ public final class AegisWidgets {
         if (tipShown == AegisLayout.NONE) return;
         AegisStyle style = globalStyle;
         String text = tooltip[tipShown];
-        float pad = style.tooltipPadding;
-        float textW = Math.min((float) Math.ceil(aegis.measure(text)), style.tooltipWidth - pad * 2.0f);
-        float w = textW + pad * 2.0f;
-        float h = aegis.wrappedHeight(text, textW + 1.0f) + pad * 2.0f;
+        float padX = style.tooltipPaddingX, padY = style.tooltipPaddingY;
+        float textW = Math.min((float) Math.ceil(aegis.measure(text)), style.tooltipWidth - padX * 2.0f);
+        float w = textW + padX * 2.0f;
+        float h = aegis.wrappedHeight(text, textW + 1.0f) + padY * 2.0f;
         float x = tipX, y = tipY;
         float bw = boundsW(), bh = boundsH();
         if (bw > 0.0f) x = Math.max(0.0f, Math.min(x, bw - w));
@@ -2618,7 +2618,7 @@ public final class AegisWidgets {
         float[] fill = style.tooltipFill, border = style.tooltipBorder, ink = style.tooltipText;
         aegis.addRoundedRect(x, y, w, h, style.tooltipRadius, fill[0], fill[1], fill[2], fill[3],
             border[0], border[1], border[2], border[3], 1.0f);
-        aegis.addTextWrapped(x + pad, y + pad, textW + 1.0f, text, ink[0], ink[1], ink[2], ink[3]);
+        aegis.addTextWrapped(x + padX, y + padY, textW + 1.0f, text, ink[0], ink[1], ink[2], ink[3]);
     }
 
     /** The bar of the nearest tabbed pane around a node — the node itself, if it is a bar — or NONE. */

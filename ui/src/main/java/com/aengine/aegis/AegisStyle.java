@@ -308,8 +308,10 @@ public final class AegisStyle {
     public final float[] tooltipBorder  = { 0.38f, 0.42f, 0.52f, 1.0f };
     /** Its text. */
     public final float[] tooltipText    = { 0.90f, 0.92f, 0.95f, 1.0f };
-    /** Space between its edge and its text. */
-    public float         tooltipPadding = 6.0f;
+    /** Space between its edge and its text, across. */
+    public float         tooltipPaddingX = 6.0f;
+    /** Space between its edge and its text, up and down. */
+    public float         tooltipPaddingY = 6.0f;
     /** How round its corners are. */
     public float         tooltipRadius  = 4.0f;
     /** The widest it gets; longer text wraps. */

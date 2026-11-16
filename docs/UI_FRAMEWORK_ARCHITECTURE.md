@@ -326,7 +326,7 @@ a row. `ae.separator(parent, name)` is a line that follows its parent — flat i
 upright in a row — drawn across the whole parent from one inner edge to the other, so it spans
 the panel whether or not the panel stretches its children; moved by a layout into a row, it
 turns upright. Theme entries: `label.text`, `label.padding.y`, `separator.line`,
-`separator.thickness`, `separator.margin`.
+`separator.line.width`, `separator.margin`.
 
 **3g-2a, scrolling.** Scrolling is the layout's, not a widget wrapped around content:
 `layout.setScrollable(node, true)` makes a row or column scroll along the way it stacks — a
@@ -394,7 +394,7 @@ by Home and End. Neither side gets smaller than 24 pixels. Pressing the divider 
 where it was: `tree.setKeepsFocus(node, true)` is new, for what is worked with the pointer
 while the keyboard stays elsewhere. `dividerLocation`, `setDividerLocation`;
 `wasChanged(split)` on each frame the user moved it. Where it is stays in memory; writing it
-to the layout file is Phase 4's. Theme entries: `split.line`, `.line.hover`, `.size` (the room
+to the layout file is Phase 4's. Theme entries: `split.line`, `.line.hover`, `.divider.width` (the room
 the divider takes, what the pointer takes hold of) and `.line.width`. The widgets' timings now
 read a clock tests can set, so a delay is tested by moving time rather than waiting.
 
@@ -436,7 +436,7 @@ It goes when the pointer leaves the node, a button is pressed or a key is. From 
 **Ctrl+F1** shows the focused widget's tooltip below it, and hides it, as Swing's postTip
 action does. Drawn above everything, even overlays; wrapped at `tooltip.width`, moved in to
 stay in the window, above the pointer when there is no room below. Theme entries, global only:
-`tooltip.fill`, `.border`, `.text`, `.padding`, `.radius`, `.width`. Swing's four-second
+`tooltip.fill`, `.border`, `.text`, `.padding.x`, `.padding.y`, `.radius`, `.width`. Swing's four-second
 dismiss is left out: a note the user is reading should not vanish.
 
 **3g-9, combo box.** `ae.comboBox(parent, name, items...)`, as a `JComboBox` that is not
@@ -449,7 +449,7 @@ End and a letter choose at once; Enter, Space, Alt+Down or F4 open the list, whe
 keys move through the items, Enter or Space choose, and Esc or Tab close it with the choice
 unchanged. Pressing the list leaves focus on the box. `comboChosen`, `setComboChosen`,
 `comboItem`, `comboItemCount`, `isComboOpen`; `wasChanged` on the user's choice. Theme entries:
-`combo.fill`, `.fill.hover`, `.border`, `.text`, `.arrow`, `.highlight`, `.highlight.text`,
+`combo.fill`, `.fill.hover`, `.border`, `.text`, `.arrow`, `.item.fill.selected`, `.item.text.selected`,
 `.padding.x`, `.padding.y`, `.radius`, `.arrow.width`. An editable combo — a text field with a
 list — waits for a panel that asks for one.
 
@@ -468,8 +468,8 @@ submenu or goes to the menu before, Enter or Space activate, Esc closes one leve
 all. While a menu is open the keys are the menus', whatever has focus, and focus is never
 moved: the text field being typed into is still focused when the menu closes. The shortcut is
 text only — binding it is the caller's, as with Swing's accelerator text. `wasActivated(item)`;
-`isMenuOpen`. Theme entries: `menu.text`, `.text.dim`, `.highlight`, `.highlight.text`,
-`.title.hover`, `.padding.x`, `.padding.y`, `.gap`, `.check.width`; a menu's items are reached
+`isMenuOpen`. Theme entries: `menu.text`, `.shortcut.text`, `.fill.selected`, `.text.selected`,
+`.title.fill.hover`, `.padding.x`, `.padding.y`, `.gap`, `.check.width`; a menu's items are reached
 by the title's name — `fileMenu.saveItem`. Mnemonics (Alt+F) wait for localisation, since the
 underlined letter depends on the language. The factory layout gains a `menu` panel above the
 toolbar, holding the scaffolding's bar.
@@ -485,8 +485,8 @@ frame); `closeDialog` is code's, for OK and Cancel, and is not a cancel.
 `setDefaultButton(dialog, button)` is `JRootPane`'s: Enter from a text field, a spinner or a
 slider in the dialog activates it, and it is drawn with an outline of its own. A theme now
 dresses everything that hangs nowhere — dialogs and popups not open, panels not shown — so
-what opens later is already dressed. Theme entries: `dialog.title`, `.line`, `.close.hover`,
-`.default`, `.title.padding.y`. Help > About in the scaffolding opens one.
+what opens later is already dressed. Theme entries: `dialog.title.text`, `.line`, `.close.fill.hover`,
+`.default.border`, `.title.padding.y`. Help > About in the scaffolding opens one.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its
@@ -1262,7 +1262,7 @@ theme that loads — tolerance, not a feature the shipped themes use.
 
   "danger": "#C04040",
 
-  "inspector.textfield.fill": "#1A1D26",
+  "inspector.field.fill":     "#1A1D26",
   "viewport.stopButton.fill": "@danger"
 }
 ```
@@ -1274,7 +1274,7 @@ A theme holds four kinds of entry:
 | Metadata | `name`, `description`, `format` | What the theme list shows, and which catalogue version the theme was written against. Not colours. |
 | Global | inside `"global"` | Applies everywhere: the **palette** (`accent`, `surface`, `text`…) and the look of each **kind** of widget (`button.fill` — every button). |
 | Local variable | a key **without** a dot, outside `global` | Paints nothing by itself; takes effect only where referenced as `@name`. |
-| Scoped rule | a key **with** a dot, outside `global` | A path of names, then a property. `panel.kind.property` — `inspector.textfield.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetName.property` — `viewport.stopButton.fill` — styles one widget. |
+| Scoped rule | a key **with** a dot, outside `global` | A path of names, then a property. `panel.kind.property` — `inspector.field.fill` — styles every widget of that kind inside that panel, **including ones added later**; `panel.widgetName.property` — `viewport.stopButton.fill` — styles one widget. |
 
 The dot is what tells a local variable from a scoped rule, which is why local variables are
 one word (`danger`, `warning`). References say where they point: `@global.accent` reads the
@@ -1296,7 +1296,7 @@ them looking foreign in someone's theme. Three layers see to it, strongest first
 1. **The catalogue's defaults point at the palette**, not at fixed colours — `button.fill`
    defaults to `@global.surface.raised`. A widget a theme has never heard of still wears the
    theme's palette.
-2. **Panel-and-kind rules cover what is added later.** `inspector.textfield.fill` applies to a
+2. **Panel-and-kind rules cover what is added later.** `inspector.field.fill` applies to a
    field an update adds to the inspector.
 3. **An older theme is reported.** Catalogue entries record the format they arrived in; a
    theme declaring an older `format` gets a log line naming the entries it does not set.
@@ -1683,10 +1683,13 @@ panel's own title. A dialog hangs in no panel, so its address starts at the dial
 - *Parts* — `fill`, `border`, `text`, `line`, `mark`, `arrow`, `thumb`, `track`, `caret`,
   `selection`, `accent`, and the sub-parts a widget has, such as a combo's `item` or a
   dialog's `title`.
-- *Measures* — `width`, `height`, `radius`, `gap`, `padding.x`, `padding.y`. A line's
-  thickness is always its `.width`, as `border.width` is.
+- *Measures* — `width`, `height`, `size` (the side of something square, as a checkbox's
+  box), `radius`, `gap`, `padding.x`, `padding.y`. A line's thickness is always its
+  `.width`, as `border.width` is.
 - *States* — `hover`, `pressed`, `focused`, `selected`, `disabled`, always last:
-  `button.fill.hover`, `menu.item.text.hover`.
+  `button.fill.hover`, `tree.text.selected`. What a list or menu points at — by pointer or
+  by arrow keys alike — is `selected`, as a tree's row is: `combo.item.fill.selected`,
+  `menu.fill.selected`.
 
 **Layout entries.** Keys in camelCase (`alignX`), fixed values in lower case (`stretch`,
 `column`), sizes as plain numbers of pixels.

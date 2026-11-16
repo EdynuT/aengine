@@ -19,7 +19,7 @@ import java.util.Map;
  *
  * <p>{@code kind.part.state} — {@code button.fill.hover}. The first part is the kind of
  * widget the entry dresses, which is what a panel-and-kind rule such as
- * {@code inspector.button.fill} matches against; {@code textfield} dresses text fields and
+ * {@code inspector.button.fill} matches against; {@code field} dresses text fields and
  * text boxes alike, and {@code focus} every widget that draws a focus ring.</p>
  *
  * <p>The <strong>palette</strong> — {@code accent}, {@code text}, {@code surface} and the rest
@@ -107,7 +107,7 @@ public final class AegisThemeCatalogue {
         /**
          * The kind of widget it dresses — the part before the first dot. Empty for the palette.
          *
-         * @return {@code button}, {@code checkbox}, {@code slider}, {@code textfield},
+         * @return {@code button}, {@code checkbox}, {@code slider}, {@code field},
          *         {@code focus}, or empty
          */
         public String widgetKind() {
@@ -173,29 +173,29 @@ public final class AegisThemeCatalogue {
         size  ("slider.padding.y",     "4",   (s, v) -> s.sliderPaddingY = v);
 
         // ── Text field and text box ────────────────────────────────────────────────────
-        colour("textfield.fill",           "@global.surface",  s -> s.textFieldFill);
-        colour("textfield.fill.hover",     "#2B3040",          s -> s.textFieldHover);
-        colour("textfield.border",         "@global.border",   s -> s.textFieldBorder);
-        colour("textfield.border.focused", "@global.accent",   s -> s.textFieldBorderFocused);
-        colour("textfield.text",           "@global.text",     s -> s.textFieldText);
-        colour("textfield.placeholder",    "@global.text.dim", s -> s.textFieldPlaceholder);
-        colour("textfield.caret",          "@global.text",     s -> s.textFieldCaret);
-        colour("textfield.selection",      "#5C9EF066",        s -> s.textFieldSelection);
-        size  ("textfield.width",          "200", (s, v) -> s.textFieldWidth = v);
-        size  ("textfield.radius",         "4",   (s, v) -> s.textFieldRadius = v);
-        size  ("textfield.border.width",   "1",   (s, v) -> s.textFieldBorderWidth = v);
-        size  ("textfield.padding.x",      "8",   (s, v) -> s.textFieldPaddingX = v);
-        size  ("textfield.padding.y",      "6",   (s, v) -> s.textFieldPaddingY = v);
-        size  ("textfield.caret.width",    "2",   (s, v) -> s.textFieldCaretWidth = v);
+        colour("field.fill",           "@global.surface",  s -> s.textFieldFill);
+        colour("field.fill.hover",     "#2B3040",          s -> s.textFieldHover);
+        colour("field.border",         "@global.border",   s -> s.textFieldBorder);
+        colour("field.border.focused", "@global.accent",   s -> s.textFieldBorderFocused);
+        colour("field.text",           "@global.text",     s -> s.textFieldText);
+        colour("field.placeholder",    "@global.text.dim", s -> s.textFieldPlaceholder);
+        colour("field.caret",          "@global.text",     s -> s.textFieldCaret);
+        colour("field.selection",      "#5C9EF066",        s -> s.textFieldSelection);
+        size  ("field.width",          "200", (s, v) -> s.textFieldWidth = v);
+        size  ("field.radius",         "4",   (s, v) -> s.textFieldRadius = v);
+        size  ("field.border.width",   "1",   (s, v) -> s.textFieldBorderWidth = v);
+        size  ("field.padding.x",      "8",   (s, v) -> s.textFieldPaddingX = v);
+        size  ("field.padding.y",      "6",   (s, v) -> s.textFieldPaddingY = v);
+        size  ("field.caret.width",    "2",   (s, v) -> s.textFieldCaretWidth = v);
 
         // ── Label ──────────────────────────────────────────────────────────────────────
         colour("label.text",      "@global.text", s -> s.labelText);
         size  ("label.padding.y", "4", (s, v) -> s.labelPaddingY = v);   // as a checkbox's, so the two line up in a row
 
         // ── Separator ──────────────────────────────────────────────────────────────────
-        colour("separator.line",      "@global.border", s -> s.separatorLine);
-        size  ("separator.thickness", "1", (s, v) -> s.separatorThickness = v);
-        size  ("separator.margin",    "4", (s, v) -> s.separatorMargin = v);   // clear space on each side of the line
+        colour("separator.line",       "@global.border", s -> s.separatorLine);
+        size  ("separator.line.width", "1", (s, v) -> s.separatorThickness = v);
+        size  ("separator.margin",     "4", (s, v) -> s.separatorMargin = v);   // clear space on each side of the line
 
         // ── Spinner. Its caret, selection, radius, border width and padding are the text
         //    field's, so a spinner and a field line up in a panel.
@@ -224,10 +224,10 @@ public final class AegisThemeCatalogue {
         size  ("tabs.accent.height", "2",  (s, v) -> s.tabsAccentHeight = v);
 
         // ── Split pane: its divider ────────────────────────────────────────────────────
-        colour("split.line",       "@global.border", s -> s.splitLine);
-        colour("split.line.hover", "@global.accent", s -> s.splitLineHover);   // under the pointer, or dragged
-        size  ("split.size",       "8", (s, v) -> s.splitSize = v);            // the room the divider takes
-        size  ("split.line.width", "2", (s, v) -> s.splitLineWidth = v);
+        colour("split.line",          "@global.border", s -> s.splitLine);
+        colour("split.line.hover",    "@global.accent", s -> s.splitLineHover);   // under the pointer, or dragged
+        size  ("split.divider.width", "8", (s, v) -> s.splitSize = v);            // the room the divider takes
+        size  ("split.line.width",    "2", (s, v) -> s.splitLineWidth = v);
 
         // ── Tree ───────────────────────────────────────────────────────────────────────
         colour("tree.text",          "@global.text",          s -> s.treeText);
@@ -248,43 +248,44 @@ public final class AegisThemeCatalogue {
         size  ("overlay.shadow.offset", "4", (s, v) -> s.overlayShadowOffset = v);
 
         // ── Combo box, and its list ───────────────────────────────────────────────────
-        colour("combo.fill",           "@global.surface.raised", s -> s.comboFill);
-        colour("combo.fill.hover",     "@global.surface.hover",  s -> s.comboHover);
-        colour("combo.border",         "@global.border",         s -> s.comboBorder);
-        colour("combo.text",           "@global.text",           s -> s.comboText);
-        colour("combo.arrow",          "@global.text.dim",       s -> s.comboArrow);
-        colour("combo.highlight",      "@global.accent",         s -> s.comboHighlight);       // the item the open list points at
-        colour("combo.highlight.text", "#FFFFFF",                s -> s.comboHighlightText);
-        size  ("combo.padding.x",      "10", (s, v) -> s.comboPaddingX = v);
-        size  ("combo.padding.y",      "6",  (s, v) -> s.comboPaddingY = v);
-        size  ("combo.radius",         "4",  (s, v) -> s.comboRadius = v);
-        size  ("combo.arrow.width",    "20", (s, v) -> s.comboArrowWidth = v);
+        colour("combo.fill",               "@global.surface.raised", s -> s.comboFill);
+        colour("combo.fill.hover",         "@global.surface.hover",  s -> s.comboHover);
+        colour("combo.border",             "@global.border",         s -> s.comboBorder);
+        colour("combo.text",               "@global.text",           s -> s.comboText);
+        colour("combo.arrow",              "@global.text.dim",       s -> s.comboArrow);
+        colour("combo.item.fill.selected", "@global.accent",         s -> s.comboHighlight);       // the item the open list points at
+        colour("combo.item.text.selected", "#FFFFFF",                s -> s.comboHighlightText);
+        size  ("combo.padding.x",          "10", (s, v) -> s.comboPaddingX = v);
+        size  ("combo.padding.y",          "6",  (s, v) -> s.comboPaddingY = v);
+        size  ("combo.radius",             "4",  (s, v) -> s.comboRadius = v);
+        size  ("combo.arrow.width",        "20", (s, v) -> s.comboArrowWidth = v);
 
         // ── Menus: a bar's titles, and the items of its menus ─────────────────────────
-        colour("menu.text",           "@global.text",          s -> s.menuText);
-        colour("menu.text.dim",       "@global.text.dim",      s -> s.menuTextDim);         // shortcuts, submenu arrows
-        colour("menu.highlight",      "@global.accent",        s -> s.menuHighlight);       // the item pointed at, the open title
-        colour("menu.highlight.text", "#FFFFFF",               s -> s.menuHighlightText);
-        colour("menu.title.hover",    "@global.surface.hover", s -> s.menuTitleHover);
-        size  ("menu.padding.x",      "10", (s, v) -> s.menuPaddingX = v);
-        size  ("menu.padding.y",      "4",  (s, v) -> s.menuPaddingY = v);
-        size  ("menu.gap",            "28", (s, v) -> s.menuGap = v);                       // text to shortcut
-        size  ("menu.check.width",    "18", (s, v) -> s.menuCheckWidth = v);
+        colour("menu.text",             "@global.text",          s -> s.menuText);
+        colour("menu.shortcut.text",    "@global.text.dim",      s -> s.menuTextDim);         // shortcuts, submenu arrows
+        colour("menu.fill.selected",    "@global.accent",        s -> s.menuHighlight);       // the item pointed at, the open title
+        colour("menu.text.selected",    "#FFFFFF",               s -> s.menuHighlightText);
+        colour("menu.title.fill.hover", "@global.surface.hover", s -> s.menuTitleHover);
+        size  ("menu.padding.x",        "10", (s, v) -> s.menuPaddingX = v);
+        size  ("menu.padding.y",        "4",  (s, v) -> s.menuPaddingY = v);
+        size  ("menu.gap",              "28", (s, v) -> s.menuGap = v);                       // text to shortcut
+        size  ("menu.check.width",      "18", (s, v) -> s.menuCheckWidth = v);
 
         // ── Dialog: its title bar, and the outline of its default button ───────────────
-        colour("dialog.title",           "@global.text",   s -> s.dialogTitle);
-        colour("dialog.line",            "@global.border", s -> s.dialogLine);         // under the title bar
-        colour("dialog.close.hover",     "#C04040",        s -> s.dialogCloseHover);
-        colour("dialog.default",         "@global.accent", s -> s.dialogDefault);      // the default button's outline
-        size  ("dialog.title.padding.y", "6", (s, v) -> s.dialogTitlePaddingY = v);
+        colour("dialog.title.text",       "@global.text",   s -> s.dialogTitle);
+        colour("dialog.line",             "@global.border", s -> s.dialogLine);         // under the title bar
+        colour("dialog.close.fill.hover", "#C04040",        s -> s.dialogCloseHover);
+        colour("dialog.default.border",   "@global.accent", s -> s.dialogDefault);      // the default button's outline
+        size  ("dialog.title.padding.y",  "6", (s, v) -> s.dialogTitlePaddingY = v);
 
         // ── Tooltip. Global values only: it belongs to no panel. ─────────────────────────
-        colour("tooltip.fill",    "#1A1C26",        s -> s.tooltipFill);
-        colour("tooltip.border",  "@global.border", s -> s.tooltipBorder);
-        colour("tooltip.text",    "@global.text",   s -> s.tooltipText);
-        size  ("tooltip.padding", "6",   (s, v) -> s.tooltipPadding = v);
-        size  ("tooltip.radius",  "4",   (s, v) -> s.tooltipRadius = v);
-        size  ("tooltip.width",   "320", (s, v) -> s.tooltipWidth = v);   // the widest; longer text wraps
+        colour("tooltip.fill",      "#1A1C26",        s -> s.tooltipFill);
+        colour("tooltip.border",    "@global.border", s -> s.tooltipBorder);
+        colour("tooltip.text",      "@global.text",   s -> s.tooltipText);
+        size  ("tooltip.padding.x", "6",   (s, v) -> s.tooltipPaddingX = v);
+        size  ("tooltip.padding.y", "6",   (s, v) -> s.tooltipPaddingY = v);
+        size  ("tooltip.radius",    "4",   (s, v) -> s.tooltipRadius = v);
+        size  ("tooltip.width",     "320", (s, v) -> s.tooltipWidth = v);   // the widest; longer text wraps
 
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.

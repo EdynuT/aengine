@@ -325,7 +325,7 @@ public final class AegisTheme {
      * @param path    the names from the top of the tree down to the widget
      * @param ownName whether the last name in {@code path} is the widget's own, rather than its
      *                nearest named container's
-     * @param kind    the kind the catalogue dresses it as — {@code button}, {@code textfield}...
+     * @param kind    the kind the catalogue dresses it as — {@code button}, {@code field}...
      */
     AegisStyle styleFor(List<String> path, boolean ownName, String kind) {
         if (rules.isEmpty() || kind.isEmpty()) return null;
