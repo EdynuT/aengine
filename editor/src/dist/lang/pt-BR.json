@@ -7,6 +7,14 @@
   "menuFile.menuItemSaveScene": "Salvar cena",
   "menuFile.menuItemQuit": "Sair",
 
+  "toolbar.toggleSelect.tooltip": "Selecionar",
+  "toolbar.toggleMove.tooltip": "Mover",
+  "toolbar.toggleRotate.tooltip": "Girar",
+  "toolbar.toggleScale.tooltip": "Escalar",
+  "toolbar.togglePlay.tooltip": "Executar a cena (F5)",
+  "toolbar.togglePause.tooltip": "Pausar",
+  "toolbar.buttonStop.tooltip": "Parar e voltar à cena como estava (F5)",
+
   "hierarchy.title": "Hierarquia",
   "assets.title": "Assets",
   "viewport.title": "Viewport",

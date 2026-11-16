@@ -92,6 +92,7 @@ public final class AegisWidgets {
     private static final byte SCREEN       = 22;  // step 4a: a screen's root, drawn as the window's background
     private static final byte PANEL        = 23;  //          a registered panel, drawn as its background
     private static final byte SURFACE      = 24;  //          an area code draws into: a texture, focused to take keys
+    private static final byte TOGGLE       = 25;  // step 4b: a button that stays pressed, alone or one of a group
 
     /** "No item" — the parent of a tree's top level, and what is selected in a tree with none. */
     public static final int NO_ITEM = -1;
@@ -235,6 +236,16 @@ public final class AegisWidgets {
     private int     menuSteps;      // Left, Right
     private boolean menuEnter;      // Enter, Space
     private boolean pendingF10;
+
+    /** The icon each button, toggle or label shows before its text — an index of the icon set — or AegisIcons.NONE. */
+    private final int[] icon;
+
+    /** The group a toggle belongs to, of which one at most is pressed; 0 for none. */
+    private final int[] toggleGroup;
+    private int lastToggleGroup;
+
+    /** Whether each widget can be used; a disabled one is drawn faded and reached by nothing. */
+    private final boolean[] disabled;
 
     /** What each surface shows: an OpenGL texture, or 0 for nothing yet. */
     private final int[]     surfaceTexture;
@@ -456,6 +467,10 @@ public final class AegisWidgets {
         this.comboItemEnglish = new String[capacity][];
         this.defaultButton   = new int[capacity];
         this.surfaceTexture    = new int[capacity];
+        this.icon              = new int[capacity];
+        Arrays.fill(this.icon, AegisIcons.NONE);
+        this.toggleGroup       = new int[capacity];
+        this.disabled          = new boolean[capacity];
         this.surfaceUpsideDown = new boolean[capacity];
         this.titleMenu       = new int[capacity];
         this.menuOwner       = new int[capacity];
@@ -599,7 +614,7 @@ public final class AegisWidgets {
             if (kind[node] == NOT_A_WIDGET && tooltipEnglish[node] == null) continue;
             String address = addressOf(node);
             if (address == null) continue;
-            if (labelEnglish[node] != null) {
+            if (labelEnglish[node] != null && !labelEnglish[node].isEmpty()) {
                 String key = switch (kind[node]) {
                     case DIALOG_TITLE         -> address + "." + AegisLocale.TITLE;
                     case TEXT_FIELD, TEXT_BOX -> address + "." + AegisLocale.PLACEHOLDER;
@@ -642,6 +657,7 @@ public final class AegisWidgets {
     private String themeKind(int node) {
         return switch (kind[node]) {
             case BUTTON               -> "button";
+            case TOGGLE               -> "toggle";
             case CHECKBOX             -> "checkbox";
             case SLIDER               -> "slider";
             case TEXT_FIELD, TEXT_BOX -> "field";
@@ -669,8 +685,11 @@ public final class AegisWidgets {
         float line = aegis.lineHeight();
         switch (kind[node]) {
             case BUTTON -> fit(node,
-                (float) Math.ceil(aegis.measure(label[node])) + style.buttonPaddingX * 2.0f,
+                contentWidth(node, style.buttonPaddingX, style.buttonPaddingY),
                 line + style.buttonPaddingY * 2.0f);
+            case TOGGLE -> fit(node,
+                contentWidth(node, style.togglePaddingX, style.togglePaddingY),
+                line + style.togglePaddingY * 2.0f);
             case CHECKBOX -> fit(node,
                 style.checkboxSize + style.checkboxGap + (float) Math.ceil(aegis.measure(label[node])),
                 Math.max(style.checkboxSize, line) + style.checkboxPaddingY * 2.0f);
@@ -678,8 +697,7 @@ public final class AegisWidgets {
                 Math.max(style.sliderThumbSize, line) + style.sliderPaddingY * 2.0f);
             case TEXT_FIELD, TEXT_BOX -> fit(node, style.textFieldWidth,
                 line * Math.max(1, visibleLines[node]) + style.textFieldPaddingY * 2.0f);
-            case LABEL -> fit(node,
-                (float) Math.ceil(aegis.measure(label[node])), line + style.labelPaddingY * 2.0f);
+            case LABEL -> fit(node, contentWidth(node, 0.0f, 0.0f), line + style.labelPaddingY * 2.0f);
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
             case TREE_VIEW -> fitTree(node, style);
@@ -808,13 +826,17 @@ public final class AegisWidgets {
     public boolean isChecked(int node) { return checked[node]; }
 
     /**
-     * Ticks or unticks a checkbox from code — to show a setting's current value, say. Does not
-     * count as a change: {@link #wasChanged} reports only what the user did.
+     * Ticks or unticks a checkbox from code — to show a setting's current value, say — or
+     * presses or releases a toggle button; pressing one of a group releases the others. Does
+     * not count as a change: {@link #wasChanged} reports only what the user did.
      *
      * @param node the checkbox
      * @param on   {@code true} to tick it
      */
-    public void setChecked(int node, boolean on) { checked[node] = on; }
+    public void setChecked(int node, boolean on) {
+        if (on && kind[node] == TOGGLE && toggleGroup[node] != 0) pressInGroup(node);
+        else checked[node] = on;
+    }
 
     /**
      * A label: text on its own, added to {@code parent} — step 3g-1.
@@ -2979,6 +3001,10 @@ public final class AegisWidgets {
         Arrays.fill(comboItemEnglish, null);
         Arrays.fill(surfaceTexture, 0);
         Arrays.fill(surfaceUpsideDown, false);
+        Arrays.fill(icon, AegisIcons.NONE);
+        Arrays.fill(toggleGroup, 0);
+        Arrays.fill(disabled, false);
+        lastToggleGroup = 0;
         tipShown = AegisLayout.NONE;
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
@@ -4196,6 +4222,17 @@ public final class AegisWidgets {
                 activated = node;
                 activatedByKeyboard = byKeyboard;
             }
+            case TOGGLE -> {
+                // Alone it flips; in a group, the one pressed stays pressed, as a radio
+                // button does, and pressing another moves the choice to it.
+                if (toggleGroup[node] != 0) {
+                    if (checked[node]) break;
+                    pressInGroup(node);
+                } else {
+                    checked[node] = !checked[node];
+                }
+                changed = node;
+            }
             case CHECKBOX -> {
                 checked[node] = !checked[node];
                 changed = node;
@@ -4280,7 +4317,11 @@ public final class AegisWidgets {
 
     /** One node and everything under it. */
     private void drawNode(int root) {
+        // A disabled widget, and all it holds, is drawn faded.
+        boolean faded = disabled[root];
+        if (faded) aegis.setOpacity(globalStyle.disabledOpacity);
         if (kind[root] == BUTTON)   drawButton(root);
+        if (kind[root] == TOGGLE)   drawToggle(root);
         if (kind[root] == CHECKBOX) drawCheckbox(root);
         if (kind[root] == SLIDER)   drawSlider(root);
         if (kind[root] == TEXT_FIELD) drawTextField(root);
@@ -4316,6 +4357,15 @@ public final class AegisWidgets {
             aegis.popClipRect();
             drawScrollBar(root);
         }
+        if (faded) aegis.setOpacity(isFadedAbove(root) ? globalStyle.disabledOpacity : 1.0f);
+    }
+
+    /** Whether something above a node is disabled, so the fade goes on after it. */
+    private boolean isFadedAbove(int node) {
+        for (int up = layout.parent(node); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (disabled[up]) return true;
+        }
+        return false;
     }
 
     /**
@@ -4375,13 +4425,9 @@ public final class AegisWidgets {
             border[0], border[1], border[2], border[3], style.buttonBorderWidth);
 
         // Centred by measurement and by line box, and clipped to the button so a label longer
-        // than its button can never draw over a neighbour.
-        String text = label[node];
-        float textX = x + (w - aegis.measure(text)) * 0.5f;
-        float textY = y + (h - aegis.lineHeight()) * 0.5f;
-        float[] ink = style.buttonText;
+        // than its button can never draw over a neighbour. An icon goes before the text.
         aegis.pushClipRect(x, y, w, h);
-        aegis.addTextTop(textX, textY, text, ink[0], ink[1], ink[2], ink[3]);
+        drawContent(node, x, y, w, h, style.buttonText, style.buttonIconGap, true);
         aegis.popClipRect();
 
         if (isDefaultButton(node)) {
@@ -4910,9 +4956,8 @@ public final class AegisWidgets {
         AegisStyle style = styleOf(node);
         float x = layout.x(node), y = layout.y(node);
         float w = layout.width(node), h = layout.height(node);
-        float[] ink = style.labelText;
         aegis.pushClipRect(x, y, w, h);
-        aegis.addTextTop(x, y + (h - aegis.lineHeight()) * 0.5f, label[node], ink[0], ink[1], ink[2], ink[3]);
+        drawContent(node, x, y, w, h, style.labelText, style.buttonIconGap, false);
         aegis.popClipRect();
     }
 
@@ -4938,6 +4983,171 @@ public final class AegisWidgets {
             aegis.addRoundedRect(layout.x(parent) + pad, y, layout.width(parent) - pad * 2.0f, t, 0.0f,
                 line[0], line[1], line[2], line[3]);
         }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Icons, toggle buttons and disabled widgets — step 4b
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A toggle button: a button that stays pressed until pressed again, added to
+     * {@code parent} — Swing's {@code JToggleButton}. Starts released.
+     *
+     * <p>A click, Enter or Space flips it, and {@link #wasChanged} reports it; whether it is
+     * pressed is {@link #isChecked}, set from code with {@link #setChecked}. Put in a group
+     * with {@link #groupToggles}, one at most is pressed at a time, as with Swing's
+     * {@code ButtonGroup}: pressing another moves the choice to it, and pressing the pressed
+     * one leaves it so — how a toolbar's tools are chosen. Give it an icon with
+     * {@link #setIcon}; with no text, it is a square of the icon, and wants a
+     * {@link #setTooltip} to say what it does.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name — {@code "toggleMove"}
+     * @param text   what it says, in English, or {@code ""} for an icon alone; kept
+     * @return its handle
+     * @throws IllegalArgumentException for a name without the {@code toggle} prefix
+     */
+    public int toggleButton(int parent, String name, String text) {
+        checkWidgetName(name, "toggle", "a toggle button");
+        int node = namedBox(parent, name);
+        tree.setInteractive(node, true);
+        tree.setFocusable(node, true);
+        kind[node]         = TOGGLE;
+        label[node]        = text;
+        labelEnglish[node] = text;
+        checked[node]      = false;
+        styleOf[node]      = null;
+        fitToContent(node);
+        return node;
+    }
+
+    /**
+     * Makes toggle buttons a group, of which one at most is pressed — Swing's
+     * {@code ButtonGroup}. If more than one is pressed now, only the first stays so.
+     *
+     * @param toggles the toggle buttons, in any order; each leaves any group it was in
+     * @throws IllegalArgumentException if one of them is not a toggle button
+     */
+    public void groupToggles(int... toggles) {
+        int group = ++lastToggleGroup;
+        boolean onePressed = false;
+        for (int toggle : toggles) {
+            if (kind[toggle] != TOGGLE) throw new IllegalArgumentException("Only toggle buttons are grouped; node " + toggle + " is not one.");
+            toggleGroup[toggle] = group;
+            if (checked[toggle] && onePressed) checked[toggle] = false;
+            onePressed |= checked[toggle];
+        }
+    }
+
+    /** Presses one toggle of a group and releases the others. */
+    private void pressInGroup(int node) {
+        int group = toggleGroup[node];
+        for (int other = 0; other < layout.nodeCount(); other++) {
+            if (toggleGroup[other] == group) checked[other] = false;
+        }
+        checked[node] = true;
+    }
+
+    /**
+     * Shows an icon before a button's, a toggle button's or a label's text — Swing's
+     * {@code setIcon}. The icon is drawn in the colour of the text, so a theme recolours it
+     * with it. A widget with no text shows the icon alone, in a square.
+     *
+     * @param node a button, toggle button or label
+     * @param name the icon's name in the icon set — {@code "play"}; {@code null} for none. An
+     *             icon the set does not have is said once in the log and shows nothing
+     * @throws IllegalStateException    if no icon set is loaded — see {@link Aegis#loadIcons}
+     * @throws IllegalArgumentException for a node that is none of those
+     */
+    public void setIcon(int node, String name) {
+        if (kind[node] != BUTTON && kind[node] != TOGGLE && kind[node] != LABEL) {
+            throw new IllegalArgumentException("Only buttons, toggle buttons and labels show an icon; node " + node + " is not one.");
+        }
+        if (name == null) {
+            icon[node] = AegisIcons.NONE;
+        } else {
+            AegisIcons set = aegis.icons();
+            if (set == null) throw new IllegalStateException("No icon set loaded: call aegis.loadIcons(...) before giving widgets icons.");
+            icon[node] = set.find(name);
+            if (icon[node] == AegisIcons.NONE) {
+                com.aengine.utils.Logger.warn(com.aengine.utils.Logger.System.UI,
+                    "The icon set \"%s\" has no icon \"%s\", asked for by %s; it shows none.", set.name(), name, addressOf(node));
+            }
+        }
+        fitToContent(node);
+    }
+
+    /**
+     * Whether a widget can be used — Swing's {@code setEnabled}. A disabled widget, and all it
+     * holds, is drawn faded by {@code disabled.opacity}; neither the pointer nor Tab reaches
+     * it, and it reports nothing. Focus on it moves on. Enabled until set.
+     *
+     * @param node    any widget
+     * @param enabled {@code false} to disable it
+     */
+    public void setEnabled(int node, boolean enabled) {
+        if (disabled[node] == !enabled) return;
+        disabled[node] = !enabled;
+        tree.setDisabled(node, !enabled);
+        if (!enabled && isFocusedWithin(node)) tree.focus(AegisLayout.NONE);
+    }
+
+    /**
+     * Whether a widget can be used.
+     *
+     * @param node any widget
+     * @return {@code false} once {@link #setEnabled} disabled it
+     */
+    public boolean isEnabled(int node) { return !disabled[node]; }
+
+    private boolean isFocusedWithin(int node) {
+        for (int up = tree.focused(); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (up == node) return true;
+        }
+        return false;
+    }
+
+    /** The width of a widget's text and icon, plus its padding; an icon alone makes a square. */
+    private float contentWidth(int node, float paddingX, float paddingY) {
+        String text = label[node];
+        float textW = text == null || text.isEmpty() ? 0.0f : (float) Math.ceil(aegis.measure(text));
+        AegisIcons set = aegis.icons();
+        if (icon[node] == AegisIcons.NONE || set == null) return textW + paddingX * 2.0f;
+        if (textW == 0.0f) return set.size() + paddingY * 2.0f + (aegis.lineHeight() - set.size());   // a square, as tall as the widget
+        return set.size() + styleOf(node).buttonIconGap + textW + paddingX * 2.0f;
+    }
+
+    /** A widget's icon and text, side by side, centred in its box — or from its left edge. */
+    private void drawContent(int node, float x, float y, float w, float h, float[] ink, float gap, boolean centred) {
+        String text = label[node];
+        boolean hasText = text != null && !text.isEmpty();
+        AegisIcons set = aegis.icons();
+        boolean hasIcon = icon[node] != AegisIcons.NONE && set != null;
+        float iconW = hasIcon ? set.size() : 0.0f;
+        float textW = hasText ? aegis.measure(text) : 0.0f;
+        float total = iconW + (hasIcon && hasText ? gap : 0.0f) + textW;
+        float left = centred ? x + (w - total) * 0.5f : x;
+        if (hasIcon) {
+            aegis.addIcon(icon[node], Math.round(left), Math.round(y + (h - set.size()) * 0.5f), ink);
+            left += iconW + (hasText ? gap : 0.0f);
+        }
+        if (hasText) aegis.addTextTop(left, y + (h - aegis.lineHeight()) * 0.5f, text, ink[0], ink[1], ink[2], ink[3]);
+    }
+
+    /** A toggle button: a button whose fill and text say whether it is pressed. */
+    private void drawToggle(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node);
+        float w = layout.width(node), h = layout.height(node);
+        boolean on = checked[node], hot = tree.isHovered(node);
+        float[] fill = on ? (hot ? style.toggleSelectedHover : style.toggleSelected) : (hot ? style.toggleHover : style.toggleFill);
+        float[] border = style.toggleBorder;
+        aegis.addRoundedRect(x, y, w, h, style.toggleRadius,
+            fill[0], fill[1], fill[2], fill[3], border[0], border[1], border[2], border[3], style.toggleBorderWidth);
+        aegis.pushClipRect(x, y, w, h);
+        drawContent(node, x, y, w, h, on ? style.toggleTextSelected : style.toggleText, style.buttonIconGap, true);
+        aegis.popClipRect();
+        if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.toggleRadius);
     }
 
     // -----------------------------------------------------------------------------------

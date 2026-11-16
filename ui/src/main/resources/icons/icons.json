@@ -1,0 +1,29 @@
+{
+  "name": "Lucide (provisional)",
+  "description": "The engine's icons by name, drawn from Lucide (ISC licence, see lucide/LICENSE) until the designer's set replaces it. The names are the engine's and stay; the font and its code points are the designer's to change.",
+  "format": 1,
+  "font": "lucide/lucide.ttf",
+
+  "icons": {
+    "toolSelect": "U+E1C3",
+    "toolMove":   "U+E125",
+    "toolRotate": "U+E14D",
+    "toolScale":  "U+E2EC",
+
+    "play":  "U+E140",
+    "pause": "U+E132",
+    "stop":  "U+E16B",
+
+    "save":     "U+E151",
+    "folder":   "U+E0DC",
+    "file":     "U+E0C4",
+    "search":   "U+E155",
+    "close":    "U+E1B2",
+    "add":      "U+E141",
+    "visible":  "U+E0BE",
+    "locked":   "U+E10F",
+    "settings": "U+E158",
+    "undo":     "U+E2A1",
+    "redo":     "U+E2A0"
+  }
+}

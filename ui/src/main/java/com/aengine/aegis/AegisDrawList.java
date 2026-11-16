@@ -160,6 +160,7 @@ public final class AegisDrawList {
         cmdCount         = 0;
         currentCmdStart  = 0;
         currentTexture   = 0;
+        opacity          = 1.0f;
 
         clipDepth = 0;
         setClip(0, 0.0f, 0.0f, viewportWidth, viewportHeight);
@@ -366,8 +367,46 @@ public final class AegisDrawList {
      * Packs a straight-alpha colour into one RGBA8 word, red in the lowest byte — see
      * {@link VertexAttribute#RGBA8}. Components outside 0..1 are clamped.
      */
-    private static int packColor(float r, float g, float b, float a) {
-        return (channel(a) << 24) | (channel(b) << 16) | (channel(g) << 8) | channel(r);
+    private int packColor(float r, float g, float b, float a) {
+        return (channel(a * opacity) << 24) | (channel(b) << 16) | (channel(g) << 8) | channel(r);
+    }
+
+    /** What every colour's alpha is multiplied by; 1 unless {@link #setOpacity} says otherwise. */
+    private float opacity = 1.0f;
+
+    /**
+     * Multiplies the alpha of everything submitted from now on — how a disabled widget is
+     * drawn faded without each draw call knowing. Back to 1 at {@link #begin}.
+     *
+     * @param opacity 0 for invisible to 1 for as given
+     */
+    public void setOpacity(float opacity) { this.opacity = opacity; }
+
+    /**
+     * Submits a quad sampling the coverage of an R8 atlas, coloured by the tint — as a glyph
+     * is drawn. What an icon is drawn with: an icon atlas holds shapes, not colours, so one
+     * atlas draws an icon in any colour the theme asks for.
+     *
+     * @param textureHandle the atlas
+     * @param x0 left edge, pixels
+     * @param y0 top edge, pixels
+     * @param x1 right edge, pixels
+     * @param y1 bottom edge, pixels
+     * @param u0 atlas U at the left edge
+     * @param v0 atlas V at the top edge
+     * @param u1 atlas U at the right edge
+     * @param v1 atlas V at the bottom edge
+     * @param r  red, 0..1
+     * @param g  green, 0..1
+     * @param b  blue, 0..1
+     * @param a  alpha, 0..1
+     */
+    public void addCoverageQuad(int textureHandle, float x0, float y0, float x1, float y1,
+                                float u0, float v0, float u1, float v1,
+                                float r, float g, float b, float a) {
+        if (vertexCount / VERTICES_PER_QUAD >= maxQuads) return;
+        useTexture(textureHandle);
+        pushSampledQuad(x0, y0, x1, y1, u0, v0, u1, v1, packColor(r, g, b, a), MODE_TEXT);
     }
 
     private static int channel(float c) {

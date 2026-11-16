@@ -66,6 +66,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Conventions | One naming scheme for every data file; widgets named by their kind first — `buttonStop`; theme entries `kind.part.property.state` |
 | Step 3h | Localisation: English in code, other languages from `lang/<tag>.json` keyed by widget address; `-PlocaleCheck` lists what is left to translate |
 | Step 4a | The editor's own screen, arranged as Godot's and Unity's; the scene in an Aegis viewport that owns the camera's keys; the scaffolding deleted |
+| Step 4b | Icons by name from an icon font; toggle buttons and groups; disabled widgets; the toolbar's tools and Play, Pause, Stop |
 
 ### The plan ahead
 
@@ -507,8 +508,8 @@ English back. Tabs and combo items gain names for their keys: `addTab(pane, "tab
 follows the system language, or `-Plocale=pt-BR`, and says in one line how much is
 translated; `-PlocaleCheck` lists what is not, ready to copy into the file.
 
-**Phase 4** builds the editor's own screen — 4a ✅ the factory arrangement and the viewport
-— and **Phase 5** deletes Dear ImGui. Both are described in §11.
+**Phase 4** builds the editor's own screen — 4a ✅ the factory arrangement and the viewport,
+4b ✅ icons and the toolbar — and **Phase 5** deletes Dear ImGui. Both are described in §11.
 
 ### Open decisions
 
@@ -529,7 +530,8 @@ Step 3d is closed; none of these blocks step 3e, which follows it.
   revisiting when a panel shows thousands of rows, which is what the asset browser will do.
 - **Localisation** — the questions listed at the end of §8.
 - **Project licence** — GPL v3 is the likely choice, not yet confirmed. The bundled fonts'
-  licences (OFL, Bitstream Vera) are compatible with it.
+  licences (OFL, Bitstream Vera) are compatible with it, as is Lucide's (ISC), the provisional
+  icon set.
 
 ---
 
@@ -1670,6 +1672,7 @@ the layout refuses anything else.
 | Slider | `slider` | `sliderOpacity` | `slider.*` |
 | Spinner | `spinner` | `spinnerGridSize` | `spinner.*` |
 | Text field, one line or several | `field` | `fieldName`, `fieldNotes` | `field.*` |
+| Toggle button | `toggle` | `toggleMove` | `toggle.*` |
 | Tabbed pane | `tabs` | `tabsScene` | `tabs.*` |
 | A tab of one | `tab` | `tabEntities` | — |
 | Split pane | `split` | `splitView` | `split.*` |
@@ -2083,12 +2086,47 @@ While ImGui still draws windows, it draws **on top**: over one of them the point
 ImGui's, and while one of its fields is typed into the keys are. The ImGui viewport's
 right-click menu (Add Entity, Save Scene) is gone with it; the right button now looks around.
 
+**4b ✅ — icons and the toolbar.** An icon set is an **icon font and a map** from the engine's
+names for its icons to the font's code points — `/icons/icons.json`:
+
+```json
+{ "name": "Lucide (provisional)", "format": 1, "font": "lucide/lucide.ttf",
+  "icons": { "play": "U+E140", "toolMove": "U+E125" } }
+```
+
+`aegis.loadIcons(map, size)` bakes only the icons the map names into an atlas of shapes, as
+the text atlas is, so an icon is drawn in the colour of the text beside it and a theme
+recolours both at once — neutral by default. The names are the engine's and stay; the font
+and code points are the designer's to replace, with any icon font, such as those IcoMoon or
+Fontello make from SVGs. Lucide (ISC) stands in until then. The set ships with the engine, so
+a mistake in its map is thrown; an icon code asks for that the map lacks is said once and
+shows nothing.
+
+- `ae.setIcon(node, "play")` on a button, a toggle button or a label — Swing's `setIcon`. With
+  no text the widget is a square of the icon, and wants a tooltip; an empty text asks for no
+  translation.
+- `ae.toggleButton(parent, "toggleMove", text)` — Swing's `JToggleButton`: stays pressed,
+  `isChecked`, `wasChanged`. `ae.groupToggles(...)` — Swing's `ButtonGroup`: one pressed at a
+  time, the pressed one staying so when pressed again.
+- `ae.setEnabled(node, false)` — Swing's `setEnabled`: the widget and all it holds drawn
+  faded by `disabled.opacity`, reached by neither the pointer nor Tab; focus on it moves off.
+
+Theme entries: `toggle.fill`, `.fill.hover`, `.fill.selected`, `.fill.selected.hover`,
+`.border`, `.text`, `.text.selected`, `.radius`, `.border.width`, `.padding.x`, `.padding.y`;
+global `icon.gap` and `disabled.opacity`.
+
+The toolbar has the **tools** — select, move, rotate, scale, a group — on the left, and
+**Play, Pause and Stop** in the middle, as Unity's and Godot's. Play starts the scene and,
+pressed again, stops it; Pause freezes physics, scripts and audio while it plays; Stop puts
+the scene back as it was. F5 still plays and stops. Pause and Stop are usable only while the
+scene plays. The tools change nothing yet: there are no gizmos to use them.
+
+**2D and 3D are not on the toolbar**: `RenderMode` is chosen at startup and read by the
+physics thread, and says it must not change underneath the systems. Switching it while the
+editor runs is engine work to plan first.
+
 **Next**, in an order to be agreed:
 
-- **4b, icons.** An icon atlas loaded from files and a widget showing an icon by name, with a
-  provisional free set in neutral colours, tinted by the theme; the final art is the
-  designer's. The toolbar gains the tools (select, move, rotate, scale), 2D/3D and Play,
-  Pause, Stop.
 - **4c, docks the user resizes.** Dividers between docks, the arrangement written back to the
   user's `layout.json`, panels closed and reopened from a View menu, and *Restore default
   layout*.

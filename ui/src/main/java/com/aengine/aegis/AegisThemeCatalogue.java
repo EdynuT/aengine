@@ -294,6 +294,23 @@ public final class AegisThemeCatalogue {
         colour("scrollbar.thumb.hover", "@global.text.dim", s -> s.scrollbarThumbHover);   // under the pointer, or dragged
         size  ("scrollbar.width", "4", (s, v) -> s.scrollbarWidth = v);
 
+        // ── Toggle button — step 4b. Its text colour also draws its icon.
+        colour("toggle.fill",                "@global.surface",        s -> s.toggleFill);
+        colour("toggle.fill.hover",          "@global.surface.hover",  s -> s.toggleHover);
+        colour("toggle.fill.selected",       "@global.surface.raised", s -> s.toggleSelected);
+        colour("toggle.fill.selected.hover", "@global.surface.hover",  s -> s.toggleSelectedHover);
+        colour("toggle.border",              "#00000000",              s -> s.toggleBorder);
+        colour("toggle.text",                "@global.text.dim",       s -> s.toggleText);
+        colour("toggle.text.selected",       "@global.text",           s -> s.toggleTextSelected);
+        size  ("toggle.radius",       "4", (s, v) -> s.toggleRadius = v);
+        size  ("toggle.border.width", "1", (s, v) -> s.toggleBorderWidth = v);
+        size  ("toggle.padding.x",    "8", (s, v) -> s.togglePaddingX = v);
+        size  ("toggle.padding.y",    "4", (s, v) -> s.togglePaddingY = v);
+
+        // ── Icons, and widgets that cannot be used — step 4b. Global values only.
+        size  ("icon.gap",         "6",   (s, v) -> s.buttonIconGap = v);     // between an icon and its text
+        size  ("disabled.opacity", "0.4", (s, v) -> s.disabledOpacity = v);   // how faded a disabled widget is
+
         // ── Window and panels: what the screen and each registered panel draw behind
         //    their widgets — step 4a. Global values only, as the scroll bar's.
         colour("window.fill",  "@global.background", s -> s.windowFill);

@@ -326,6 +326,36 @@ public final class AegisStyle {
     /** How thick it is. */
     public float         scrollbarWidth     = 4.0f;
 
+    // Toggle button — step 4b.
+    /** At rest, released. */
+    public final float[] toggleFill          = { 0.141f, 0.161f, 0.212f, 1.0f };
+    /** Released, under the pointer. */
+    public final float[] toggleHover         = { 0.271f, 0.310f, 0.388f, 1.0f };
+    /** Pressed. */
+    public final float[] toggleSelected      = { 0.200f, 0.231f, 0.290f, 1.0f };
+    /** Pressed, under the pointer. */
+    public final float[] toggleSelectedHover = { 0.271f, 0.310f, 0.388f, 1.0f };
+    /** Its edge. */
+    public final float[] toggleBorder        = { 0.0f, 0.0f, 0.0f, 0.0f };
+    /** Its text and icon, released. */
+    public final float[] toggleText          = { 0.502f, 0.541f, 0.620f, 1.0f };
+    /** Its text and icon, pressed. */
+    public final float[] toggleTextSelected  = { 0.902f, 0.922f, 0.949f, 1.0f };
+    /** How round its corners are. */
+    public float toggleRadius      = 4.0f;
+    /** How thick its edge is. */
+    public float toggleBorderWidth = 1.0f;
+    /** Space beside its content. */
+    public float togglePaddingX    = 8.0f;
+    /** Space above and below its content. */
+    public float togglePaddingY    = 4.0f;
+
+    // Icons, and disabled widgets — step 4b.
+    /** Between an icon and the text after it. */
+    public float buttonIconGap   = 6.0f;
+    /** How faded a disabled widget is drawn: 0 invisible, 1 as usual. */
+    public float disabledOpacity = 0.4f;
+
     // Window and panels — step 4a. Global values only.
     /** Behind the panels: the window itself. */
     public final float[] windowFill         = { 0.106f, 0.118f, 0.149f, 1.0f };

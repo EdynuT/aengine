@@ -66,6 +66,7 @@ public final class AegisTree {
 
     /** Which nodes can take focus. Indexed by layout handle. */
     private final boolean[] focusable;
+    private final boolean[] disabled;
 
     /** Which nodes leave focus where it was when pressed. Indexed by layout handle. */
     private final boolean[] keepsFocus;
@@ -101,6 +102,7 @@ public final class AegisTree {
     public AegisTree(AegisLayout layout, int capacity) {
         this.layout      = layout;
         this.interactive = new boolean[capacity];
+        this.disabled    = new boolean[capacity];
         this.focusable   = new boolean[capacity];
         this.keepsFocus  = new boolean[capacity];
     }
@@ -128,6 +130,21 @@ public final class AegisTree {
     public void setFocusable(int node, boolean on) { focusable[node] = on; }
 
     /**
+     * Whether a node, and all it holds, is out of reach — step 4b, a disabled widget: neither
+     * the pointer nor Tab reaches it. A press on it lands on nothing. Off until set.
+     *
+     * @param node the handle
+     * @param on   {@code true} to put it out of reach
+     */
+    public void setDisabled(int node, boolean on) { disabled[node] = on; }
+
+    /** Whether a node or anything above it is out of reach. */
+    private boolean isOutOfReach(int node) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (disabled[up]) return true;
+        return false;
+    }
+
+    /**
      * Whether a press on a node leaves focus where it was, rather than moving it to the node
      * or clearing it. For what is worked with the pointer while the keyboard stays elsewhere —
      * a split pane's divider, an open list or menu: dragging a divider must not take focus
@@ -147,6 +164,7 @@ public final class AegisTree {
     public void clear() {
         Arrays.fill(interactive, false);
         Arrays.fill(focusable, false);
+        Arrays.fill(disabled, false);
         Arrays.fill(keepsFocus, false);
         hovered = AegisLayout.NONE;
         pressed = AegisLayout.NONE;
@@ -338,7 +356,7 @@ public final class AegisTree {
         int node  = start;
         do {
             node = nextInOrder(root, node);
-            if (focusable[node]) {
+            if (focusable[node] && !isOutOfReach(node)) {
                 focused = node;
                 return;
             }
@@ -357,7 +375,7 @@ public final class AegisTree {
         int node  = start;
         do {
             node = previousInOrder(root, node);
-            if (focusable[node]) {
+            if (focusable[node] && !isOutOfReach(node)) {
                 focused = node;
                 return;
             }
@@ -439,7 +457,7 @@ public final class AegisTree {
         while (node != AegisLayout.NONE && !marks[node]) {
             node = layout.parent(node);
         }
-        return node;
+        return node != AegisLayout.NONE && isOutOfReach(node) ? AegisLayout.NONE : node;
     }
 
     /**

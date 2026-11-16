@@ -56,10 +56,13 @@ public final class EditorShell {
     private final int menuItemSaveScene;
     private final int menuItemQuit;
     private final int surfaceScene;
+    private final int toggleSelect, toggleMove, toggleRotate, toggleScale;
+    private final int togglePlay, togglePause, buttonStop;
 
     // This frame's outcome.
     private boolean saveAsked;
     private boolean quitAsked;
+    private boolean playAsked, stopAsked;
     private boolean escapeInViewport;
     private boolean viewportPressed;
     private float pressNdcX, pressNdcY;
@@ -75,6 +78,8 @@ public final class EditorShell {
         aegis = new Aegis(MAX_QUADS);
         // 18px Latin-1 is 224 glyphs: 86 rows of the atlas. 128 leaves room for a larger size.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
+        // The icons, by the engine's names — a provisional set until the designer's (4b).
+        aegis.loadIcons("/icons/icons.json", 18.0f);
         layout = aegis.layout();
         tree   = aegis.tree();
         ae     = aegis.widgets();
@@ -95,9 +100,45 @@ public final class EditorShell {
         ae.separator(menuFile, "separatorFile");
         menuItemQuit = ae.menuItem(menuFile, "menuItemQuit", "Quit");
 
+        // Toolbar (4b): the tools on the left, Play, Pause and Stop in the middle, as Unity's
+        // and Godot's. Each is an icon alone, so each has a tooltip saying what it does.
         int toolbar = screens.rowPanel("toolbar");
-        layout.setPadding(toolbar, 6.0f);
-        layout.setGap(toolbar, 6.0f);
+        layout.setPadding(toolbar, 4.0f);
+        layout.setGap(toolbar, 2.0f);
+        layout.setAlignY(toolbar, AegisLayout.Align.CENTER);
+
+        // The tools: toggle buttons in a group, one pressed at a time — Swing's ButtonGroup.
+        toggleSelect = ae.toggleButton(toolbar, "toggleSelect", "");
+        ae.setIcon(toggleSelect, "toolSelect");
+        ae.setTooltip(toggleSelect, "Select");
+        toggleMove = ae.toggleButton(toolbar, "toggleMove", "");
+        ae.setIcon(toggleMove, "toolMove");
+        ae.setTooltip(toggleMove, "Move");
+        toggleRotate = ae.toggleButton(toolbar, "toggleRotate", "");
+        ae.setIcon(toggleRotate, "toolRotate");
+        ae.setTooltip(toggleRotate, "Rotate");
+        toggleScale = ae.toggleButton(toolbar, "toggleScale", "");
+        ae.setIcon(toggleScale, "toolScale");
+        ae.setTooltip(toggleScale, "Scale");
+        ae.groupToggles(toggleSelect, toggleMove, toggleRotate, toggleScale);
+        ae.setChecked(toggleSelect, true);
+
+        // Play and Pause stay pressed while the scene plays or is paused; Pause and Stop can
+        // be used only while it plays. A box that grows on each side keeps them in the middle.
+        int spaceBefore = layout.box(toolbar);
+        layout.setGrow(spaceBefore, 1.0f);
+        togglePlay = ae.toggleButton(toolbar, "togglePlay", "");
+        ae.setIcon(togglePlay, "play");
+        ae.setTooltip(togglePlay, "Play the scene (F5)");
+        togglePause = ae.toggleButton(toolbar, "togglePause", "");
+        ae.setIcon(togglePause, "pause");
+        ae.setTooltip(togglePause, "Pause");
+        buttonStop = ae.button(toolbar, "buttonStop", "");
+        ae.setIcon(buttonStop, "stop");
+        ae.setTooltip(buttonStop, "Stop and go back to the scene as it was (F5)");
+        int spaceAfter = layout.box(toolbar);
+        layout.setGrow(spaceAfter, 1.0f);
+        showPlayState(false, false);
 
         // The docks. Empty for now, each showing its title on its tab.
         emptyDock(screens, "hierarchy", "Hierarchy");
@@ -167,6 +208,8 @@ public final class EditorShell {
     public void frame(int width, int height, int sceneTexture, boolean imguiHasMouse, boolean imguiHasKeyboard) {
         saveAsked = false;
         quitAsked = false;
+        playAsked = false;
+        stopAsked = false;
         escapeInViewport = false;
         viewportPressed = false;
         viewportWheel = 0.0f;
@@ -231,6 +274,14 @@ public final class EditorShell {
         if (ae.wasActivated(menuItemSaveScene)) saveAsked = true;
         if (ae.wasActivated(menuItemQuit))      quitAsked = true;
 
+        // Play pressed starts the scene; pressed again, it stops it, as Unity's does. Its
+        // pressed look, and Pause's, are set back by showPlayState() once the editor acts.
+        if (ae.wasChanged(togglePlay)) {
+            if (ae.isChecked(togglePlay)) playAsked = true;
+            else stopAsked = true;
+        }
+        if (ae.wasActivated(buttonStop)) stopAsked = true;
+
         // A press on the scene: where, in the viewport's normalised coordinates, Y up.
         if (tree.pointerWentDown() && tree.hovered() == surfaceScene) {
             viewportPressed = true;
@@ -249,6 +300,41 @@ public final class EditorShell {
 
     /** @return whether Save scene was asked for this frame, from the menu or Ctrl+S */
     public boolean saveAsked() { return saveAsked; }
+
+    /** @return whether Play was pressed this frame, to start the scene */
+    public boolean playAsked() { return playAsked; }
+
+    /** @return whether Stop was asked for this frame — the Stop button, or Play pressed while playing */
+    public boolean stopAsked() { return stopAsked; }
+
+    /** @return whether Pause is pressed: the scene, if it plays, is to stay frozen */
+    public boolean pauseAsked() { return ae.isChecked(togglePause); }
+
+    /**
+     * Shows the scene's state on the toolbar: Play pressed while it plays, Pause pressed
+     * while it is paused, and Pause and Stop usable only while it plays.
+     *
+     * @param playing whether the scene plays
+     * @param paused  whether it is paused
+     */
+    public void showPlayState(boolean playing, boolean paused) {
+        ae.setChecked(togglePlay, playing);
+        ae.setChecked(togglePause, playing && paused);
+        ae.setEnabled(togglePause, playing);
+        ae.setEnabled(buttonStop, playing);
+    }
+
+    /**
+     * The tool chosen on the toolbar.
+     *
+     * @return {@code "select"}, {@code "move"}, {@code "rotate"} or {@code "scale"}
+     */
+    public String tool() {
+        if (ae.isChecked(toggleMove))   return "move";
+        if (ae.isChecked(toggleRotate)) return "rotate";
+        if (ae.isChecked(toggleScale))  return "scale";
+        return "select";
+    }
 
     /** @return whether Quit was chosen this frame */
     public boolean quitAsked() { return quitAsked; }

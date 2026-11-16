@@ -185,6 +185,35 @@ public class Main extends Engine {
 
     private boolean wasF5Pressed = false;
 
+    /** Whether the scene, while playing, is paused: physics, scripts and audio frozen. */
+    private boolean playPaused = false;
+
+    /** Starts the scene: a snapshot of it is kept in memory, to be restored by {@link #enterEditor}. */
+    private void enterPlay() {
+        Logger.info(Logger.System.CORE, "Entering PLAY Mode. Snapshotting ECS to RAM...");
+        currentState = EngineState.PLAY;
+        playPaused = false;
+        EditorState.deselect(); // Clear inspector to prevent editing during simulation
+        // Serialize straight to RAM, bypassing disk IO
+        sceneMemoryBackup = SceneSerializer.serializeScene(registry, "RAM_BACKUP");
+        physicsThread.setPaused(false);
+        shell.showPlayState(true, false);
+    }
+
+    /** Stops the scene and puts it back as it was when it started. */
+    private void enterEditor() {
+        Logger.info(Logger.System.CORE, "Entering EDITOR Mode. Restoring ECS from RAM...");
+        currentState = EngineState.EDITOR;
+        playPaused = false;
+        physicsThread.setPaused(true);
+        // Wipe dynamic entities cleanly
+        synchronized (physicsThread.getSyncLock()) {
+            registry.clearScene();
+            SceneLoader.load(registry, sceneMemoryBackup);
+        }
+        shell.showPlayState(false, false);
+    }
+
     @Override
     protected void onUpdate(float deltaTime) {
         FPSTracker.update(deltaTime);    // Optional: Enable FPS tracking for the editor stats panel. Comment it but DO NOT REMOVE
@@ -229,28 +258,23 @@ public class Main extends Engine {
             }
         }
 
-        // --- STATE MACHINE TRANSITION (F5) ---
+        // --- STATE MACHINE TRANSITION: F5, or the toolbar's Play, Pause and Stop ---
+        // The toolbar's choices are those of the last frame's interface, which runs after
+        // this update; F5 is read here. Play starts the scene, or stops it if it is playing;
+        // Stop stops it; Pause freezes it where it is while it plays.
         boolean isF5Pressed = Input.isKeyPressed(Keys.F5);
-        if (isF5Pressed && !wasF5Pressed) {
-            if (currentState == EngineState.EDITOR) {
-                Logger.info(Logger.System.CORE, "Entering PLAY Mode. Snapshotting ECS to RAM...");
-                currentState = EngineState.PLAY;
-                EditorState.deselect(); // Clear inspector to prevent editing during simulation
-                // Serialize straight to RAM, bypassing disk IO
-                sceneMemoryBackup = SceneSerializer.serializeScene(registry, "RAM_BACKUP");
-                physicsThread.setPaused(false);
-            } else {
-                Logger.info(Logger.System.CORE, "Entering EDITOR Mode. Restoring ECS from RAM...");
-                currentState = EngineState.EDITOR;
-                physicsThread.setPaused(true);
-                // Wipe dynamic entities cleanly
-                synchronized (physicsThread.getSyncLock()) {
-                    registry.clearScene();
-                    SceneLoader.load(registry, sceneMemoryBackup);
-                }
-            }
-        }
+        boolean f5 = isF5Pressed && !wasF5Pressed;
         wasF5Pressed = isF5Pressed;
+        if (currentState == EngineState.EDITOR && (f5 || shell.playAsked())) {
+            enterPlay();
+        } else if (currentState == EngineState.PLAY && (f5 || shell.stopAsked())) {
+            enterEditor();
+        }
+        if (currentState == EngineState.PLAY && shell.pauseAsked() != playPaused) {
+            playPaused = shell.pauseAsked();
+            physicsThread.setPaused(playPaused);
+            Logger.info(Logger.System.CORE, playPaused ? "PLAY Mode paused." : "PLAY Mode resumed.");
+        }
 
         // Cap deltaTime before any system update to prevent spiral-of-death if the main
         // thread falls behind (e.g., during asset loading or OS scheduling spikes).
@@ -259,7 +283,7 @@ public class Main extends Engine {
         // Guard all registry access with the physics syncLock.
         synchronized (physicsThread.getSyncLock()) {
             
-            if (currentState == EngineState.PLAY) {
+            if (currentState == EngineState.PLAY && !playPaused) {
                 audioSystem.update(registry, deltaTime);
                 scriptSystem.update(registry, deltaTime);
             }

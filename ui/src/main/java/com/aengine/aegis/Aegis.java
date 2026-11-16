@@ -31,6 +31,9 @@ package com.aengine.aegis;
  *
  * <p>Must be created on the GL thread: the renderer compiles shaders and the font uploads a
  * texture.</p>
+ * 
+ * @author EdynuT
+ * @since 0.17
  */
 public final class Aegis {
 
@@ -56,6 +59,9 @@ public final class Aegis {
      * exists to remove.</p>
      */
     private AegisFont font;
+
+    /** The icons widgets draw, or null before loadIcons — step 4b. */
+    private AegisIcons icons;
 
     /** Viewport of the frame being recorded, kept so {@link #end()} can present it. */
     private int viewportWidth;
@@ -113,6 +119,42 @@ public final class Aegis {
         font = loaded;
         return loaded;
     }
+
+    /**
+     * Bakes an icon set and makes it the one widgets draw icons from — step 4b. See
+     * {@link AegisIcons} for what a set is. Calling it again replaces the set; widgets given
+     * an icon before keep the index they were given, so load it once, before building.
+     *
+     * @param mapResource classpath path of the set's map — {@code "/icons/icons.json"}
+     * @param pixelHeight the size the icons are drawn at, in pixels
+     * @return the icon set, now the current one
+     * @throws IllegalStateException for a set that cannot be read, a bug in the engine
+     */
+    public AegisIcons loadIcons(String mapResource, float pixelHeight) {
+        AegisIcons loaded = new AegisIcons(mapResource, pixelHeight, renderer != null);
+        if (icons != null) icons.cleanup();
+        icons = loaded;
+        return loaded;
+    }
+
+    /**
+     * The current icon set.
+     *
+     * @return it, or {@code null} before {@link #loadIcons}
+     */
+    public AegisIcons icons() { return icons; }
+
+    /** Draws an icon of the current set; nothing without one. For widgets. */
+    void addIcon(int icon, float x, float y, float[] rgba) {
+        if (icons != null) icons.draw(drawList, icon, x, y, rgba);
+    }
+
+    /**
+     * Fades everything drawn from now until it is set back — how a disabled widget is drawn.
+     *
+     * @param opacity 0 to 1; back to 1 at {@link #begin}
+     */
+    void setOpacity(float opacity) { drawList.setOpacity(opacity); }
 
     // -----------------------------------------------------------------------------------
     // Frame
@@ -426,6 +468,7 @@ public final class Aegis {
     /** Releases the font and the renderer. Must run on the GL thread, before the context goes. */
     public void cleanup() {
         if (font != null) font.cleanup();
+        if (icons != null) icons.cleanup();
         if (renderer != null) renderer.cleanup();
     }
 
