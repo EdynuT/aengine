@@ -20,10 +20,17 @@ final class TestShell {
     private float   pointerX = -1.0f, pointerY = -1.0f;
     private boolean buttonDown;
 
+    /** The widgets' clock: it stands still until a test moves it with {@link #waitMillis}. */
+    private long nanos = 1_000_000_000L;
+
     TestShell() {
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
         root = layout.column(AegisLayout.NONE);
+        ae.clock = () -> nanos;
     }
+
+    /** Time passing, with no frame: what a delay is measured against. */
+    void waitMillis(long millis) { nanos += millis * 1_000_000L; }
 
     /** One frame: solve, hand the pointer in, apply the keys handed in since the last. */
     void frame() {

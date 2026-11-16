@@ -196,6 +196,17 @@ public final class AegisStyle {
     /** How thick the line marking the shown tab is. */
     public float         tabsAccentHeight = 2.0f;
 
+    // ── Split pane ──────────────────────────────────────────────────────────
+
+    /** The divider's line. */
+    public final float[] splitLine      = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** The line under the pointer, or being dragged. */
+    public final float[] splitLineHover = { 0.36f, 0.62f, 0.94f, 1.0f };
+    /** The room the divider takes between the two sides — what the pointer can take hold of. */
+    public float         splitSize      = 8.0f;
+    /** How thick the line drawn along it is. */
+    public float         splitLineWidth = 2.0f;
+
     // ── Scroll bar ──────────────────────────────────────────────────────────
 
     /** The bar showing where a scrolling panel is, which is dragged to scroll it. */

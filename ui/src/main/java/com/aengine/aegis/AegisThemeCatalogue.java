@@ -223,6 +223,12 @@ public final class AegisThemeCatalogue {
         size  ("tabs.radius",        "4",  (s, v) -> s.tabsRadius = v);
         size  ("tabs.accent.height", "2",  (s, v) -> s.tabsAccentHeight = v);
 
+        // ── Split pane: its divider ────────────────────────────────────────────────────
+        colour("split.line",       "@global.border", s -> s.splitLine);
+        colour("split.line.hover", "@global.accent", s -> s.splitLineHover);   // under the pointer, or dragged
+        size  ("split.size",       "8", (s, v) -> s.splitSize = v);            // the room the divider takes
+        size  ("split.line.width", "2", (s, v) -> s.splitLineWidth = v);
+
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);

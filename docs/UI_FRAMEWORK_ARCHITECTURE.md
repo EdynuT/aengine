@@ -55,6 +55,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Tests | JUnit in `ui/src/test`, run by `./gradlew test` with no window (`Aegis.headless`); every step from here adds its own |
 | Step 3g-3 | Spinner: a number typed or stepped, by its arrows or Up and Down; the marks widgets draw (▴ ▾ ▸ ◂ ✓) join the font atlas |
 | Step 3g-4 | Tabbed pane: `ae.tabbedPane` and `addTab`; a layout's `tabs` builds one, a tab per panel, titled by `screens.setPanelTitle` |
+| Step 3g-5 | Split pane: `ae.splitPane`, its divider dragged or moved by keys, a press on it leaving focus alone (`tree.setKeepsFocus`); in memory only |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -288,7 +289,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-4.**
+3g-5.**
 
 | Group | Widgets |
 |---|---|
@@ -301,7 +302,7 @@ against Swing's list; each keyboard-operable like the rest. **Started — we sto
 The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅ label and
 separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
 **3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
-`tabs` then uses instead of showing its first panel; **3g-5** split pane, its dividers dragged
+`tabs` then uses instead of showing its first panel; **3g-5** ✅ split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
 waits for the panels that ask for it, in Phase 4.
@@ -377,6 +378,20 @@ not shown, so naming it twice is still an error. Theme entries: `tabs.fill`, `.f
 `.fill.selected`, `.text`, `.text.selected`, `.accent`, `.border`, `.padding.x`, `.padding.y`,
 `.gap`, `.radius`, `.accent.height`. Tabs the bar has no room for are cut off; scrolling the
 bar waits for a panel that needs it.
+
+**3g-5, split pane.** `ae.splitPane(parent, name, sideBySide, first, second, location)`, as
+`JSplitPane`: a row (side by side) or column of the first side, a divider, the second side.
+The first keeps the size the divider gives it and the second grows into the rest, so a
+larger window goes to the second side, as `JSplitPane`'s default resize weight does. The
+divider is dragged — it does not jump under the pointer — or, being a stop of Tab, moved by
+the arrows along its way, 8 pixels a press and Shift ten times that, and taken to either end
+by Home and End. Neither side gets smaller than 24 pixels. Pressing the divider leaves focus
+where it was: `tree.setKeepsFocus(node, true)` is new, for what is worked with the pointer
+while the keyboard stays elsewhere. `dividerLocation`, `setDividerLocation`;
+`wasChanged(split)` on each frame the user moved it. Where it is stays in memory; writing it
+to the layout file is Phase 4's. Theme entries: `split.line`, `.line.hover`, `.size` (the room
+the divider takes, what the pointer takes hold of) and `.line.width`. The widgets' timings now
+read a clock tests can set, so a delay is tested by moving time rather than waiting.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

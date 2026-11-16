@@ -31,7 +31,8 @@
           { "type": "panel", "panel": "viewport", "grow": 1, "children": [
             { "type": "widget", "widget": "pauseButton", "hidden": true },
             { "type": "widget", "widget": "playButton" },
-            { "type": "widget", "widget": "descriptionBox" }
+            { "type": "widget", "widget": "descriptionBox" },
+            { "type": "widget", "widget": "viewSplit" }
           ]},
           { "type": "panel", "panel": "hierarchy", "width": 240 }
         ]}

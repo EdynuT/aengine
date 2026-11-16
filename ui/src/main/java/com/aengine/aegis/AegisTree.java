@@ -67,6 +67,9 @@ public final class AegisTree {
     /** Which nodes can take focus. Indexed by layout handle. */
     private final boolean[] focusable;
 
+    /** Which nodes leave focus where it was when pressed. Indexed by layout handle. */
+    private final boolean[] keepsFocus;
+
     private int hovered = AegisLayout.NONE;
     private int pressed = AegisLayout.NONE;   // holds the capture while the button is down
     private int clicked = AegisLayout.NONE;   // this frame only
@@ -89,6 +92,7 @@ public final class AegisTree {
         this.layout      = layout;
         this.interactive = new boolean[capacity];
         this.focusable   = new boolean[capacity];
+        this.keepsFocus  = new boolean[capacity];
     }
 
     // -----------------------------------------------------------------------------------
@@ -114,6 +118,17 @@ public final class AegisTree {
     public void setFocusable(int node, boolean on) { focusable[node] = on; }
 
     /**
+     * Whether a press on a node leaves focus where it was, rather than moving it to the node
+     * or clearing it. For what is worked with the pointer while the keyboard stays elsewhere —
+     * a split pane's divider, an open list or menu: dragging a divider must not take focus
+     * from the text field being typed into. Off by default.
+     *
+     * @param node the layout handle
+     * @param on   {@code true} to leave focus alone when it is pressed
+     */
+    public void setKeepsFocus(int node, boolean on) { keepsFocus[node] = on; }
+
+    /**
      * Forgets every node's settings, the pointer state and the focus.
      *
      * <p>Call it together with {@link AegisLayout#clear()}. Handles are reused after a layout is
@@ -122,6 +137,7 @@ public final class AegisTree {
     public void clear() {
         Arrays.fill(interactive, false);
         Arrays.fill(focusable, false);
+        Arrays.fill(keepsFocus, false);
         hovered = AegisLayout.NONE;
         pressed = AegisLayout.NONE;
         clicked = AegisLayout.NONE;
@@ -161,7 +177,9 @@ public final class AegisTree {
         // It also moves focus: to the focusable node pressed on, or away from everything.
         if (justPressed) {
             pressed = target;
-            focused = markedAt(focusable, root, mouseX, mouseY);
+            if (target == AegisLayout.NONE || !keepsFocus[target]) {
+                focused = markedAt(focusable, root, mouseX, mouseY);
+            }
         }
 
         if (justReleased) {

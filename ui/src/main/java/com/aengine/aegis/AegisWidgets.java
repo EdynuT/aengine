@@ -6,6 +6,7 @@ import com.aengine.core.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.LongSupplier;
 /**
  * The widgets — layer L4's controls, built on the layout and the tree.
  *
@@ -72,6 +73,13 @@ public final class AegisWidgets {
 
     private static final byte TABBED_PANE  = 9;   // step 3g-4: the column holding a tab bar and the shown panel
     private static final byte TAB_BAR      = 10;  //            its bar, the part that is drawn and takes input
+    private static final byte SPLIT_PANE   = 11;  // step 3g-5: a row or column of two sides and a divider
+    private static final byte DIVIDER      = 12;  //            the divider, dragged or moved by keys
+
+    /** Neither side of a split pane is made smaller than this by its divider. */
+    private static final float SPLIT_MINIMUM = 24.0f;
+    /** How far an arrow key moves a divider; Shift makes it ten times as far. */
+    private static final float DIVIDER_KEY_STEP = 8.0f;
 
     /** A held spinner arrow steps again after this long, then every {@link #SPIN_REPEAT_NANOS}. */
     private static final long SPIN_DELAY_NANOS  = 400_000_000L;
@@ -145,6 +153,17 @@ public final class AegisWidgets {
 
     /** Whether the last name of a widget's {@link #themePath} is its own, or its nearest named container's. */
     private final boolean[] themeNamed;
+
+    /** Where on a divider the pointer took hold of it, from its start, so it does not jump. */
+    private float dividerGrab;
+
+    /**
+     * What every timing here reads — the caret's blink, the undo pause, a held arrow — in
+     * nanoseconds. The system clock; a test sets its own, to step time instead of waiting.
+     */
+    LongSupplier clock = System::nanoTime;
+
+    private long now() { return clock.getAsLong(); }
 
     /** Ctrl+Tab and Ctrl+PageDown this frame, or their opposites: + or -. */
     private int pendingTabSwitch;
@@ -382,6 +401,7 @@ public final class AegisWidgets {
             case SEPARATOR            -> "separator";
             case SPINNER              -> "spinner";
             case TAB_BAR              -> "tabs";
+            case DIVIDER              -> "split";
             default                   -> "";
         };
     }
@@ -409,6 +429,11 @@ public final class AegisWidgets {
                 (float) Math.ceil(aegis.measure(label[node])), line + style.labelPaddingY * 2.0f);
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
+            case DIVIDER -> {
+                // Its room along the way the split pane lays its sides out; across, it is stretched.
+                if (layout.isRow(layout.parent(node))) fit(node, style.splitSize, 0.0f);
+                else                                   fit(node, 0.0f, style.splitSize);
+            }
             case SEPARATOR -> {
                 // Room for the line and its margins along the way its parent stacks; nothing
                 // across, since the line is drawn across the whole parent (drawSeparator).
@@ -1068,6 +1093,121 @@ public final class AegisWidgets {
         return (float) Math.ceil(aegis.measure(title)) + style.tabsPaddingX * 2.0f;
     }
 
+    // -----------------------------------------------------------------------------------
+    // Split pane — step 3g-5
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A split pane: two sides with a divider between them, which is dragged to give one side
+     * more room and the other less — added to {@code parent}. Side by side, the divider stands
+     * upright; one above the other, it lies flat.
+     *
+     * <p>It works as Swing's {@code JSplitPane} does. The divider is dragged with the pointer;
+     * from the keyboard it is a stop of Tab, and with focus the arrows along the way it moves
+     * shift it {@value #DIVIDER_KEY_STEP} pixels — Shift, ten times that — and Home and End
+     * take it as far as it goes either way. Pressing it leaves focus where it was, so a text
+     * field being typed into keeps the keyboard while the divider is dragged. Neither side is
+     * made smaller than {@value #SPLIT_MINIMUM} pixels.</p>
+     *
+     * <p>The handle is a row (side by side) or a column: {@code first}, the divider,
+     * {@code second}. {@code first} keeps the size the divider gives it, and {@code second}
+     * grows into the rest, so a larger window goes to the second side — as {@code JSplitPane}
+     * gives it with its default resize weight. Size the pane, or make it grow, as any node.
+     * Where the divider is is kept in memory only; a layout file writing it back is Phase 4's.</p>
+     *
+     * @param parent     the row or column to add it to, or {@link AegisLayout#NONE}
+     * @param name       its name, which a theme writes — {@code "viewSplit"}, dressed by
+     *                   {@code viewport.viewSplit.line} and the other {@code split} entries;
+     *                   see {@link AegisLayout#setNodeName}
+     * @param sideBySide {@code true} for left and right, {@code false} for top and bottom
+     * @param first      the left or top side: any row, column or box; taken from where it hangs
+     * @param second     the right or bottom side; taken likewise
+     * @param location   how wide (or tall) {@code first} starts, in pixels
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int splitPane(int parent, String name, boolean sideBySide, int first, int second, float location) {
+        AegisLayout.checkNodeName(name);
+        int split = sideBySide ? layout.row(parent) : layout.column(parent);
+        layout.setNodeName(split, name);
+        if (sideBySide) layout.setAlignY(split, AegisLayout.Align.STRETCH);
+        else            layout.setAlignX(split, AegisLayout.Align.STRETCH);
+
+        layout.attach(first, split);
+        int divider = layout.box(split);
+        layout.attach(second, split);
+        layout.setGrow(first, 0.0f);
+        layout.setGrow(second, 1.0f);
+
+        tree.setInteractive(divider, true);
+        tree.setFocusable(divider, true);
+        tree.setKeepsFocus(divider, true);
+        kind[split]   = SPLIT_PANE;
+        kind[divider] = DIVIDER;
+        ArrayList<String> path = new ArrayList<>(pathAbove(parent));
+        path.add(name);
+        themePath[divider]  = List.copyOf(path);
+        themeNamed[divider] = true;
+        styleOf[divider]    = null;
+        fitToContent(divider);
+        setDividerLocation(split, location);
+        return split;
+    }
+
+    /** The names above a node, top down, as a theme path starts. */
+    private List<String> pathAbove(int parent) {
+        ArrayList<String> path = new ArrayList<>();
+        for (int up = parent; up != AegisLayout.NONE; up = layout.parent(up)) {
+            String above = layout.nodeName(up);
+            if (above != null) path.add(0, above);
+        }
+        return path;
+    }
+
+    /**
+     * Where a split pane's divider is: how wide its first side is, or how tall when the sides
+     * are one above the other.
+     *
+     * @param split the split pane
+     * @return the first side's size, in pixels
+     */
+    public float dividerLocation(int split) {
+        int first = layout.firstChild(split);
+        return layout.isRow(split) ? layout.requestedWidth(first) : layout.requestedHeight(first);
+    }
+
+    /**
+     * Moves a split pane's divider from code. Not reported by {@link #wasChanged}. Kept to the
+     * pane's room once it has been solved.
+     *
+     * @param split    the split pane
+     * @param location how wide (or tall) the first side is to be, in pixels
+     */
+    public void setDividerLocation(int split, float location) {
+        int first = layout.firstChild(split);
+        float to = clampDivider(split, location);
+        if (layout.isRow(split)) layout.setWidth(first, to);
+        else                     layout.setHeight(first, to);
+    }
+
+    /** A divider location kept between the two minimums, once the pane has a size to keep it in. */
+    private float clampDivider(int split, float location) {
+        float room = (layout.isRow(split) ? layout.width(split) : layout.height(split))
+                   - layout.padding(split) * 2.0f;
+        if (room <= 0.0f) return Math.max(0.0f, location);   // not solved yet
+        int divider = layout.nextSibling(layout.firstChild(split));
+        float most = room - (layout.isRow(split) ? layout.requestedWidth(divider) : layout.requestedHeight(divider))
+                   - SPLIT_MINIMUM;
+        return Math.max(Math.min(SPLIT_MINIMUM, most), Math.min(location, most));
+    }
+
+    /** Moves a divider because the user did, and reports it on the split pane. */
+    private void userMovesDivider(int split, float location) {
+        float before = dividerLocation(split);
+        setDividerLocation(split, Math.round(location));
+        if (dividerLocation(split) != before) changed = split;
+    }
+
     /** The bar of the nearest tabbed pane around a node — the node itself, if it is a bar — or NONE. */
     private int tabBarAround(int node) {
         for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
@@ -1139,7 +1279,8 @@ public final class AegisWidgets {
 
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
-     * box, a label, a separator, a spinner, or a tabbed pane or its bar.
+     * box, a label, a separator, a spinner, a tabbed pane or its bar, or a split pane or its
+     * divider.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -1224,9 +1365,9 @@ public final class AegisWidgets {
         } else if (key == Keys.PAGE_UP) {
             pendingPages--;
         } else if (key == Keys.DOWN) {
-            pendingLines++;
+            pendingLines += shift ? LARGE_STEP : 1;
         } else if (key == Keys.UP) {
-            pendingLines--;
+            pendingLines -= shift ? LARGE_STEP : 1;
         }
     }
 
@@ -1364,7 +1505,7 @@ public final class AegisWidgets {
             return false;
         }
 
-        caretShownAt = System.nanoTime();   // the caret shows at once wherever it went
+        caretShownAt = now();   // the caret shows at once wherever it went
         return true;
     }
 
@@ -1445,7 +1586,7 @@ public final class AegisWidgets {
     private void moveCaret(int node, int to, boolean extend) {
         caret[node] = to;
         if (!extend) anchor[node] = to;
-        caretShownAt = System.nanoTime();
+        caretShownAt = now();
         caretGoalX   = -1.0f;   // any move but Up or Down ends a vertical run; those set it again after
         revealCaret  = true;
     }
@@ -1617,7 +1758,7 @@ public final class AegisWidgets {
             hCaretAfter[hApplied - 1]  = caret[node];
             hAnchorAfter[hApplied - 1] = anchor[node];
         }
-        hLastEdit = System.nanoTime();
+        hLastEdit = now();
         edited = node;
     }
 
@@ -1632,7 +1773,7 @@ public final class AegisWidgets {
         caret[node]  = hCaretBefore[b];
         anchor[node] = hAnchorBefore[b];
         revealCaret  = true;
-        caretShownAt = System.nanoTime();
+        caretShownAt = now();
         edited = node;
     }
 
@@ -1647,7 +1788,7 @@ public final class AegisWidgets {
         caret[node]  = hCaretAfter[b];
         anchor[node] = hAnchorAfter[b];
         revealCaret  = true;
-        caretShownAt = System.nanoTime();
+        caretShownAt = now();
         edited = node;
     }
 
@@ -1768,6 +1909,29 @@ public final class AegisWidgets {
         // moves only the caret, so dragging selects from where the press began. Dragging past
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
+        // A divider pressed follows the pointer, every frame the press lasts.
+        if (pressed != AegisLayout.NONE && kind[pressed] == DIVIDER) {
+            int split = layout.parent(pressed);
+            boolean across = layout.isRow(split);
+            float along = across ? tree.pointerX() : tree.pointerY();
+            if (pressed != lastPressed) {
+                dividerGrab = along - (across ? layout.x(pressed) : layout.y(pressed));
+            } else {
+                float start = (across ? layout.x(split) : layout.y(split)) + layout.padding(split);
+                userMovesDivider(split, along - dividerGrab - start);
+            }
+        }
+
+        // A focused divider takes the arrows along the way it moves, and Home and End.
+        if (focused != AegisLayout.NONE && kind[focused] == DIVIDER) {
+            int split = layout.parent(focused);
+            int steps = layout.isRow(split) ? pendingSteps : pendingLines;
+            float to = dividerLocation(split) + steps * DIVIDER_KEY_STEP;
+            if (pendingJump < 0) to = 0.0f;
+            if (pendingJump > 0) to = Float.MAX_VALUE;
+            if (steps != 0 || pendingJump != 0) userMovesDivider(split, to);
+        }
+
         // A tab pressed is shown at once, on the press rather than the release, as in Swing.
         if (pressed != AegisLayout.NONE && kind[pressed] == TAB_BAR && pressed != lastPressed) {
             userSelectsTab(pressed, tabAt(pressed, tree.pointerX()));
@@ -1796,11 +1960,11 @@ public final class AegisWidgets {
                 spinHeld = spinnerArrowAt(pressed, tree.pointerX(), tree.pointerY());
                 if (spinHeld != 0) {
                     stepSpinner(pressed, spinHeld);
-                    spinNextAt = System.nanoTime() + SPIN_DELAY_NANOS;
+                    spinNextAt = now() + SPIN_DELAY_NANOS;
                 }
-            } else if (spinHeld != 0 && System.nanoTime() >= spinNextAt) {
+            } else if (spinHeld != 0 && now() >= spinNextAt) {
                 stepSpinner(pressed, spinHeld);
-                spinNextAt = System.nanoTime() + SPIN_REPEAT_NANOS;
+                spinNextAt = now() + SPIN_REPEAT_NANOS;
             }
             onArrows = spinHeld != 0;
             if (stepped != AegisLayout.NONE) changed = stepped;
@@ -1830,7 +1994,7 @@ public final class AegisWidgets {
                 anchor[focused] = 0;
                 caret[focused]  = fieldText[focused].length();
             }
-            caretShownAt = System.nanoTime();
+            caretShownAt = now();
             lastFocused  = focused;
             if (focused != AegisLayout.NONE) scrollIntoView(focused);
         }
@@ -1843,7 +2007,7 @@ public final class AegisWidgets {
         // The undo history belongs to the field with focus: once focus is elsewhere it is gone.
         // A second without an edit ends the block being typed, so the next word is its own undo.
         if (hField != AegisLayout.NONE && hField != focused) resetHistory();
-        if (hOpen && System.nanoTime() - hLastEdit > HISTORY_PAUSE_NANOS) hOpen = false;
+        if (hOpen && now() - hLastEdit > HISTORY_PAUSE_NANOS) hOpen = false;
 
         // A focused slider takes the arrows, + and -, Home and End.
         if (focused != AegisLayout.NONE && kind[focused] == SLIDER) {
@@ -2329,6 +2493,7 @@ public final class AegisWidgets {
         if (kind[root] == SEPARATOR)  drawSeparator(root);
         if (kind[root] == SPINNER)    drawSpinner(root);
         if (kind[root] == TAB_BAR)    drawTabBar(root);
+        if (kind[root] == DIVIDER)    drawDivider(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -2565,7 +2730,7 @@ public final class AegisWidgets {
 
         // Shown for one blink interval, hidden for the next, counted from the last time it
         // moved or the field gained focus.
-        boolean caretOn = ((System.nanoTime() - caretShownAt) / CARET_BLINK_NANOS) % 2 == 0;
+        boolean caretOn = ((now() - caretShownAt) / CARET_BLINK_NANOS) % 2 == 0;
         if (focused && caretOn) {
             float[] c = style.textFieldCaret;
             aegis.addRoundedRect(Math.round(textX + caretOffset(node, caret[node])), textY,
@@ -2626,6 +2791,24 @@ public final class AegisWidgets {
             drawFocusRing(style, ringX + inset, y + inset, ringW - inset * 2.0f, h - inset * 2.0f,
                 Math.max(0.0f, style.tabsRadius - inset));
         }
+    }
+
+    /**
+     * A split pane's divider: a line along its middle, the length of the pane, lighter under
+     * the pointer and while dragged; the focus ring around it while it has focus.
+     */
+    private void drawDivider(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        float t = style.splitLineWidth;
+        boolean lit = tree.isPressed(node) || (tree.isHovered(node) && tree.pressed() == AegisLayout.NONE);
+        float[] ink = lit ? style.splitLineHover : style.splitLine;
+        if (layout.isRow(layout.parent(node))) {
+            aegis.addRoundedRect(Math.round(x + (w - t) * 0.5f), y, t, h, t * 0.5f, ink[0], ink[1], ink[2], ink[3]);
+        } else {
+            aegis.addRoundedRect(x, Math.round(y + (h - t) * 0.5f), w, t, t * 0.5f, ink[0], ink[1], ink[2], ink[3]);
+        }
+        if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, 0.0f);
     }
 
     /**
@@ -2730,7 +2913,7 @@ public final class AegisWidgets {
             }
         }
 
-        boolean caretOn = ((System.nanoTime() - caretShownAt) / CARET_BLINK_NANOS) % 2 == 0;
+        boolean caretOn = ((now() - caretShownAt) / CARET_BLINK_NANOS) % 2 == 0;
         if (focused && caretOn) {
             float[] c = style.textFieldCaret;
             int from = lineStarts[caretLine], to = lineEnds[caretLine];

@@ -129,6 +129,7 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int viewSplit;          // step 3g-5: a split pane, from ae.splitPane()
     private int sceneTabs;          // step 3g-4: a tabbed pane, from ae.tabbedPane() and ae.addTab()
     private int gridSizeLabel;      // step 3g-3: a spinner, from ae.spinner(), with its label
     private int gridSizeSpinner;
@@ -1191,6 +1192,21 @@ public class Main extends Engine {
             + "Up and Down keep the caret's place across lines.\n"
             + "The wheel scrolls it too.");
         ae.setPlaceholder(descriptionBox, "Description");
+
+        // Step 3g-5: a split pane — two sides and a divider between them. Each side is an
+        // ordinary column, built with NONE as its parent since splitPane() takes it over; true
+        // puts them side by side, and 110 is how wide the left one starts. Drag the divider, or
+        // Tab to it and use Left and Right (Shift: ten times as far), Home and End. Pressing
+        // it leaves focus where it was. ae.dividerLocation(viewSplit) reads where it is, and
+        // ae.wasChanged(viewSplit) is true on each frame the user moved it.
+        int splitLeft = layout.column(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(splitLeft, 6.0f);
+        ae.label(splitLeft, "splitLeftLabel", "Left");
+        int splitRight = layout.column(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(splitRight, 6.0f);
+        ae.label(splitRight, "splitRightLabel", "Right side");
+        viewSplit = ae.splitPane(layoutViewport, "viewSplit", true, splitLeft, splitRight, 110.0f);
+        layout.setSize(viewSplit, 300.0f, 90.0f);
 
         // Inspector: STRETCH on X makes every field as wide as the pane, so the fields ask only
         // for a height. Its width comes from the layout.
