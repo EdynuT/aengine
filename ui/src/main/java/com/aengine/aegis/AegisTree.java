@@ -70,6 +70,16 @@ public final class AegisTree {
     /** Which nodes leave focus where it was when pressed. Indexed by layout handle. */
     private final boolean[] keepsFocus;
 
+    /**
+     * The overlay layers, bottom first: roots drawn above everything and given the pointer
+     * before it — step 3g-7. A modal one also keeps the pointer from everything below it. Kept
+     * by {@link AegisWidgets}, which opens and closes them.
+     */
+    private static final int MAX_LAYERS = 16;
+    private final int[]     layers     = new int[MAX_LAYERS];
+    private final boolean[] layerModal = new boolean[MAX_LAYERS];
+    private int layerCount;
+
     private int hovered = AegisLayout.NONE;
     private int pressed = AegisLayout.NONE;   // holds the capture while the button is down
     private int clicked = AegisLayout.NONE;   // this frame only
@@ -142,6 +152,7 @@ public final class AegisTree {
         pressed = AegisLayout.NONE;
         clicked = AegisLayout.NONE;
         focused = AegisLayout.NONE;
+        layerCount = 0;
     }
 
     // -----------------------------------------------------------------------------------
@@ -355,6 +366,66 @@ public final class AegisTree {
     // Internals
     // -----------------------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------------------
+    // Overlay layers — step 3g-7
+    // -----------------------------------------------------------------------------------
+
+    /** Puts a root on top of the others, given the pointer first; modal, it also blocks what is below. */
+    void pushLayer(int node, boolean modal) {
+        if (layerCount == MAX_LAYERS) {
+            throw new IllegalStateException("More than " + MAX_LAYERS + " overlays open at once.");
+        }
+        layers[layerCount]     = node;
+        layerModal[layerCount] = modal;
+        layerCount++;
+    }
+
+    /** Takes a root out of the layers, wherever it is among them. */
+    void removeLayer(int node) {
+        for (int i = 0; i < layerCount; i++) {
+            if (layers[i] != node) continue;
+            System.arraycopy(layers, i + 1, layers, i, layerCount - i - 1);
+            System.arraycopy(layerModal, i + 1, layerModal, i, layerCount - i - 1);
+            layerCount--;
+            if (isUnderAny(pressed, node)) pressed = AegisLayout.NONE;
+            if (isUnderAny(hovered, node)) hovered = AegisLayout.NONE;
+            return;
+        }
+    }
+
+    int layerCount()            { return layerCount; }
+    int layer(int i)            { return layers[i]; }
+    boolean isModalLayer(int i) { return layerModal[i]; }
+
+    /** The topmost modal layer, or NONE: what Tab keeps focus inside. */
+    int topModal() {
+        for (int i = layerCount - 1; i >= 0; i--) if (layerModal[i]) return layers[i];
+        return AegisLayout.NONE;
+    }
+
+    /**
+     * The deepest node under a point, layers first: the topmost layer holding it answers;
+     * below a modal layer, nothing does; otherwise {@code root}.
+     *
+     * @param root the tree under the layers
+     * @param x    point x
+     * @param y    point y
+     * @return the node, or {@link AegisLayout#NONE}
+     */
+    public int nodeUnder(int root, float x, float y) {
+        for (int i = layerCount - 1; i >= 0; i--) {
+            int hit = layout.nodeAt(layers[i], x, y);
+            if (hit != AegisLayout.NONE) return hit;
+            if (layerModal[i]) return AegisLayout.NONE;
+        }
+        return layout.nodeAt(root, x, y);
+    }
+
+    private boolean isUnderAny(int node, int above) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (up == above) return true;
+        return false;
+    }
+
     /** The innermost node under the point, walked up to the nearest interactive one. */
     private int interactiveAt(int root, float x, float y) {
         return markedAt(interactive, root, x, y);
@@ -362,7 +433,7 @@ public final class AegisTree {
 
     /** The innermost node under the point, walked up to the nearest one set in {@code marks}. */
     private int markedAt(boolean[] marks, int root, float x, float y) {
-        int node = layout.nodeAt(root, x, y);
+        int node = nodeUnder(root, x, y);
         while (node != AegisLayout.NONE && !marks[node]) {
             node = layout.parent(node);
         }

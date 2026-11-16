@@ -239,6 +239,14 @@ public final class AegisThemeCatalogue {
         size  ("tree.padding.x",     "4",  (s, v) -> s.treePaddingX = v);
         size  ("tree.padding.y",     "3",  (s, v) -> s.treePaddingY = v);
 
+        // ── Overlay: popups, lists, menus and dialogs stand on it. Global values only. ────
+        colour("overlay.fill",          "#2B3040",        s -> s.overlayFill);
+        colour("overlay.border",        "@global.border", s -> s.overlayBorder);
+        colour("overlay.shadow",        "#00000059",      s -> s.overlayShadow);
+        colour("overlay.scrim",         "#00000073",      s -> s.overlayScrim);   // over what is below a dialog
+        size  ("overlay.radius",        "6", (s, v) -> s.overlayRadius = v);
+        size  ("overlay.shadow.offset", "4", (s, v) -> s.overlayShadowOffset = v);
+
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);

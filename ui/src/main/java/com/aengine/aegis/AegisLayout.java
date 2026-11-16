@@ -699,6 +699,21 @@ public final class AegisLayout {
     }
 
     /**
+     * The width a node would ask its parent for — what it was given, or its content's —
+     * measured now. For a root placed on its own, as an overlay is, at the size it needs.
+     */
+    float naturalWidth(int node) {
+        measure(node);
+        return askedWidth(node);
+    }
+
+    /** The height a node would ask its parent for; see {@link #naturalWidth}. */
+    float naturalHeight(int node) {
+        measure(node);
+        return askedHeight(node);
+    }
+
+    /**
      * How many solves actually ran.
      *
      * <p>The number that makes the cache visible, as in the text layout cache: it climbs while

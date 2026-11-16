@@ -226,6 +226,21 @@ public final class AegisStyle {
     /** Space above and below each item's text. */
     public float         treePaddingY     = 3.0f;
 
+    // ── Overlay: what any popup, list, menu or dialog stands on ─────────────────
+
+    /** Its background. */
+    public final float[] overlayFill    = { 0.17f, 0.19f, 0.25f, 1.0f };
+    /** Its outline. */
+    public final float[] overlayBorder  = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** The shadow drawn under it, offset down and right. */
+    public final float[] overlayShadow  = { 0.0f, 0.0f, 0.0f, 0.35f };
+    /** Laid over everything below a modal overlay. */
+    public final float[] overlayScrim   = { 0.0f, 0.0f, 0.0f, 0.45f };
+    /** How round its corners are. */
+    public float         overlayRadius  = 6.0f;
+    /** How far its shadow falls. */
+    public float         overlayShadowOffset = 4.0f;
+
     // ── Scroll bar ──────────────────────────────────────────────────────────
 
     /** The bar showing where a scrolling panel is, which is dragged to scroll it. */

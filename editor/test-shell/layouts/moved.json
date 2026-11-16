@@ -26,7 +26,8 @@
             ]},
             { "type": "widget", "widget": "inspectorSeparator" },
             { "type": "widget", "widget": "nameLabel" },
-            { "type": "widget", "widget": "nameField" }
+            { "type": "widget", "widget": "nameField" },
+            { "type": "widget", "widget": "showPopupButton" }
           ]},
           { "type": "panel", "panel": "viewport", "grow": 1, "children": [
             { "type": "widget", "widget": "pauseButton", "hidden": true },

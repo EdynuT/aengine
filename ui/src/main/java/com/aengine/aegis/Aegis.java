@@ -137,6 +137,12 @@ public final class Aegis {
      * order, every time. Separating them bought no freedom and only offered the chance to
      * forget the second.</p>
      */
+    /** The width of the frame being recorded, as handed to {@link #begin}; 0 before the first. */
+    int viewportWidth()  { return viewportWidth; }
+
+    /** The height of the frame being recorded; 0 before the first. */
+    int viewportHeight() { return viewportHeight; }
+
     public void end() {
         drawList.end();
         if (renderer != null) renderer.render(drawList, viewportWidth, viewportHeight);

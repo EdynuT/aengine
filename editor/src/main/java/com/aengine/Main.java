@@ -129,6 +129,9 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int showPopupButton;    // step 3g-7: a popup on the overlay layer, from ae.showPopup()
+    private int examplePopup;
+    private int closePopupButton;
     private int sceneTree;          // step 3g-6: a tree, from ae.treeView() and ae.addTreeItem()
     private int viewSplit;          // step 3g-5: a split pane, from ae.splitPane()
     private int sceneTabs;          // step 3g-4: a tabbed pane, from ae.tabbedPane() and ae.addTab()
@@ -818,6 +821,13 @@ public class Main extends Engine {
             nameConfirmed.append(ae.text(nameField));
         }
 
+        // Step 3g-7: the popup opens just below the button that asks for it.
+        if (ae.wasActivated(showPopupButton)) {
+            ae.showPopup(examplePopup, layout.x(showPopupButton),
+                layout.y(showPopupButton) + layout.height(showPopupButton) + 4.0f);
+        }
+        if (ae.wasActivated(closePopupButton)) ae.closeOverlay(examplePopup);
+
         // A text box reports the same way; wasActivated() comes from Ctrl+Enter.
         if (ae.wasActivated(descriptionBox)) descriptionConfirms++;
 
@@ -1295,6 +1305,19 @@ public class Main extends Engine {
         // ae.spinnerValue(). A label says what it is, as for the name field.
         gridSizeLabel   = ae.label(layoutInspector, "gridSizeLabel", "Grid size");
         gridSizeSpinner = ae.spinner(layoutInspector, "gridSizeSpinner", 0.25f, 16.0f, 1.0f, 0.25f);
+
+        // Step 3g-7: a popup — anything built under a root, shown above everything else with
+        // ae.showPopup(root, x, y). Built once here, with NONE as its parent; shown when the
+        // button is activated (see the frame loop). A press outside it or Esc closes it, and
+        // it is given the pointer before whatever lies under it. ae.closeOverlay() closes it
+        // from code, as its own Close button does.
+        showPopupButton = ae.button(layoutInspector, "showPopupButton", "Show a popup");
+        examplePopup = layout.column(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(examplePopup, 10.0f);
+        layout.setGap(examplePopup, 8.0f);
+        ae.label(examplePopup, "popupLabel", "A popup, above everything.");
+        ae.label(examplePopup, "popupHint", "A press outside or Esc closes it.");
+        closePopupButton = ae.button(examplePopup, "closePopupButton", "Close");
 
         // Step 3f-4c: the scaffolding's plain boxes are not widgets, so nothing names them as
         // they are made. Named here with setNodeName, so a layout file can move them like the

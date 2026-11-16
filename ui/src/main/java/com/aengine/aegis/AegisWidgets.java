@@ -197,6 +197,28 @@ public final class AegisWidgets {
 
     private long now() { return clock.getAsLong(); }
 
+    // The overlays open, bottom first, as the tree's layers are: where each was asked to be,
+    // whether it is modal, and the widget that opened it, if one did — the combo box whose
+    // list it is. A press outside a popup closes it; the widget that opened it is told, so a
+    // press on that widget does not open it again at once.
+    private static final int MAX_OVERLAYS = 16;
+    private final int[]     overlayNode  = new int[MAX_OVERLAYS];
+    private final float[]   overlayX     = new float[MAX_OVERLAYS];
+    private final float[]   overlayY     = new float[MAX_OVERLAYS];
+    private final boolean[] overlayModal = new boolean[MAX_OVERLAYS];
+    private final int[]     overlayOwner = new int[MAX_OVERLAYS];
+    private final int[]     overlayFocus = new int[MAX_OVERLAYS];   // what had focus before a modal one
+    private int overlayCount;
+
+    /** The owner of a popup a press closed this frame, or NONE: that press is not to open it again. */
+    private int dismissedOwner = AegisLayout.NONE;
+
+    /** Esc went down, outside a text field: it closes the topmost overlay. */
+    private boolean pendingEscape;
+
+    /** The root update() was last given — what overlays are kept inside before the first frame is drawn. */
+    private int lastRoot = AegisLayout.NONE;
+
     /** Ctrl+Tab and Ctrl+PageDown this frame, or their opposites: + or -. */
     private int pendingTabSwitch;
 
@@ -1552,6 +1574,181 @@ public final class AegisWidgets {
     private final int[] pendingTyped = new int[16];
     private int pendingTypedCount;
 
+    // -----------------------------------------------------------------------------------
+    // Overlays — step 3g-7
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * Shows a root above everything else, at {@code (x, y)}, as a popup: what Swing puts on
+     * its popup layer. It is drawn after the tree, on its own background, at the size its
+     * content asks for — or the size set on it — and moved in if it would leave the window. It
+     * is given the pointer first, so nothing under it is hovered or pressed.
+     *
+     * <p>A press anywhere outside it closes it, as does Esc; that press still reaches what it
+     * landed on. Opening a popup does not move focus. Build what it shows under a root — a
+     * column made with {@link AegisLayout#NONE} as its parent — once, and show it as often as
+     * needed. The widgets a combo box, a menu and a tooltip use are popups too.</p>
+     *
+     * @param node a root: a row, column or box hanging nowhere
+     * @param x    where its left edge goes, in the pixels the layout is solved in
+     * @param y    where its top edge goes
+     * @throws IllegalArgumentException if {@code node} hangs under another node
+     */
+    public void showPopup(int node, float x, float y) {
+        openOverlay(node, x, y, false, AegisLayout.NONE);
+    }
+
+    /**
+     * Closes an overlay, and every overlay opened on top of it. One not open is left alone.
+     *
+     * @param node the overlay's root
+     */
+    public void closeOverlay(int node) {
+        for (int i = 0; i < overlayCount; i++) {
+            if (overlayNode[i] == node) {
+                closeOverlaysFrom(i);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Whether an overlay is open.
+     *
+     * @param node the overlay's root
+     * @return {@code true} while it is shown
+     */
+    public boolean isOverlayOpen(int node) { return overlayIndex(node) >= 0; }
+
+    private int overlayIndex(int node) {
+        for (int i = 0; i < overlayCount; i++) if (overlayNode[i] == node) return i;
+        return -1;
+    }
+
+    /** Opens an overlay, on top of the ones open; reopening one moves it to where it is asked. */
+    private void openOverlay(int node, float x, float y, boolean modal, int owner) {
+        if (layout.parent(node) != AegisLayout.NONE) {
+            throw new IllegalArgumentException("An overlay is a root: build it with NONE as its parent.");
+        }
+        int at = overlayIndex(node);
+        if (at >= 0) {
+            overlayX[at] = x;
+            overlayY[at] = y;
+            return;
+        }
+        if (overlayCount == MAX_OVERLAYS) {
+            throw new IllegalStateException("More than " + MAX_OVERLAYS + " overlays open at once.");
+        }
+        // Its background takes the pointer, so a press on it is the overlay's own and leaves
+        // focus where it was, rather than reaching what is below or clearing focus.
+        tree.setInteractive(node, true);
+        tree.setKeepsFocus(node, true);
+        overlayNode[overlayCount]  = node;
+        overlayX[overlayCount]     = x;
+        overlayY[overlayCount]     = y;
+        overlayModal[overlayCount] = modal;
+        overlayOwner[overlayCount] = owner;
+        overlayFocus[overlayCount] = tree.focused();
+        overlayCount++;
+        tree.pushLayer(node, modal);
+        solveOverlay(overlayCount - 1);
+    }
+
+    /** Closes the overlay at an index and all above it, topmost first; a modal one gives focus back. */
+    private void closeOverlaysFrom(int index) {
+        while (overlayCount > index) {
+            int i = --overlayCount;
+            int node = overlayNode[i];
+            tree.removeLayer(node);
+            if (isUnder(tree.focused(), node)) tree.focus(overlayFocus[i]);
+            overlayClosed(node, overlayOwner[i]);
+        }
+    }
+
+    /** What closing an overlay means for the widget that opened it, if any. */
+    private void overlayClosed(int node, int owner) { }
+
+    /** Whether a node is {@code above} or inside it. */
+    private boolean isUnder(int node, int above) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (up == above) return true;
+        return false;
+    }
+
+    /** The rectangle overlays are kept inside: the window, or before the first frame the root. */
+    private float boundsW() {
+        int w = aegis.viewportWidth();
+        return w > 0 ? w : lastRoot != AegisLayout.NONE ? layout.x(lastRoot) + layout.width(lastRoot) : 0.0f;
+    }
+
+    private float boundsH() {
+        int h = aegis.viewportHeight();
+        return h > 0 ? h : lastRoot != AegisLayout.NONE ? layout.y(lastRoot) + layout.height(lastRoot) : 0.0f;
+    }
+
+    /** Places an overlay at its natural size where it was asked to be, moved in to stay in the window. */
+    private void solveOverlay(int i) {
+        int node = overlayNode[i];
+        float w = layout.naturalWidth(node), h = layout.naturalHeight(node);
+        float x = overlayX[i], y = overlayY[i];
+        float bw = boundsW(), bh = boundsH();
+        if (bw > 0.0f) x = Math.max(0.0f, Math.min(x, bw - w));
+        if (bh > 0.0f) y = Math.max(0.0f, Math.min(y, bh - h));
+        layout.solve(node, x, y, w, h);
+    }
+
+    private void solveOverlays() {
+        for (int i = 0; i < overlayCount; i++) solveOverlay(i);
+    }
+
+    /**
+     * A press outside the popups on top closes them — each popup above the topmost overlay
+     * that holds the point, down to a modal one. Remembers whose popup it closed, so that
+     * widget's own press does not reopen it.
+     */
+    private void dismissPopups() {
+        dismissedOwner = AegisLayout.NONE;
+        if (!tree.pointerWentDown() || overlayCount == 0) return;
+        float px = tree.pointerX(), py = tree.pointerY();
+        int keep = overlayCount;
+        while (keep > 0) {
+            int i = keep - 1;
+            if (overlayModal[i] || layout.nodeAt(overlayNode[i], px, py) != AegisLayout.NONE) break;
+            keep--;
+        }
+        if (keep < overlayCount) {
+            dismissedOwner = overlayOwner[keep];
+            closeOverlaysFrom(keep);
+        }
+    }
+
+    /**
+     * Draws the overlays, bottom first, above everything: under a modal one, a scrim over the
+     * whole window; each on its background, with a shadow; then its widgets.
+     */
+    private void drawOverlays() {
+        solveOverlays();
+        AegisStyle style = globalStyle;
+        for (int i = 0; i < overlayCount; i++) {
+            int node = overlayNode[i];
+            if (overlayModal[i]) {
+                float[] scrim = style.overlayScrim;
+                aegis.addRoundedRect(0.0f, 0.0f, boundsW(), boundsH(), 0.0f, scrim[0], scrim[1], scrim[2], scrim[3]);
+            }
+            drawOverlayBackground(style, node);
+            drawNode(node);
+        }
+    }
+
+    /** What any overlay stands on: a shadow, a fill and an outline. */
+    private void drawOverlayBackground(AegisStyle style, int node) {
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        float off = style.overlayShadowOffset, r = style.overlayRadius;
+        float[] sh = style.overlayShadow, fill = style.overlayFill, border = style.overlayBorder;
+        if (off > 0.0f) aegis.addRoundedRect(x + off, y + off, w, h, r, sh[0], sh[1], sh[2], sh[3]);
+        aegis.addRoundedRect(x, y, w, h, r, fill[0], fill[1], fill[2], fill[3],
+            border[0], border[1], border[2], border[3], 1.0f);
+    }
+
     /** The bar of the nearest tabbed pane around a node — the node itself, if it is a bar — or NONE. */
     private int tabBarAround(int node) {
         for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
@@ -1636,6 +1833,7 @@ public final class AegisWidgets {
      * {@link AegisTree#clear()}, since handles are reused after a clear.
      */
     public void clear() {
+        overlayCount = 0;
         Arrays.fill(kind, NOT_A_WIDGET);
         Arrays.fill(label, null);
         Arrays.fill(checked, false);
@@ -1693,6 +1891,8 @@ public final class AegisWidgets {
             pendingTabSwitch += key == Keys.PAGE_DOWN ? +1 : -1;
         } else if (key == Keys.TAB) {
             pendingFocusMove = shift ? -1 : +1;
+        } else if (!repeat && key == Keys.ESCAPE) {
+            pendingEscape = true;
         } else if (!repeat && key == Keys.ENTER) {
             pendingEnter = true;
         } else if (!repeat && key == Keys.SPACE) {
@@ -2215,6 +2415,8 @@ public final class AegisWidgets {
      * @param root the tree whose widgets receive this frame's input; Tab moves focus within it
      */
     public void update(int root) {
+        lastRoot = root;
+        dismissPopups();
         activated = AegisLayout.NONE;
         changed   = AegisLayout.NONE;
         activatedByKeyboard = false;
@@ -2230,8 +2432,10 @@ public final class AegisWidgets {
         // does not take focus away from where it was.
         dragScrollBar(root);
 
-        if (pendingFocusMove > 0) tree.focusNext(root);
-        if (pendingFocusMove < 0) tree.focusPrevious(root);
+        // Tab stays inside a modal overlay while one is open.
+        int focusRoot = tree.topModal() != AegisLayout.NONE ? tree.topModal() : root;
+        if (pendingFocusMove > 0) tree.focusNext(focusRoot);
+        if (pendingFocusMove < 0) tree.focusPrevious(focusRoot);
 
         // The pointer: a click acts on whatever widget it landed on.
         int clicked = tree.clicked();
@@ -2394,6 +2598,11 @@ public final class AegisWidgets {
         pendingLines     = 0;
         pendingTabSwitch = 0;
         stepped          = AegisLayout.NONE;
+
+        // Esc, outside a text field, closes the topmost overlay.
+        if (pendingEscape && overlayCount > 0) closeOverlaysFrom(overlayCount - 1);
+        pendingEscape = false;
+        solveOverlays();
     }
 
     /** Moves a slider to the value under the pointer's x, and reports a change if there was one. */
@@ -2624,7 +2833,7 @@ public final class AegisWidgets {
             fieldScroll[hovered] -= by;   // kept in range when drawn
             return;
         }
-        for (int up = layout.nodeAt(root, tree.pointerX(), tree.pointerY()); up != AegisLayout.NONE;
+        for (int up = tree.nodeUnder(root, tree.pointerX(), tree.pointerY()); up != AegisLayout.NONE;
              up = layout.parent(up)) {
             if (layout.isScrollable(up) && layout.scrollRange(up) > 0.0f) {
                 layout.setScrollOffset(up, layout.scrollOffset(up) - by);   // kept in range by the solve
@@ -2736,7 +2945,7 @@ public final class AegisWidgets {
 
     /** The scrolling row or column whose bar strip is under a point, innermost first, or NONE. */
     private int barAt(int root, float px, float py) {
-        for (int up = layout.nodeAt(root, px, py); up != AegisLayout.NONE; up = layout.parent(up)) {
+        for (int up = tree.nodeUnder(root, px, py); up != AegisLayout.NONE; up = layout.parent(up)) {
             if (layout.isContainer(up) && layout.isScrollable(up) && inBarStrip(up, px, py)) return up;
         }
         return AegisLayout.NONE;
@@ -2857,11 +3066,18 @@ public final class AegisWidgets {
      * Draws every widget under {@code root}, in tree order, each as its kind and state say.
      *
      * <p>Only widgets: panes and other plain nodes are the caller's to draw, first, so the
-     * widgets sit on top of them.</p>
+     * widgets sit on top of them. Then the open overlays, above everything — so call it last
+     * of what the interface draws.</p>
      *
      * @param root the top of the tree to draw
      */
     public void draw(int root) {
+        drawNode(root);
+        drawOverlays();
+    }
+
+    /** One node and everything under it. */
+    private void drawNode(int root) {
         if (kind[root] == BUTTON)   drawButton(root);
         if (kind[root] == CHECKBOX) drawCheckbox(root);
         if (kind[root] == SLIDER)   drawSlider(root);
@@ -2884,7 +3100,7 @@ public final class AegisWidgets {
         }
         for (int child = layout.firstChild(root); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
-            draw(child);
+            drawNode(child);
         }
         if (scrolls) {
             aegis.popClipRect();

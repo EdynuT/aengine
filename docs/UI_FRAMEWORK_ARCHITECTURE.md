@@ -57,6 +57,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-4 | Tabbed pane: `ae.tabbedPane` and `addTab`; a layout's `tabs` builds one, a tab per panel, titled by `screens.setPanelTitle` |
 | Step 3g-5 | Split pane: `ae.splitPane`, its divider dragged or moved by keys, a press on it leaving focus alone (`tree.setKeepsFocus`); in memory only |
 | Step 3g-6 | Tree: `ae.treeView` and `addTreeItem`; pointer, double click, the arrow keys, type-ahead; sized to its open items, the selection kept in view |
+| Step 3g-7 | The overlay layer: roots drawn above everything and given the pointer first; `ae.showPopup`, closed by a press outside or Esc; modal ones for dialogs |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -290,7 +291,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-6.**
+3g-7.**
 
 | Group | Widgets |
 |---|---|
@@ -304,7 +305,7 @@ The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅
 separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
 **3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** ✅ split pane, its dividers dragged
-in memory only until Phase 4 writes them; **3g-6** ✅ tree; **3g-7** the overlay layer; **3g-8**
+in memory only until Phase 4 writes them; **3g-6** ✅ tree; **3g-7** ✅ the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
 waits for the panels that ask for it, in Phase 4.
 
@@ -409,6 +410,20 @@ on a new selection, `wasActivated` on Enter or a double click. Theme entries: `t
 `.text.selected`, `.fill.selected`, `.fill.hover`, `.arrow`, `.indent`, `.padding.x`,
 `.padding.y`. Dragging items to reorder them, and several selected at once, wait for the
 hierarchy panel that needs them.
+
+**3g-7, the overlay layer.** Swing's layered pane, made small: an overlay is any root — a
+row, column or box built with `NONE` as its parent — shown above everything. The tree keeps
+the open ones as layers, topmost last, and asks them first whenever it finds what is under
+the pointer (`tree.nodeUnder`), so nothing beneath an overlay is hovered, pressed or scrolled;
+a modal layer also keeps the pointer from everything below it, and Tab inside it. The widgets
+open, place and draw them: each at the size its content asks for, moved in if it would leave
+the window, on a background with a shadow — `overlay.fill`, `.border`, `.shadow`, `.scrim`
+(over what is below a modal one), `.radius`, `.shadow.offset`, global only — drawn by
+`ae.draw()` after the tree, so `ae.draw()` is the last thing the interface draws.
+`ae.showPopup(root, x, y)` shows a popup: a press outside it, or Esc, closes it, and that
+press still reaches what it landed on, as in Swing; opening one does not move focus, and its
+background is a press that keeps focus where it was. `closeOverlay` closes one and everything
+on top of it; `isOverlayOpen`. The tooltip, combo box, menus and dialog stand on this.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its
