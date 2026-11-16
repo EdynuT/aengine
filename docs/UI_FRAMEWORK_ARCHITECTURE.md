@@ -56,6 +56,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-3 | Spinner: a number typed or stepped, by its arrows or Up and Down; the marks widgets draw (▴ ▾ ▸ ◂ ✓) join the font atlas |
 | Step 3g-4 | Tabbed pane: `ae.tabbedPane` and `addTab`; a layout's `tabs` builds one, a tab per panel, titled by `screens.setPanelTitle` |
 | Step 3g-5 | Split pane: `ae.splitPane`, its divider dragged or moved by keys, a press on it leaving focus alone (`tree.setKeepsFocus`); in memory only |
+| Step 3g-6 | Tree: `ae.treeView` and `addTreeItem`; pointer, double click, the arrow keys, type-ahead; sized to its open items, the selection kept in view |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -289,7 +290,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-5.**
+3g-6.**
 
 | Group | Widgets |
 |---|---|
@@ -303,7 +304,7 @@ The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅
 separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
 **3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** ✅ split pane, its dividers dragged
-in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
+in memory only until Phase 4 writes them; **3g-6** ✅ tree; **3g-7** the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
 waits for the panels that ask for it, in Phase 4.
 
@@ -392,6 +393,22 @@ while the keyboard stays elsewhere. `dividerLocation`, `setDividerLocation`;
 to the layout file is Phase 4's. Theme entries: `split.line`, `.line.hover`, `.size` (the room
 the divider takes, what the pointer takes hold of) and `.line.width`. The widgets' timings now
 read a clock tests can set, so a delay is tested by moving time rather than waiting.
+
+**3g-6, tree.** `ae.treeView(parent, name)` and `ae.addTreeItem(tree, parentItem, text)` — the
+top level under `AegisWidgets.NO_ITEM` — as `JTree`: a press selects an item, a press on its
+arrow or a double click opens or closes it; one stop of Tab, and with focus Up and Down move
+through the items shown, Right opens the selected item or goes to its first child, Left
+closes it or goes to its parent, Home and End go to the ends, a letter goes to the next item
+starting with it, Enter activates. Items are numbers per tree, not layout nodes: a tree of a
+thousand entities costs a thousand array slots, not a thousand nodes. The tree asks for the
+room its open items take, so it belongs in a scrolling column, which keeps the selection in
+view as it moves; rows out of sight are not drawn. Closing an item that holds the selection
+moves it to the item. `selectedTreeItem`, `selectTreeItem` (opening what is above it),
+`setTreeItemExpanded`, `isTreeItemExpanded`, `treeItemText`, `treeItemParent`; `wasChanged`
+on a new selection, `wasActivated` on Enter or a double click. Theme entries: `tree.text`,
+`.text.selected`, `.fill.selected`, `.fill.hover`, `.arrow`, `.indent`, `.padding.x`,
+`.padding.y`. Dragging items to reorder them, and several selected at once, wait for the
+hierarchy panel that needs them.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

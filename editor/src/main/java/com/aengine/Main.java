@@ -129,6 +129,7 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int sceneTree;          // step 3g-6: a tree, from ae.treeView() and ae.addTreeItem()
     private int viewSplit;          // step 3g-5: a split pane, from ae.splitPane()
     private int sceneTabs;          // step 3g-4: a tabbed pane, from ae.tabbedPane() and ae.addTab()
     private int gridSizeLabel;      // step 3g-3: a spinner, from ae.spinner(), with its label
@@ -1161,6 +1162,25 @@ public class Main extends Engine {
         ae.label(layersTab, "layersHint", "Layers go here");
         ae.checkbox(layersTab, "lockLayersCheckbox", "Lock layers");
         ae.addTab(sceneTabs, "Layers", layersTab);
+
+        // Step 3g-6: a tree — the scene's hierarchy. Items are added under a parent item, or
+        // under NO_ITEM for the top level, and start closed; World is opened from code. Press
+        // an item to select it, its arrow (or a double click) to open or close it. From the
+        // keyboard: Up and Down, Right to open or go in, Left to close or go out, Home, End, a
+        // letter to jump, Enter to activate. ae.selectedTreeItem(sceneTree) reads the
+        // selection, ae.wasChanged(sceneTree) and ae.wasActivated(sceneTree) report the user.
+        // The tree asks for the room its open items take, so the hierarchy now scrolls.
+        layout.setScrollable(layoutHierarchy, true);
+        sceneTree = ae.treeView(layoutHierarchy, "sceneTree");
+        int world  = ae.addTreeItem(sceneTree, com.aengine.aegis.AegisWidgets.NO_ITEM, "World");
+        ae.addTreeItem(sceneTree, world, "Main Camera");
+        int lights = ae.addTreeItem(sceneTree, world, "Lights");
+        ae.addTreeItem(sceneTree, lights, "Sun");
+        ae.addTreeItem(sceneTree, lights, "Fill light");
+        int player = ae.addTreeItem(sceneTree, com.aengine.aegis.AegisWidgets.NO_ITEM, "Player");
+        ae.addTreeItem(sceneTree, player, "Mesh");
+        ae.addTreeItem(sceneTree, player, "Collider");
+        ae.setTreeItemExpanded(sceneTree, world, true);
 
         // Viewport: centres what it holds on both axes — one call per axis. A row panel, so its
         // buttons sit side by side: CENTER on X moves the three of them together into the

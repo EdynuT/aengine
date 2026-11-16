@@ -207,6 +207,25 @@ public final class AegisStyle {
     /** How thick the line drawn along it is. */
     public float         splitLineWidth = 2.0f;
 
+    // ── Tree ────────────────────────────────────────────────────────────────
+
+    /** An item's text. */
+    public final float[] treeText         = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The selected item's text. */
+    public final float[] treeTextSelected = { 1.00f, 1.00f, 1.00f, 1.0f };
+    /** Behind the selected item. */
+    public final float[] treeSelected     = { 0.36f, 0.62f, 0.94f, 0.40f };
+    /** Behind the item under the pointer. */
+    public final float[] treeHover        = { 0.27f, 0.31f, 0.39f, 0.60f };
+    /** The arrow that opens and closes an item. */
+    public final float[] treeArrow        = { 0.50f, 0.54f, 0.62f, 1.0f };
+    /** How far each level is set in from the one above; also the room the arrow takes. */
+    public float         treeIndent       = 16.0f;
+    /** Space left of the first level and right of the longest text. */
+    public float         treePaddingX     = 4.0f;
+    /** Space above and below each item's text. */
+    public float         treePaddingY     = 3.0f;
+
     // ── Scroll bar ──────────────────────────────────────────────────────────
 
     /** The bar showing where a scrolling panel is, which is dragged to scroll it. */

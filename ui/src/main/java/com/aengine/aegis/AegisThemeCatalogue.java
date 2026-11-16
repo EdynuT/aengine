@@ -229,6 +229,16 @@ public final class AegisThemeCatalogue {
         size  ("split.size",       "8", (s, v) -> s.splitSize = v);            // the room the divider takes
         size  ("split.line.width", "2", (s, v) -> s.splitLineWidth = v);
 
+        // ── Tree ───────────────────────────────────────────────────────────────────────
+        colour("tree.text",          "@global.text",          s -> s.treeText);
+        colour("tree.text.selected", "#FFFFFF",               s -> s.treeTextSelected);
+        colour("tree.fill.selected", "#5C9EF066",             s -> s.treeSelected);
+        colour("tree.fill.hover",    "#454F6399",             s -> s.treeHover);
+        colour("tree.arrow",         "@global.text.dim",      s -> s.treeArrow);
+        size  ("tree.indent",        "16", (s, v) -> s.treeIndent = v);   // each level; also the arrow's room
+        size  ("tree.padding.x",     "4",  (s, v) -> s.treePaddingX = v);
+        size  ("tree.padding.y",     "3",  (s, v) -> s.treePaddingY = v);
+
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);

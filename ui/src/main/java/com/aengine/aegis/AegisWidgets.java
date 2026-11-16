@@ -76,6 +76,14 @@ public final class AegisWidgets {
     private static final byte SPLIT_PANE   = 11;  // step 3g-5: a row or column of two sides and a divider
     private static final byte DIVIDER      = 12;  //            the divider, dragged or moved by keys
 
+    private static final byte TREE_VIEW    = 13;  // step 3g-6: items in levels, opened and closed
+
+    /** "No item" — the parent of a tree's top level, and what is selected in a tree with none. */
+    public static final int NO_ITEM = -1;
+
+    /** Two presses on the same tree item within this long are a double click. */
+    private static final long DOUBLE_CLICK_NANOS = 500_000_000L;
+
     /** Neither side of a split pane is made smaller than this by its divider. */
     private static final float SPLIT_MINIMUM = 24.0f;
     /** How far an arrow key moves a divider; Shift makes it ten times as far. */
@@ -150,6 +158,30 @@ public final class AegisWidgets {
     }
 
     private final TabSet[] tabsOf;
+
+    /**
+     * A tree's items: a forest threaded through arrays, as the layout keeps its nodes — each
+     * item knows its parent, first and last child and next sibling. Grown, doubling, when an
+     * item is added; nothing here is made in the frame loop.
+     */
+    private static final class TreeItems {
+        String[]  text        = new String[16];
+        int[]     parent      = new int[16];
+        int[]     firstChild  = new int[16];
+        int[]     lastChild   = new int[16];
+        int[]     nextSibling = new int[16];
+        boolean[] expanded    = new boolean[16];
+        int firstTop = NO_ITEM, lastTop = NO_ITEM;
+        int count;
+        int selected = NO_ITEM;
+    }
+
+    private final TreeItems[] itemsOf;
+
+    // The last press on a tree item, to tell a double click.
+    private int  treePressItem = NO_ITEM;
+    private int  treePressTree = AegisLayout.NONE;
+    private long treePressAt;
 
     /** Whether the last name of a widget's {@link #themePath} is its own, or its nearest named container's. */
     private final boolean[] themeNamed;
@@ -306,6 +338,7 @@ public final class AegisWidgets {
         this.sliderStep  = new float[capacity];
         this.spinnerDecimals = new int[capacity];
         this.tabsOf          = new TabSet[capacity];
+        this.itemsOf         = new TreeItems[capacity];
         this.themeNamed      = new boolean[capacity];
 
         this.fieldText      = new StringBuilder[capacity];
@@ -402,6 +435,7 @@ public final class AegisWidgets {
             case SPINNER              -> "spinner";
             case TAB_BAR              -> "tabs";
             case DIVIDER              -> "split";
+            case TREE_VIEW            -> "tree";
             default                   -> "";
         };
     }
@@ -429,6 +463,7 @@ public final class AegisWidgets {
                 (float) Math.ceil(aegis.measure(label[node])), line + style.labelPaddingY * 2.0f);
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
+            case TREE_VIEW -> fitTree(node, style);
             case DIVIDER -> {
                 // Its room along the way the split pane lays its sides out; across, it is stretched.
                 if (layout.isRow(layout.parent(node))) fit(node, style.splitSize, 0.0f);
@@ -1208,6 +1243,315 @@ public final class AegisWidgets {
         if (dividerLocation(split) != before) changed = split;
     }
 
+    // -----------------------------------------------------------------------------------
+    // Tree — step 3g-6
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A tree: items in levels, each opened to show the items under it and closed to hide them
+     * — the scene's hierarchy, a folder of assets — added to {@code parent}. Starts empty; see
+     * {@link #addTreeItem}.
+     *
+     * <p>It works as Swing's {@code JTree} does. A press on an item selects it; on its arrow,
+     * or a double click, opens or closes it. It is one stop of Tab, and with focus Up and Down
+     * move the selection through the items shown, Right opens the selected item or, open,
+     * goes to its first child, Left closes it or, closed, goes to its parent, Home and End go
+     * to the first and last, and typing a letter goes to the next item starting with it. Enter
+     * and a double click activate the selected item: {@link #wasActivated} on the tree.</p>
+     *
+     * <p>It asks for the room its items take while shown, so it grows as they are opened: put
+     * it in a scrolling column ({@link AegisLayout#setScrollable}) and the selection is kept in
+     * view as it moves.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "sceneTree"}
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int treeView(int parent, String name) {
+        int node = namedBox(parent, name);
+        tree.setInteractive(node, true);
+        tree.setFocusable(node, true);
+        kind[node]    = TREE_VIEW;
+        itemsOf[node] = new TreeItems();
+        styleOf[node] = null;
+        fitToContent(node);
+        return node;
+    }
+
+    /**
+     * Adds an item to a tree, after the items its parent already has. Items start closed.
+     *
+     * @param treeView   the tree
+     * @param parentItem the item to add it under, or {@link #NO_ITEM} for the top level
+     * @param text       what it says; kept, so pass a string that does not change
+     * @return the item, a number counting from 0 that stays the item's for the tree's life
+     */
+    public int addTreeItem(int treeView, int parentItem, String text) {
+        TreeItems t = itemsOf[treeView];
+        if (t.count == t.text.length) {
+            int n = t.count * 2;
+            t.text        = Arrays.copyOf(t.text, n);
+            t.parent      = Arrays.copyOf(t.parent, n);
+            t.firstChild  = Arrays.copyOf(t.firstChild, n);
+            t.lastChild   = Arrays.copyOf(t.lastChild, n);
+            t.nextSibling = Arrays.copyOf(t.nextSibling, n);
+            t.expanded    = Arrays.copyOf(t.expanded, n);
+        }
+        int item = t.count++;
+        t.text[item]        = text;
+        t.parent[item]      = parentItem;
+        t.firstChild[item]  = NO_ITEM;
+        t.lastChild[item]   = NO_ITEM;
+        t.nextSibling[item] = NO_ITEM;
+        t.expanded[item]    = false;
+        if (parentItem == NO_ITEM) {
+            if (t.firstTop == NO_ITEM) t.firstTop = item; else t.nextSibling[t.lastTop] = item;
+            t.lastTop = item;
+        } else {
+            if (t.firstChild[parentItem] == NO_ITEM) t.firstChild[parentItem] = item;
+            else                                     t.nextSibling[t.lastChild[parentItem]] = item;
+            t.lastChild[parentItem] = item;
+        }
+        if (isShown(t, item)) fitToContent(treeView);
+        return item;
+    }
+
+    /**
+     * Opens or closes a tree item from code, showing or hiding the items under it.
+     *
+     * @param treeView the tree
+     * @param item     the item
+     * @param open     {@code true} to open it
+     */
+    public void setTreeItemExpanded(int treeView, int item, boolean open) {
+        TreeItems t = itemsOf[treeView];
+        if (t.expanded[item] == open) return;
+        t.expanded[item] = open;
+        // Closing an item that holds the selection moves it to the item, as JTree does.
+        if (!open && t.selected != NO_ITEM && isUnderItem(t, t.selected, item)) t.selected = item;
+        fitToContent(treeView);
+    }
+
+    /**
+     * Whether a tree item is open.
+     *
+     * @param treeView the tree
+     * @param item     the item
+     * @return {@code true} when the items under it are shown
+     */
+    public boolean isTreeItemExpanded(int treeView, int item) { return itemsOf[treeView].expanded[item]; }
+
+    /**
+     * The selected item of a tree.
+     *
+     * @param treeView the tree
+     * @return the item, or {@link #NO_ITEM}
+     */
+    public int selectedTreeItem(int treeView) { return itemsOf[treeView].selected; }
+
+    /**
+     * Selects a tree item from code, opening the items above it so it is shown. Not reported
+     * by {@link #wasChanged}.
+     *
+     * @param treeView the tree
+     * @param item     the item, or {@link #NO_ITEM} to select none
+     */
+    public void selectTreeItem(int treeView, int item) {
+        TreeItems t = itemsOf[treeView];
+        t.selected = item;
+        boolean opened = false;
+        for (int up = item == NO_ITEM ? NO_ITEM : t.parent[item]; up != NO_ITEM; up = t.parent[up]) {
+            if (!t.expanded[up]) {
+                t.expanded[up] = true;
+                opened = true;
+            }
+        }
+        if (opened) fitToContent(treeView);
+    }
+
+    /**
+     * What a tree item says.
+     *
+     * @param treeView the tree
+     * @param item     the item
+     * @return its text
+     */
+    public String treeItemText(int treeView, int item) { return itemsOf[treeView].text[item]; }
+
+    /**
+     * The item a tree item was added under.
+     *
+     * @param treeView the tree
+     * @param item     the item
+     * @return its parent, or {@link #NO_ITEM} for the top level
+     */
+    public int treeItemParent(int treeView, int item) { return itemsOf[treeView].parent[item]; }
+
+    /** Whether an item is shown: every item above it is open. */
+    private static boolean isShown(TreeItems t, int item) {
+        for (int up = t.parent[item]; up != NO_ITEM; up = t.parent[up]) {
+            if (!t.expanded[up]) return false;
+        }
+        return true;
+    }
+
+    /** Whether {@code item} is under {@code above}, at any depth, and not {@code above} itself. */
+    private static boolean isUnderItem(TreeItems t, int item, int above) {
+        for (int up = t.parent[item]; up != NO_ITEM; up = t.parent[up]) {
+            if (up == above) return true;
+        }
+        return false;
+    }
+
+    /** The item shown after this one, in the order rows are drawn, or NO_ITEM after the last. */
+    private static int nextShown(TreeItems t, int item) {
+        if (item == NO_ITEM) return t.firstTop;
+        if (t.expanded[item] && t.firstChild[item] != NO_ITEM) return t.firstChild[item];
+        while (item != NO_ITEM && t.nextSibling[item] == NO_ITEM) item = t.parent[item];
+        return item == NO_ITEM ? NO_ITEM : t.nextSibling[item];
+    }
+
+    private static int depthOf(TreeItems t, int item) {
+        int depth = 0;
+        for (int up = t.parent[item]; up != NO_ITEM; up = t.parent[up]) depth++;
+        return depth;
+    }
+
+    /** Which row an item is shown on, counting from 0, or -1 when it is not shown. */
+    private static int rowOf(TreeItems t, int item) {
+        int row = 0;
+        for (int i = t.firstTop; i != NO_ITEM; i = nextShown(t, i), row++) {
+            if (i == item) return row;
+        }
+        return -1;
+    }
+
+    /** The item shown on a row, or NO_ITEM past the last. */
+    private static int itemOnRow(TreeItems t, int row) {
+        if (row < 0) return NO_ITEM;
+        int i = t.firstTop;
+        for (int r = 0; r < row && i != NO_ITEM; r++) i = nextShown(t, i);
+        return i;
+    }
+
+    private float treeRowHeight(AegisStyle style) { return aegis.lineHeight() + style.treePaddingY * 2.0f; }
+
+    /** Asks for the room the shown items take: as many rows as are shown, as wide as the widest. */
+    private void fitTree(int node, AegisStyle style) {
+        TreeItems t = itemsOf[node];
+        float widest = 0.0f;
+        int rows = 0;
+        for (int i = t.firstTop; i != NO_ITEM; i = nextShown(t, i), rows++) {
+            float w = (depthOf(t, i) + 1) * style.treeIndent + (float) Math.ceil(aegis.measure(t.text[i]));
+            widest = Math.max(widest, w);
+        }
+        fit(node, widest + style.treePaddingX * 2.0f, Math.max(1, rows) * treeRowHeight(style));
+    }
+
+    /** Selects an item because the user did: reports it and keeps it in view. */
+    private void userSelectsItem(int node, int item) {
+        TreeItems t = itemsOf[node];
+        if (item == NO_ITEM || item == t.selected) return;
+        t.selected = item;
+        changed = node;
+        scrollItemIntoView(node, item);
+    }
+
+    /** Opens or closes an item because the user did, if it has anything under it. */
+    private void userTogglesItem(int node, int item) {
+        TreeItems t = itemsOf[node];
+        if (item == NO_ITEM || t.firstChild[item] == NO_ITEM) return;
+        setTreeItemExpanded(node, item, !t.expanded[item]);
+    }
+
+    private void scrollItemIntoView(int node, int item) {
+        int row = rowOf(itemsOf[node], item);
+        if (row < 0) return;
+        float h = treeRowHeight(styleOf(node));
+        float top = layout.y(node) + row * h;
+        scrollSpanIntoView(node, layout.x(node), top, layout.x(node) + layout.width(node), top + h);
+    }
+
+    /** A tree pressed: the item under the pointer selected, its arrow or a double click opening it. */
+    private void pressTree(int node) {
+        AegisStyle style = styleOf(node);
+        TreeItems t = itemsOf[node];
+        int item = itemOnRow(t, (int) Math.floor((tree.pointerY() - layout.y(node)) / treeRowHeight(style)));
+        if (item == NO_ITEM) return;
+
+        float arrowX = layout.x(node) + style.treePaddingX + depthOf(t, item) * style.treeIndent;
+        boolean onArrow = tree.pointerX() >= arrowX && tree.pointerX() < arrowX + style.treeIndent;
+        boolean twice = treePressTree == node && treePressItem == item && now() - treePressAt < DOUBLE_CLICK_NANOS;
+
+        userSelectsItem(node, item);
+        if (onArrow) {
+            userTogglesItem(node, item);
+        } else if (twice) {
+            userTogglesItem(node, item);
+            activated = node;
+            activatedByKeyboard = false;
+        }
+        treePressTree = node;
+        treePressItem = twice ? NO_ITEM : item;   // a third press starts again
+        treePressAt   = now();
+    }
+
+    /** A focused tree's keys: the arrows, Home and End; see {@link #treeView}. */
+    private void treeKeys(int node) {
+        TreeItems t = itemsOf[node];
+        if (t.firstTop == NO_ITEM) return;
+        int sel = t.selected;
+        if (sel == NO_ITEM && (pendingLines != 0 || pendingSteps != 0)) {
+            userSelectsItem(node, t.firstTop);   // nothing selected yet: an arrow starts at the top
+            return;
+        }
+        if (pendingLines != 0 && sel != NO_ITEM) {
+            int rows = rowOf(t, sel) + pendingLines;
+            int last = 0;
+            for (int i = t.firstTop; nextShown(t, i) != NO_ITEM; i = nextShown(t, i)) last++;
+            userSelectsItem(node, itemOnRow(t, Math.max(0, Math.min(last, rows))));
+        }
+        if (pendingJump < 0) userSelectsItem(node, t.firstTop);
+        if (pendingJump > 0) {
+            int last = t.firstTop;
+            for (int i = t.firstTop; i != NO_ITEM; i = nextShown(t, i)) last = i;
+            userSelectsItem(node, last);
+        }
+        sel = t.selected;
+        if (sel == NO_ITEM) return;
+        if (pendingSteps > 0) {
+            if (t.firstChild[sel] != NO_ITEM && !t.expanded[sel]) setTreeItemExpanded(node, sel, true);
+            else if (t.firstChild[sel] != NO_ITEM)                userSelectsItem(node, t.firstChild[sel]);
+        } else if (pendingSteps < 0) {
+            if (t.expanded[sel])                setTreeItemExpanded(node, sel, false);
+            else if (t.parent[sel] != NO_ITEM)  userSelectsItem(node, t.parent[sel]);
+        }
+    }
+
+    /** A letter typed in a focused tree: the next item shown after the selection that starts with it. */
+    private void treeTypeAhead(int node, int codepoint) {
+        TreeItems t = itemsOf[node];
+        if (t.firstTop == NO_ITEM || !isAllowed(codepoint) || codepoint == ' ') return;
+        char c = Character.toLowerCase((char) codepoint);
+        int start = t.selected == NO_ITEM ? NO_ITEM : nextShown(t, t.selected);
+        if (start == NO_ITEM) start = t.firstTop;   // past the last: around from the top
+        int i = start;
+        do {
+            String text = t.text[i];
+            if (!text.isEmpty() && Character.toLowerCase(text.charAt(0)) == c) {
+                userSelectsItem(node, i);
+                return;
+            }
+            i = nextShown(t, i);
+            if (i == NO_ITEM) i = t.firstTop;
+        } while (i != start);
+    }
+
+    /** Typed letters waiting for update(), for a focused tree; reused, never grown past its size. */
+    private final int[] pendingTyped = new int[16];
+    private int pendingTypedCount;
+
     /** The bar of the nearest tabbed pane around a node — the node itself, if it is a bar — or NONE. */
     private int tabBarAround(int node) {
         for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
@@ -1279,8 +1623,8 @@ public final class AegisWidgets {
 
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
-     * box, a label, a separator, a spinner, a tabbed pane or its bar, or a split pane or its
-     * divider.
+     * box, a label, a separator, a spinner, a tabbed pane or its bar, a split pane or its
+     * divider, or a tree.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -1298,6 +1642,7 @@ public final class AegisWidgets {
         Arrays.fill(fieldText, null);
         Arrays.fill(themePath, null);
         Arrays.fill(tabsOf, null);
+        Arrays.fill(itemsOf, null);
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
         activated = AegisLayout.NONE;
@@ -1393,6 +1738,10 @@ public final class AegisWidgets {
             return;
         }
 
+        if (focused != AegisLayout.NONE && kind[focused] == TREE_VIEW) {
+            if (pendingTypedCount < pendingTyped.length) pendingTyped[pendingTypedCount++] = codepoint;
+            return;
+        }
         if (codepoint == '+')      pendingSteps++;
         else if (codepoint == '-') pendingSteps--;
     }
@@ -1909,6 +2258,16 @@ public final class AegisWidgets {
         // moves only the caret, so dragging selects from where the press began. Dragging past
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
+        // A tree pressed selects, opens and closes, on the press.
+        if (pressed != AegisLayout.NONE && kind[pressed] == TREE_VIEW && pressed != lastPressed) {
+            pressTree(pressed);
+        }
+        if (focused != AegisLayout.NONE && kind[focused] == TREE_VIEW) {
+            treeKeys(focused);
+            for (int i = 0; i < pendingTypedCount; i++) treeTypeAhead(focused, pendingTyped[i]);
+        }
+        pendingTypedCount = 0;
+
         // A divider pressed follows the pointer, every frame the press lasts.
         if (pressed != AegisLayout.NONE && kind[pressed] == DIVIDER) {
             int split = layout.parent(pressed);
@@ -1997,6 +2356,9 @@ public final class AegisWidgets {
             caretShownAt = now();
             lastFocused  = focused;
             if (focused != AegisLayout.NONE) scrollIntoView(focused);
+            if (focused != AegisLayout.NONE && kind[focused] == TREE_VIEW && itemsOf[focused].selected != NO_ITEM) {
+                scrollItemIntoView(focused, itemsOf[focused].selected);   // the selection, rather than the top
+            }
         }
 
         // The wheel: a text box under the pointer scrolls its lines; otherwise the nearest
@@ -2277,14 +2639,24 @@ public final class AegisWidgets {
      * next solve moves it.
      */
     private void scrollIntoView(int node) {
+        scrollSpanIntoView(node, layout.x(node), layout.y(node),
+            layout.x(node) + layout.width(node), layout.y(node) + layout.height(node));
+    }
+
+    /**
+     * Scrolls every scrolling row or column around a node just far enough to show a part of
+     * it — the rectangle from (x0, y0) to (x1, y1) — whole, or its start if it is longer than
+     * the room. A tree uses it for one row.
+     */
+    private void scrollSpanIntoView(int node, float x0, float y0, float x1, float y1) {
         for (int up = layout.parent(node); up != AegisLayout.NONE; up = layout.parent(up)) {
             if (!layout.isScrollable(up)) continue;
             boolean across = layout.isRow(up);
             float pad       = layout.padding(up);
             float viewStart = (across ? layout.x(up) : layout.y(up)) + pad;
             float viewEnd   = (across ? layout.x(up) + layout.width(up) : layout.y(up) + layout.height(up)) - pad;
-            float start     = across ? layout.x(node) : layout.y(node);
-            float end       = start + (across ? layout.width(node) : layout.height(node));
+            float start     = across ? x0 : y0;
+            float end       = across ? x1 : y1;
             float offset    = layout.scrollOffset(up);
             if (start < viewStart)  offset -= viewStart - start;
             else if (end > viewEnd) offset += Math.min(end - viewEnd, start - viewStart);
@@ -2435,6 +2807,12 @@ public final class AegisWidgets {
                     activatedByKeyboard = true;
                 }
             }
+            case TREE_VIEW -> {
+                if (byKeyboard && itemsOf[node].selected != NO_ITEM) {
+                    activated = node;
+                    activatedByKeyboard = true;
+                }
+            }
             case SPINNER -> {
                 if (byKeyboard) {
                     commitSpinner(node);
@@ -2494,6 +2872,7 @@ public final class AegisWidgets {
         if (kind[root] == SPINNER)    drawSpinner(root);
         if (kind[root] == TAB_BAR)    drawTabBar(root);
         if (kind[root] == DIVIDER)    drawDivider(root);
+        if (kind[root] == TREE_VIEW)  drawTree(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -2790,6 +3169,62 @@ public final class AegisWidgets {
             float inset = style.focusRingGap + style.focusRingWidth;   // inside the tab: the bar's neighbours are close
             drawFocusRing(style, ringX + inset, y + inset, ringW - inset * 2.0f, h - inset * 2.0f,
                 Math.max(0.0f, style.tabsRadius - inset));
+        }
+    }
+
+    /**
+     * A tree: a row per item shown, set in by its level; the selected row filled, the row under
+     * the pointer lighter; an arrow before each item that has items under it, pointing down
+     * when open; and, while it has focus, the focus ring inside the selected row. Rows outside
+     * the scrolling pane around it are not drawn.
+     */
+    private void drawTree(int node) {
+        AegisStyle style = styleOf(node);
+        TreeItems t = itemsOf[node];
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        float rowH = treeRowHeight(style);
+        float lh = aegis.lineHeight();
+
+        // Only rows that can be seen: inside the tree, and inside every scrolling pane around it.
+        float seenTop = y, seenBottom = y + h;
+        for (int up = layout.parent(node); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (!layout.isScrollable(up)) continue;
+            seenTop    = Math.max(seenTop, layout.y(up));
+            seenBottom = Math.min(seenBottom, layout.y(up) + layout.height(up));
+        }
+        int over = NO_ITEM;
+        if (tree.isHovered(node) && tree.pressed() == AegisLayout.NONE) {
+            over = itemOnRow(t, (int) Math.floor((tree.pointerY() - y) / rowH));
+        }
+
+        aegis.pushClipRect(x, y, w, h);
+        float rowY = y;
+        for (int i = t.firstTop; i != NO_ITEM && rowY < seenBottom; i = nextShown(t, i), rowY += rowH) {
+            if (rowY + rowH < seenTop) continue;
+            boolean selected = i == t.selected;
+            if (selected || i == over) {
+                float[] fill = selected ? style.treeSelected : style.treeHover;
+                aegis.addRoundedRect(x, rowY, w, rowH, 3.0f, fill[0], fill[1], fill[2], fill[3]);
+            }
+            float levelX = x + style.treePaddingX + depthOf(t, i) * style.treeIndent;
+            float textY  = rowY + (rowH - lh) * 0.5f;
+            if (t.firstChild[i] != NO_ITEM) {
+                arrowText.setLength(0);
+                arrowText.append(t.expanded[i] ? AegisFont.ARROW_DOWN : AegisFont.ARROW_RIGHT);
+                float[] a = style.treeArrow;
+                aegis.addTextTop(Math.round(levelX + (style.treeIndent - aegis.measure(arrowText)) * 0.5f), textY,
+                    arrowText, a[0], a[1], a[2], a[3]);
+            }
+            float[] ink = selected ? style.treeTextSelected : style.treeText;
+            aegis.addTextTop(levelX + style.treeIndent, textY, t.text[i], ink[0], ink[1], ink[2], ink[3]);
+        }
+        aegis.popClipRect();
+
+        if (tree.isFocused(node)) {
+            int row = t.selected == NO_ITEM ? -1 : rowOf(t, t.selected);
+            float inset = style.focusRingGap + style.focusRingWidth;
+            if (row >= 0) drawFocusRing(style, x + inset, y + row * rowH + inset, w - inset * 2.0f, rowH - inset * 2.0f, 0.0f);
+            else          drawFocusRing(style, x, y, w, h, 0.0f);
         }
     }
 
