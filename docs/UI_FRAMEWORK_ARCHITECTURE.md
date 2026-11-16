@@ -1590,6 +1590,25 @@ rights. The user's data directory is always writable by its owner and survives r
 or updating the engine; the installation keeps only what the engine itself guarantees. The
 future theme list shows both kinds together.
 
+### The files are data, never behaviour
+
+**Decision: nothing a user can edit reaches what the engine does.** `theme.json` and
+`layout.json` place and dress widgets; every behaviour is compiled Java, shipped inside the
+installation. A user who edits the files can make the editor look wrong — which validation
+and the factory fallbacks already contain — but cannot make it do anything it was not built
+to do.
+
+The split is the one NetBeans draws between a form and its code. `layout.json` plays the
+`.form`, with one difference: it places widgets but does not declare them, and it is read
+on every start rather than turned into code once. A panel's Java class creates its widgets
+by name and handles their events, as an `ActionPerformed` method would; those handlers
+call the editor's commands and services, which change the engine's model and can be undone.
+
+So no field in either file is ever an expression, a script, a condition or a method name.
+The most a file will name is an *action* — `"view.toggleGrid"` — and only one already
+registered in Java (Phase 4, modelled on Swing's `Action`); an unknown name is a warning
+and is ignored, like an unknown widget.
+
 ### What the theme may and may not dress
 
 **The theme dresses the editor's frame, never the content being edited.** A colour in
@@ -1608,6 +1627,73 @@ hardcoded call. That is not extra work bolted on: it is how panels have to be wr
 as they move to the framework in Phase 4. The arrangement half of this feature is largely
 absorbed by migration work already planned.
 
+### Conventions
+
+The editor's data files — themes, layouts and, from step 3h, locales — share one set of
+conventions, so a key read in one can be guessed in another. They hold for as long as the
+format does; renaming anything after release is a change to announce.
+
+**Files.** Every file opens with `name`, `description` and `format`, in that order. Strict
+JSON — no comments, `description` says what a comment would — in UTF-8, indented by two
+spaces in the files that ship. File names are lower case with hyphens between words:
+`dark.json`, `default.json`, `high-contrast.json`. Locale files are the exception, named by
+their BCP 47 tag, the form Java's `Locale.toLanguageTag()` gives: `en-US.json`, `pt-BR.json`.
+
+**Names given in code.** Letters and digits only, camelCase, starting with a letter.
+
+- A **panel** is named for what it shows, one word where one will do: `hierarchy`,
+  `inspector`, `assetBrowser`.
+- A **widget** is named by a prefix saying its kind, then what it is for: `buttonStop`,
+  `spinnerGridSize`. The prefix comes first so that a panel's code lists its buttons together,
+  its combos together; and it is the word the theme already knows the kind by, so the name
+  says which entries dress it. The widgets refuse a name without their prefix, and a name
+  that is the prefix alone.
+
+| Kind | Prefix | Example | Dressed by |
+|---|---|---|---|
+| Button | `button` | `buttonStop` | `button.*` |
+| Checkbox | `checkbox` | `checkboxSnap` | `checkbox.*` |
+| Label | `label` | `labelName` | `label.*` |
+| Separator | `separator` | `separatorToolbar` | `separator.*` |
+| Slider | `slider` | `sliderOpacity` | `slider.*` |
+| Spinner | `spinner` | `spinnerGridSize` | `spinner.*` |
+| Text field, one line or several | `field` | `fieldName`, `fieldNotes` | `field.*` |
+| Tabbed pane | `tabs` | `tabsScene` | `tabs.*` |
+| Split pane | `split` | `splitView` | `split.*` |
+| Tree | `tree` | `treeScene` | `tree.*` |
+| Combo box | `combo` | `comboShading` | `combo.*` |
+| Menu bar | `menuBar` | `menuBarMain` | `menu.*` |
+| Menu, or a submenu | `menu` | `menuFile`, `menuRecent` | `menu.*` |
+| Menu item, or a check item | `menuItem` | `menuItemSave` | `menu.*` |
+| Dialog | `dialog` | `dialogAbout` | `dialog.*` |
+
+A kind is one lower-case word and a widget's name never is, so a scoped rule can tell them
+apart: `inspector.button.fill` dresses every button in the inspector, `inspector.buttonSave.fill`
+one of them.
+
+**One address in every file: `panel.widget.part`.** The theme writes
+`inspector.buttonSave.fill.hover`; the layout writes `"panel": "inspector"` and
+`"widget": "buttonSave"`; a locale file, from step 3h, writes `inspector.buttonSave` for the
+widget's text, `inspector.buttonSave.tooltip` for its tooltip and `inspector.title` for the
+panel's own title. A dialog hangs in no panel, so its address starts at the dialog:
+`dialogAbout.title`, `dialogAbout.buttonOk`.
+
+**Theme entries: `kind.part.property.state`.**
+
+- *Parts* — `fill`, `border`, `text`, `line`, `mark`, `arrow`, `thumb`, `track`, `caret`,
+  `selection`, `accent`, and the sub-parts a widget has, such as a combo's `item` or a
+  dialog's `title`.
+- *Measures* — `width`, `height`, `radius`, `gap`, `padding.x`, `padding.y`. A line's
+  thickness is always its `.width`, as `border.width` is.
+- *States* — `hover`, `pressed`, `focused`, `selected`, `disabled`, always last:
+  `button.fill.hover`, `menu.item.text.hover`.
+
+**Layout entries.** Keys in camelCase (`alignX`), fixed values in lower case (`stretch`,
+`column`), sizes as plain numbers of pixels.
+
+**Values.** Colours as `#RRGGBB` or `#RRGGBBAA`; a reference starts with `@`; a number is a
+JSON number and a word is a JSON string, never one written as the other (§7, *Validation*).
+
 ---
 
 ## 8. Localisation
@@ -1619,13 +1705,13 @@ usable in other languages.
 
 ### What the files are
 
-A locale is identified by a language and a region — `en_US`, `pt_BR`, `pt_PT`, `de_DE`,
-`ja_JP` — the language as an ISO 639 code and the region as an ISO 3166 code. The region
+A locale is identified by a language and a region — `en-US`, `pt-BR`, `pt-PT`, `de-DE`,
+`ja-JP` — the language as an ISO 639 code and the region as an ISO 3166 code. The region
 matters because one language varies between countries.
 
 Each locale is one JSON file mapping keys to text:
 
-**`en_US.json`**
+**`en-US.json`**
 
 ```json
 {
@@ -1635,7 +1721,7 @@ Each locale is one JSON file mapping keys to text:
 }
 ```
 
-**`pt_BR.json`**
+**`pt-BR.json`**
 
 ```json
 {
@@ -1648,7 +1734,7 @@ Each locale is one JSON file mapping keys to text:
 Editor code refers to `menu.file`, never to `"File"`. `{count}` is a placeholder filled in at
 display time.
 
-**`en_US` is the reference locale.** It must contain every key, and it is the catalogue of
+**`en-US` is the reference locale.** It must contain every key, and it is the catalogue of
 what can be translated — the same role the property catalogue plays in §7.
 
 ### Choosing the language
@@ -1656,9 +1742,9 @@ what can be translated — the same role the property catalogue plays in §7.
 1. The language chosen in the editor's settings, if there is one.
 2. Otherwise the operating system's language, which Java reports through
    `Locale.getDefault()`.
-3. For each key, a fallback chain: the exact locale (`pt_BR`), then the language alone
-   (`pt`), then `en_US`. A missing Portuguese translation shows English, not a blank.
-4. A key missing even from `en_US` shows the key itself — `menu.file.save` — so the gap is
+3. For each key, a fallback chain: the exact locale (`pt-BR`), then the language alone
+   (`pt`), then `en-US`. A missing Portuguese translation shows English, not a blank.
+4. A key missing even from `en-US` shows the key itself — `menu.file.save` — so the gap is
    visible instead of silent, consistent with §7.
 
 ### Validation
@@ -1667,7 +1753,7 @@ The same structure-or-value rule as §7:
 
 | Situation | Outcome |
 |---|---|
-| `en_US.json` missing or does not parse | Refuse to start — it is the reference |
+| `en-US.json` missing or does not parse | Refuse to start — it is the reference |
 | A translation file missing or does not parse | That locale is unavailable, with a warning; English is used |
 | A key missing from a translation | Falls through the chain, with a warning |
 | A placeholder missing from a translation — `{count}` dropped | The translation is used as is, with a warning |
@@ -1705,7 +1791,7 @@ Japanese or Korean, which would need a fallback font behind the main one.
 
 ### Open questions
 
-- **Which languages ship first.** Suggested: `en_US` and `pt_BR`.
+- **Which languages ship first.** Suggested: `en-US` and `pt-BR`.
 - **Which scripts to plan for.** Latin only for now, or East Asian and right-to-left as
   well — this decides the atlas design, so it is worth settling before step 3b-2.
 - ~~**Where the locale files live**~~ — **decided:** with the engine, in `<install>/lang/`.
