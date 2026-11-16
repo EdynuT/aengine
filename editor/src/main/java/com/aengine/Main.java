@@ -1192,6 +1192,13 @@ public class Main extends Engine {
         ae.addTreeItem(sceneTree, player, "Collider");
         ae.setTreeItemExpanded(sceneTree, world, true);
 
+        // Step 3g-8: tooltips. Any node can have one; rest the pointer on it for a moment, or
+        // Tab to it and press Ctrl+F1. A node without one shows the nearest one above it — the
+        // hierarchy's covers the plain boxes in it.
+        ae.setTooltip(sceneTree, "The scene: press an arrow to open an item, double-click to open and activate.");
+        ae.setTooltip(layoutHierarchy, "The hierarchy panel.");
+        ae.setTooltip(opacitySlider, "Drag, or Tab here and use the arrows (Shift: ten steps).");
+
         // Viewport: centres what it holds on both axes — one call per axis. A row panel, so its
         // buttons sit side by side: CENTER on X moves the three of them together into the
         // middle, CENTER on Y centres each one vertically. The layout makes it take the width
@@ -1237,6 +1244,8 @@ public class Main extends Engine {
         ae.label(splitRight, "splitRightLabel", "Right side");
         viewSplit = ae.splitPane(layoutViewport, "viewSplit", true, splitLeft, splitRight, 110.0f);
         layout.setSize(viewSplit, 300.0f, 90.0f);
+        ae.setTooltip(playButton, "Starts the scene.");
+        ae.setTooltip(stopButton, "Stops the scene and puts every entity back where it was.");
 
         // Inspector: STRETCH on X makes every field as wide as the pane, so the fields ask only
         // for a height. Its width comes from the layout.
@@ -1312,6 +1321,8 @@ public class Main extends Engine {
         // it is given the pointer before whatever lies under it. ae.closeOverlay() closes it
         // from code, as its own Close button does.
         showPopupButton = ae.button(layoutInspector, "showPopupButton", "Show a popup");
+        ae.setTooltip(showPopupButton, "Shows a popup on the overlay layer.");
+        ae.setTooltip(gridSizeSpinner, "Type a number, or step it with the arrows or Up and Down.");
         examplePopup = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(examplePopup, 10.0f);
         layout.setGap(examplePopup, 8.0f);

@@ -84,6 +84,11 @@ public final class AegisWidgets {
     /** Two presses on the same tree item within this long are a double click. */
     private static final long DOUBLE_CLICK_NANOS = 500_000_000L;
 
+    /** How long the pointer rests on a node before its tooltip shows, as Swing's initial delay. */
+    private static final long TOOLTIP_DELAY_NANOS  = 750_000_000L;
+    /** A tooltip hidden this recently by the pointer leaving lets the next one show at once. */
+    private static final long TOOLTIP_RESHOW_NANOS = 500_000_000L;
+
     /** Neither side of a split pane is made smaller than this by its divider. */
     private static final float SPLIT_MINIMUM = 24.0f;
     /** How far an arrow key moves a divider; Shift makes it ten times as far. */
@@ -218,6 +223,19 @@ public final class AegisWidgets {
 
     /** The root update() was last given — what overlays are kept inside before the first frame is drawn. */
     private int lastRoot = AegisLayout.NONE;
+
+    // Tooltips — step 3g-8: each node's text, if it has one; the node under the resting
+    // pointer and since when it rested; the one shown, and whether the keyboard showed it.
+    private final String[] tooltip;
+    private int     tipCandidate = AegisLayout.NONE;
+    private long    tipRestingSince;
+    private float   tipPointerX = Float.NaN, tipPointerY = Float.NaN;
+    private int     tipShown = AegisLayout.NONE;
+    private boolean tipByKeyboard;
+    private float   tipX, tipY;
+    private long    tipHiddenAt = Long.MIN_VALUE / 2;
+    private boolean pendingTipToggle;   // Ctrl+F1
+    private boolean pendingAnyKey;      // any other key: hides a tooltip
 
     /** Ctrl+Tab and Ctrl+PageDown this frame, or their opposites: + or -. */
     private int pendingTabSwitch;
@@ -361,6 +379,7 @@ public final class AegisWidgets {
         this.spinnerDecimals = new int[capacity];
         this.tabsOf          = new TabSet[capacity];
         this.itemsOf         = new TreeItems[capacity];
+        this.tooltip         = new String[capacity];
         this.themeNamed      = new boolean[capacity];
 
         this.fieldText      = new StringBuilder[capacity];
@@ -1749,6 +1768,117 @@ public final class AegisWidgets {
             border[0], border[1], border[2], border[3], 1.0f);
     }
 
+    // -----------------------------------------------------------------------------------
+    // Tooltips — step 3g-8
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * Gives a node a tooltip: a short note shown beside the pointer once it rests on the node,
+     * as Swing's {@code setToolTipText}. Any node may have one — a widget, a panel, a plain
+     * box; what is under the pointer and has none shows the nearest one above it.
+     *
+     * <p>It shows after the pointer has rested on the node for three quarters of a second, and
+     * at once when moving on from another tooltip; it goes when the pointer leaves the node, a
+     * button is pressed or a key is. From the keyboard, Ctrl+F1 shows the focused widget's
+     * tooltip under it, and hides it again. Text wider than {@code tooltip.width} wraps.</p>
+     *
+     * @param node any layout node
+     * @param text the note; kept, so pass a string that does not change; {@code null} for none
+     */
+    public void setTooltip(int node, String text) {
+        tooltip[node] = text;
+        if (text == null && tipShown == node) tipShown = AegisLayout.NONE;
+    }
+
+    /** The node whose tooltip is shown, or NONE; for tests. */
+    int tooltipShown() { return tipShown; }
+
+    /** The nearest node from this one up that has a tooltip, or NONE. */
+    private int tipOwner(int node) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (tooltip[up] != null) return up;
+        return AegisLayout.NONE;
+    }
+
+    /** Shows, moves on or hides the tooltip for this frame. */
+    private void updateTooltip(int root) {
+        long t = now();
+        float px = tree.pointerX(), py = tree.pointerY();
+
+        // The keyboard's: Ctrl+F1 on the focused widget, below it, until a key or a press.
+        if (pendingTipToggle) {
+            int owner = tipOwner(tree.focused());
+            if (tipShown != AegisLayout.NONE && tipByKeyboard) {
+                tipShown = AegisLayout.NONE;
+            } else if (owner != AegisLayout.NONE) {
+                int f = tree.focused();
+                tipShown = owner;
+                tipByKeyboard = true;
+                tipX = layout.x(f);
+                tipY = layout.y(f) + layout.height(f) + 4.0f;
+            }
+            return;
+        }
+        if (pendingAnyKey || tree.pointerWentDown() || tree.pointerDown()) {
+            if (tipShown != AegisLayout.NONE) tipHiddenAt = t;
+            tipShown = AegisLayout.NONE;
+            tipCandidate = AegisLayout.NONE;
+            tipPointerX = px;
+            tipPointerY = py;
+            return;
+        }
+        if (tipByKeyboard && tipShown != AegisLayout.NONE) {
+            if (px == tipPointerX && py == tipPointerY) return;   // the pointer has not moved
+            tipByKeyboard = false;
+            tipShown = AegisLayout.NONE;
+        }
+
+        int owner = tipOwner(tree.nodeUnder(root, px, py));
+        boolean moved = px != tipPointerX || py != tipPointerY;
+        tipPointerX = px;
+        tipPointerY = py;
+
+        if (tipShown != AegisLayout.NONE) {
+            if (owner == tipShown) return;                       // still on it: stays, where it is
+            tipShown = AegisLayout.NONE;
+            tipHiddenAt = t;
+        }
+        if (owner != tipCandidate) {
+            tipCandidate = owner;
+            tipRestingSince = t;
+        } else if (moved) {
+            tipRestingSince = t;                                 // it must rest, as in Swing
+        }
+        if (owner == AegisLayout.NONE) return;
+        boolean warm = t - tipHiddenAt < TOOLTIP_RESHOW_NANOS;
+        if (warm || t - tipRestingSince >= TOOLTIP_DELAY_NANOS) {
+            tipShown = owner;
+            tipByKeyboard = false;
+            tipX = px;
+            tipY = py + aegis.lineHeight() + 4.0f;               // below the pointer, clear of it
+        }
+    }
+
+    /** The tooltip, above everything, moved in to stay in the window. */
+    private void drawTooltip() {
+        if (tipShown == AegisLayout.NONE) return;
+        AegisStyle style = globalStyle;
+        String text = tooltip[tipShown];
+        float pad = style.tooltipPadding;
+        float textW = Math.min((float) Math.ceil(aegis.measure(text)), style.tooltipWidth - pad * 2.0f);
+        float w = textW + pad * 2.0f;
+        float h = aegis.wrappedHeight(text, textW + 1.0f) + pad * 2.0f;
+        float x = tipX, y = tipY;
+        float bw = boundsW(), bh = boundsH();
+        if (bw > 0.0f) x = Math.max(0.0f, Math.min(x, bw - w));
+        if (bh > 0.0f && y + h > bh) y = Math.max(0.0f, tipY - h - aegis.lineHeight() - 8.0f);   // above, if no room below
+        x = Math.round(x);
+        y = Math.round(y);
+        float[] fill = style.tooltipFill, border = style.tooltipBorder, ink = style.tooltipText;
+        aegis.addRoundedRect(x, y, w, h, style.tooltipRadius, fill[0], fill[1], fill[2], fill[3],
+            border[0], border[1], border[2], border[3], 1.0f);
+        aegis.addTextWrapped(x + pad, y + pad, textW + 1.0f, text, ink[0], ink[1], ink[2], ink[3]);
+    }
+
     /** The bar of the nearest tabbed pane around a node — the node itself, if it is a bar — or NONE. */
     private int tabBarAround(int node) {
         for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
@@ -1841,6 +1971,8 @@ public final class AegisWidgets {
         Arrays.fill(themePath, null);
         Arrays.fill(tabsOf, null);
         Arrays.fill(itemsOf, null);
+        Arrays.fill(tooltip, null);
+        tipShown = AegisLayout.NONE;
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
         activated = AegisLayout.NONE;
@@ -1877,6 +2009,11 @@ public final class AegisWidgets {
      * @param repeat whether this is a repeat of a held key rather than a fresh press
      */
     public void key(int key, int mods, boolean repeat) {
+        if (key == Keys.F1 && (mods & Keys.MOD_CONTROL) != 0) {
+            if (!repeat) pendingTipToggle = true;
+            return;
+        }
+        pendingAnyKey = true;
         int focused = tree.focused();
         if (isText(focused) && editKey(focused, key, mods, repeat)) {
             return;
@@ -2602,6 +2739,10 @@ public final class AegisWidgets {
         // Esc, outside a text field, closes the topmost overlay.
         if (pendingEscape && overlayCount > 0) closeOverlaysFrom(overlayCount - 1);
         pendingEscape = false;
+
+        updateTooltip(root);
+        pendingTipToggle = false;
+        pendingAnyKey    = false;
         solveOverlays();
     }
 
@@ -3074,6 +3215,7 @@ public final class AegisWidgets {
     public void draw(int root) {
         drawNode(root);
         drawOverlays();
+        drawTooltip();
     }
 
     /** One node and everything under it. */

@@ -241,6 +241,21 @@ public final class AegisStyle {
     /** How far its shadow falls. */
     public float         overlayShadowOffset = 4.0f;
 
+    // ── Tooltip ─────────────────────────────────────────────────────────────
+
+    /** Its background. */
+    public final float[] tooltipFill    = { 0.10f, 0.11f, 0.15f, 1.0f };
+    /** Its outline. */
+    public final float[] tooltipBorder  = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** Its text. */
+    public final float[] tooltipText    = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** Space between its edge and its text. */
+    public float         tooltipPadding = 6.0f;
+    /** How round its corners are. */
+    public float         tooltipRadius  = 4.0f;
+    /** The widest it gets; longer text wraps. */
+    public float         tooltipWidth   = 320.0f;
+
     // ── Scroll bar ──────────────────────────────────────────────────────────
 
     /** The bar showing where a scrolling panel is, which is dragged to scroll it. */

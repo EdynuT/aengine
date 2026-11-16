@@ -247,6 +247,14 @@ public final class AegisThemeCatalogue {
         size  ("overlay.radius",        "6", (s, v) -> s.overlayRadius = v);
         size  ("overlay.shadow.offset", "4", (s, v) -> s.overlayShadowOffset = v);
 
+        // ── Tooltip. Global values only: it belongs to no panel. ─────────────────────────
+        colour("tooltip.fill",    "#1A1C26",        s -> s.tooltipFill);
+        colour("tooltip.border",  "@global.border", s -> s.tooltipBorder);
+        colour("tooltip.text",    "@global.text",   s -> s.tooltipText);
+        size  ("tooltip.padding", "6",   (s, v) -> s.tooltipPadding = v);
+        size  ("tooltip.radius",  "4",   (s, v) -> s.tooltipRadius = v);
+        size  ("tooltip.width",   "320", (s, v) -> s.tooltipWidth = v);   // the widest; longer text wraps
+
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);
