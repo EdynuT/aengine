@@ -924,26 +924,29 @@ public class Main extends Engine {
             1.0f);
 
         // Hierarchy items: START, so each keeps the width it asked for, against the left edge.
+        // The hierarchy scrolls (3g-6): boxes drawn by hand are cut off at its padding, as
+        // ae.draw() does for widgets.
+        pushPaneClip(layout, layoutTreeItemA);
         aegis.addRoundedRect(layout.x(layoutTreeItemA), layout.y(layoutTreeItemA),
             layout.width(layoutTreeItemA), layout.height(layoutTreeItemA), 4.0f,
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
         aegis.addTextTop(layout.x(layoutTreeItemA) + 8.0f, layout.y(layoutTreeItemA) + 4.0f,
             "START 150", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+        aegis.popClipRect();
 
+        pushPaneClip(layout, layoutTreeItemB);
         aegis.addRoundedRect(layout.x(layoutTreeItemB), layout.y(layoutTreeItemB),
             layout.width(layoutTreeItemB), layout.height(layoutTreeItemB), 4.0f,
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
         aegis.addTextTop(layout.x(layoutTreeItemB) + 8.0f, layout.y(layoutTreeItemB) + 4.0f,
             "START 110", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
+        aegis.popClipRect();
 
         // Inspector fields: STRETCH, so each is as wide as the pane minus its padding. The
         // inspector scrolls (3g-2), and the widgets cut themselves off at its padding when
         // ae.draw() draws them; a plain box drawn here by hand is cut off by hand, to the inside
         // of whatever pane it hangs in — the inspector, unless a layout file moved it.
-        int fieldPane = layout.parent(layoutFieldA);
-        float panePad = layout.padding(fieldPane);
-        aegis.pushClipRect(layout.x(fieldPane) + panePad, layout.y(fieldPane) + panePad,
-            layout.width(fieldPane) - panePad * 2.0f, layout.height(fieldPane) - panePad * 2.0f);
+        pushPaneClip(layout, layoutFieldA);
         aegis.addRoundedRect(layout.x(layoutFieldA), layout.y(layoutFieldA),
             layout.width(layoutFieldA), layout.height(layoutFieldA), 4.0f,
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
@@ -1479,6 +1482,18 @@ public class Main extends Engine {
         if (tree.isPressed(box) && tree.isHovered(box)) return BOX_PRESSED;
         if (tree.isHovered(box))                        return BOX_HOVER;
         return LAYOUT_BOX;
+    }
+
+    /**
+     * SCAFFOLDING — cuts what is drawn next off at the padding of the pane {@code node}
+     * hangs in, the way {@code ae.draw()} cuts widgets off inside a scrolling pane. For
+     * boxes the scaffolding draws by hand; the caller pops the clip.
+     */
+    private void pushPaneClip(com.aengine.aegis.AegisLayout layout, int node) {
+        int pane = layout.parent(node);
+        float pad = layout.padding(pane);
+        aegis.pushClipRect(layout.x(pane) + pad, layout.y(pane) + pad,
+            layout.width(pane) - pad * 2.0f, layout.height(pane) - pad * 2.0f);
     }
 
     /**
