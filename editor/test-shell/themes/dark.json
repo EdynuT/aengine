@@ -1,20 +1,14 @@
 {
   "name": "Test - scoped rules",
-  "description": "A test theme for step 3f-2; it does not ship. The global accent turns orange, so focus rings, ticked checkboxes, the slider and a focused field's border follow it. Every text field in the inspector gets a darker fill through a panel-and-kind rule. The Stop button alone turns red, through a rule of its own and a local variable. The name field alone takes a violet border from another local variable, while the notes field keeps the global one.",
+  "description": "A test theme; it does not ship. The global accent turns orange, so the focused viewport's edge, the shown tab's line and the menus' highlight follow it. The window behind the panels turns darker. The File menu's Quit item alone turns red, through a rule of its own and a local variable.",
   "format": 1,
 
   "global": {
-    "accent": "#E0A030"
+    "accent":      "#E0A030",
+    "window.fill": "#101218"
   },
 
-  "danger": "#C04040",
-  "violet": "#8A6CE0",
+  "danger": "#E05858",
 
-  "inspector.field.fill": "#141820",
-
-  "viewport.buttonStop.fill":       "@danger",
-  "viewport.buttonStop.fill.hover": "#D05858",
-
-  "inspector.fieldName.border":         "@violet",
-  "inspector.fieldName.border.focused": "@violet"
+  "menuFile.menuItemQuit.text": "@danger"
 }

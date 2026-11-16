@@ -1,17 +1,18 @@
 {
   "name":        "Test - tabbed",
-  "description": "Test layout, does not ship: the hierarchy and the inspector share one slot on the right as tabs, the hierarchy shown first; the viewport takes the rest.",
+  "description": "Test layout, does not ship: every dock as tabs in one slot on the right — hierarchy shown first, then assets, inspector, console and output; the viewport takes the rest.",
   "format":      1,
 
   "screens": {
     "editor": {
-      "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
-        { "type": "panel", "panel": "menu",    "height": 30 },
-        { "type": "panel", "panel": "toolbar", "height": 84 },
-        { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
-          { "type": "panel", "panel": "viewport", "grow": 1 },
-          { "type": "tabs", "width": 320, "panels": ["hierarchy", "inspector"] }
-        ]}
+      "root": { "type": "column", "padding": 6, "gap": 6, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "menu",    "height": 28 },
+        { "type": "panel", "panel": "toolbar", "height": 40 },
+        { "type": "row", "grow": 1, "gap": 6, "alignY": "stretch", "children": [
+          { "type": "tabs", "grow": 1, "panels": ["viewport"] },
+          { "type": "tabs", "width": 360, "panels": ["hierarchy", "assets", "inspector", "console", "output"] }
+        ]},
+        { "type": "panel", "panel": "status", "height": 24 }
       ]}
     }
   }

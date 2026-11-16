@@ -22,26 +22,36 @@ public final class FactoryLayout {
     public static final String SOURCE = "factory layout";
 
     /**
-     * The editor screen: the toolbar across the top, then hierarchy, viewport and inspector
-     * side by side, the viewport taking the width the other two leave. Sizes and spacing
-     * between panels are here; spacing inside a panel is its code's.
+     * The editor screen, arranged as Godot's and Unity's are — step 4a. The menu bar and the
+     * toolbar across the top, the status bar across the bottom; between them the hierarchy
+     * over the assets on the left, the viewport over the console and output in the middle,
+     * taking the room the sides leave, and the inspector the whole height on the right. Every
+     * dock is a {@code "tabs"}, so each shows its title and more panels can share it. Sizes
+     * and spacing between panels are here; spacing inside a panel is its code's.
      */
     private static final String TEXT = """
         {
-          "name":        "Factory",
-          "description": "Menu bar and toolbar on top; hierarchy, viewport and inspector below.",
-          "format":      1,
+          "name": "Factory",
+          "description": "Menu bar and toolbar on top, status bar below; hierarchy over assets on the left, viewport over console and output in the middle, inspector on the right.",
+          "format": 1,
 
           "screens": {
             "editor": {
-              "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
-                { "type": "panel", "panel": "menu",    "height": 30 },
-                { "type": "panel", "panel": "toolbar", "height": 84 },
-                { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
-                  { "type": "panel", "panel": "hierarchy", "width": 240 },
-                  { "type": "panel", "panel": "viewport",  "grow": 1 },
-                  { "type": "panel", "panel": "inspector", "width": 300 }
-                ]}
+              "root": { "type": "column", "padding": 6, "gap": 6, "alignX": "stretch", "children": [
+                { "type": "panel", "panel": "menu",    "height": 28 },
+                { "type": "panel", "panel": "toolbar", "height": 40 },
+                { "type": "row", "grow": 1, "gap": 6, "alignY": "stretch", "children": [
+                  { "type": "column", "width": 260, "gap": 6, "alignX": "stretch", "children": [
+                    { "type": "tabs", "grow": 1, "panels": ["hierarchy"] },
+                    { "type": "tabs", "grow": 1, "panels": ["assets"] }
+                  ]},
+                  { "type": "column", "grow": 1, "gap": 6, "alignX": "stretch", "children": [
+                    { "type": "tabs", "grow": 1, "panels": ["viewport"] },
+                    { "type": "tabs", "height": 200, "panels": ["console", "output"] }
+                  ]},
+                  { "type": "tabs", "width": 320, "panels": ["inspector"] }
+                ]},
+                { "type": "panel", "panel": "status", "height": 24 }
               ]}
             }
           }

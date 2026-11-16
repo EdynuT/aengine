@@ -65,6 +65,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 | Conventions | One naming scheme for every data file; widgets named by their kind first — `buttonStop`; theme entries `kind.part.property.state` |
 | Step 3h | Localisation: English in code, other languages from `lang/<tag>.json` keyed by widget address; `-PlocaleCheck` lists what is left to translate |
+| Step 4a | The editor's own screen, arranged as Godot's and Unity's; the scene in an Aegis viewport that owns the camera's keys; the scaffolding deleted |
 
 ### The plan ahead
 
@@ -506,8 +507,8 @@ English back. Tabs and combo items gain names for their keys: `addTab(pane, "tab
 follows the system language, or `-Plocale=pt-BR`, and says in one line how much is
 translated; `-PlocaleCheck` lists what is not, ready to copy into the file.
 
-**Then Phase 4** migrates the real editor panels one at a time, and **Phase 5** deletes Dear
-ImGui. Both are described in §11.
+**Phase 4** builds the editor's own screen — 4a ✅ the factory arrangement and the viewport
+— and **Phase 5** deletes Dear ImGui. Both are described in §11.
 
 ### Open decisions
 
@@ -1678,6 +1679,7 @@ the layout refuses anything else.
 | Menu, or a submenu | `menu` | `menuFile`, `menuRecent` | `menu.*` |
 | Menu item, or a check item | `menuItem` | `menuItemSave` | `menu.*` |
 | Dialog | `dialog` | `dialogAbout` | `dialog.*` |
+| Surface | `surface` | `surfaceScene` | `surface.*` |
 
 A plain box the code draws itself, not a widget, is named the same way with `box` —
 `boxStretch` — though nothing checks it.
@@ -2039,22 +2041,61 @@ both be designed together.
 Step 3a is the real start of the mountain. Everything before it in this document is the 10%
 the effort table in §2 assigns to the draw list and GPU backend.
 
-**Phase 4 — Panel-by-panel migration.** ImGui and the new framework coexist, both rendering
-through the same backend. Panels move one at a time. Order: stats and physics debug panels
-(read-only, trivial) → menu bar → inspector → hierarchy → asset browser → viewport docking.
+**Phase 4 — The editor's own screen.** Revised at its start: the panels Dear ImGui draws
+today — Engine Stats, Physics Debug, Scene Hierarchy, Properties — are **not** migrated.
+The panels are designed anew by the owner and a colleague, and each is added when it is
+decided; the ImGui windows stay as they are until Phase 5 removes them. The viewport alone
+moves at once, since the screen is built around it.
 
-**The viewport owns the camera controls.** Today the fly camera reads the keyboard by
-polling and acts wherever the pointer is, so Space and Ctrl typed into an Aegis widget also
-raise and lower it, and the wheel over a text box also zooms it. When the viewport is native, the camera takes input only once the
-viewport has been clicked — has focus — and a click anywhere else, or focus in any widget,
-takes the camera's keys away. Until then it is left as it is.
+**The factory model is the reference.** Development works against the factory theme — the
+catalogue's defaults — and `FactoryLayout`, both compiled in. The theme and layout files the
+engine ships are another developer's, as the themes already were (§7).
 
-Each panel arrives as a **registration under a stable name** rather than a hardcoded call, so
-`layout.json` — read since 3f — can place it; it costs almost nothing extra here because a
-panel being migrated has to be rewritten anyway. This phase adds what needs real panels:
-dividers the user drags, written back to their `layout.json` a second after release, and
-**Restore default layout** in settings. It ends when the shipped `layout.json` places every
-panel, with no arrangement left in code.
+**The arrangement follows Godot's and Unity's**, the common ground of the three editors
+studied (Godot, Unity, Unreal): the menu bar and the toolbar across the top, the status bar
+across the bottom; the hierarchy over the assets on the left, the viewport over the console
+and output in the middle, the inspector the whole height on the right. Every dock is a
+`"tabs"`, so it shows its title and can take more panels.
+
+**4a ✅ — the screen and the viewport.** The scaffolding is deleted; `EditorShell` registers
+the editor's panels, builds the `editor` screen, applies the factory theme — or
+`-PthemeFile` — and the language, and runs each frame. The panels are empty but for their
+titles, except:
+
+- the **menu bar**, with File › Save scene (Ctrl+S) and Quit;
+- the **viewport**, a surface — `ae.surface(parent, "surfaceScene")`, Swing's `Canvas` —
+  showing the scene's framebuffer, which renders at the surface's size. A press on it picks
+  an entity and starts a drag, as the ImGui viewport did, and focuses it.
+
+**The viewport owns the camera controls.** The camera takes the keys only while the
+viewport has focus — a left or right press on it, or Tab — and gives them up as soon as
+anything else is focused, so Space typed into a field no longer raises it. The wheel zooms
+only over the viewport. Esc leaves the editor only while the viewport has focus and nothing
+is open over it.
+
+Panels and the screen are now drawn by `ae.draw()`: a registered panel as its background,
+the screen's root as the window's. Theme entries, global only: `window.fill`, `panel.fill`,
+`.border`, `.radius`, `.border.width`; `surface.fill`, `.border.focused`, `.border.width`;
+and the palette's `background`.
+
+While ImGui still draws windows, it draws **on top**: over one of them the pointer is
+ImGui's, and while one of its fields is typed into the keys are. The ImGui viewport's
+right-click menu (Add Entity, Save Scene) is gone with it; the right button now looks around.
+
+**Next**, in an order to be agreed:
+
+- **4b, icons.** An icon atlas loaded from files and a widget showing an icon by name, with a
+  provisional free set in neutral colours, tinted by the theme; the final art is the
+  designer's. The toolbar gains the tools (select, move, rotate, scale), 2D/3D and Play,
+  Pause, Stop.
+- **4c, docks the user resizes.** Dividers between docks, the arrangement written back to the
+  user's `layout.json`, panels closed and reopened from a View menu, and *Restore default
+  layout*.
+- **What any panel will need:** nodes removed and reused, for panels whose content changes; a
+  label updated without allocating; a context menu; undo and redo.
+- **The panels themselves**, as they are decided, with what each asks of the framework.
+- **Settings**: `editor.json` in the user's directory, the language, the theme list with the
+  development option, *Restore default layout*.
 
 **Phase 5 — Remove Dear ImGui.** Drop the three `io.github.spair` dependencies and the JNI
 boundary with them.

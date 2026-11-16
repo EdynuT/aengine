@@ -89,6 +89,10 @@ public final class AegisWidgets {
     private static final byte DIALOG       = 20;  // step 3g-11: a modal column on the overlay layer
     private static final byte DIALOG_TITLE = 21;  //             its title bar, dragged to move it
 
+    private static final byte SCREEN       = 22;  // step 4a: a screen's root, drawn as the window's background
+    private static final byte PANEL        = 23;  //          a registered panel, drawn as its background
+    private static final byte SURFACE      = 24;  //          an area code draws into: a texture, focused to take keys
+
     /** "No item" — the parent of a tree's top level, and what is selected in a tree with none. */
     public static final int NO_ITEM = -1;
 
@@ -231,6 +235,11 @@ public final class AegisWidgets {
     private int     menuSteps;      // Left, Right
     private boolean menuEnter;      // Enter, Space
     private boolean pendingF10;
+
+    /** What each surface shows: an OpenGL texture, or 0 for nothing yet. */
+    private final int[]     surfaceTexture;
+    /** Whether a surface's texture is stored bottom row first, as a framebuffer's is. */
+    private final boolean[] surfaceUpsideDown;
 
     /** Each dialog's default button — what Enter activates from a field in it — or NONE. */
     private final int[] defaultButton;
@@ -446,6 +455,8 @@ public final class AegisWidgets {
         this.comboItemNames  = new String[capacity][];
         this.comboItemEnglish = new String[capacity][];
         this.defaultButton   = new int[capacity];
+        this.surfaceTexture    = new int[capacity];
+        this.surfaceUpsideDown = new boolean[capacity];
         this.titleMenu       = new int[capacity];
         this.menuOwner       = new int[capacity];
         this.itemSubMenu     = new int[capacity];
@@ -527,7 +538,7 @@ public final class AegisWidgets {
 
     /** Walks a subtree, giving each widget the style its path calls for, and sizing it again. */
     private void dressSubtree(AegisTheme theme, int node) {
-        if (kind[node] != NOT_A_WIDGET) {
+        if (kind[node] != NOT_A_WIDGET && kind[node] != SCREEN && kind[node] != PANEL) {
             styleOf[node] = theme.styleFor(themePath[node], themeNamed[node], themeKind(node));
             fitToContent(node);
         }
@@ -643,6 +654,7 @@ public final class AegisWidgets {
             case COMBO_BOX            -> "combo";
             case MENU_TITLE, MENU_ITEM -> "menu";
             case DIALOG_TITLE         -> "dialog";
+            case SURFACE              -> "surface";
             default                   -> "";
         };
     }
@@ -1895,6 +1907,14 @@ public final class AegisWidgets {
      */
     public boolean isOverlayOpen(int node) { return overlayIndex(node) >= 0; }
 
+    /**
+     * Whether anything is open on the overlay layer — a menu, a combo box's list, a popup, a
+     * dialog. While one is, Esc is the overlay's: the editor must not act on it as well.
+     *
+     * @return {@code true} while an overlay is shown
+     */
+    public boolean isAnyOverlayOpen() { return overlayCount > 0; }
+
     private int overlayIndex(int node) {
         for (int i = 0; i < overlayCount; i++) if (overlayNode[i] == node) return i;
         return -1;
@@ -2936,7 +2956,7 @@ public final class AegisWidgets {
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
      */
-    public boolean isWidget(int node) { return kind[node] != NOT_A_WIDGET; }
+    public boolean isWidget(int node) { return kind[node] != NOT_A_WIDGET && kind[node] != SCREEN && kind[node] != PANEL; }
 
     /**
      * Forgets every widget. Call it together with {@link AegisLayout#clear()} and
@@ -2957,6 +2977,8 @@ public final class AegisWidgets {
         Arrays.fill(comboItems, null);
         Arrays.fill(comboItemNames, null);
         Arrays.fill(comboItemEnglish, null);
+        Arrays.fill(surfaceTexture, 0);
+        Arrays.fill(surfaceUpsideDown, false);
         tipShown = AegisLayout.NONE;
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
@@ -4274,6 +4296,9 @@ public final class AegisWidgets {
         if (kind[root] == MENU_TITLE) drawMenuTitle(root);
         if (kind[root] == MENU_ITEM)  drawMenuItem(root);
         if (kind[root] == DIALOG_TITLE) drawDialogTitle(root);
+        if (kind[root] == SCREEN)     drawScreen(root);
+        if (kind[root] == PANEL)      drawPanel(root);
+        if (kind[root] == SURFACE)    drawSurface(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -4912,6 +4937,93 @@ public final class AegisWidgets {
             float y = Math.round(layout.y(node) + (layout.height(node) - t) * 0.5f);
             aegis.addRoundedRect(layout.x(parent) + pad, y, layout.width(parent) - pad * 2.0f, t, 0.0f,
                 line[0], line[1], line[2], line[3]);
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Screens, panels and surfaces — step 4a
+    // -----------------------------------------------------------------------------------
+
+    /** A screen's root, as {@link AegisScreens#build} made it: drawn as the window's background. */
+    void markScreen(int node) {
+        if (kind[node] == NOT_A_WIDGET) kind[node] = SCREEN;
+    }
+
+    /** A registered panel: drawn as its background, under its widgets. */
+    void markPanel(int node) {
+        kind[node] = PANEL;
+    }
+
+    /**
+     * A surface: an area code draws into — the viewport's scene, a texture preview — added to
+     * {@code parent}, as Swing's {@code Canvas} is. It shows the texture
+     * {@link #setSurfaceTexture} gives it, stretched to its size, and takes no room of its own:
+     * give it a size, or let it grow.
+     *
+     * <p>It is a stop of Tab, and a press on it focuses it, so what it shows can take keys while
+     * it has focus — a camera flying over the scene — and give them up as soon as anything
+     * else is focused. A thin {@code surface.border.focused} edge says it has focus. The
+     * widgets do nothing with the keys it is given; the code that owns it reads them.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name — {@code "surfaceScene"}
+     * @return its handle
+     * @throws IllegalArgumentException for a name without the {@code surface} prefix
+     */
+    public int surface(int parent, String name) {
+        checkWidgetName(name, "surface", "a surface");
+        int node = namedBox(parent, name);
+        tree.setInteractive(node, true);
+        tree.setFocusable(node, true);
+        kind[node]           = SURFACE;
+        surfaceTexture[node] = 0;
+        styleOf[node]        = null;
+        return node;
+    }
+
+    /**
+     * What a surface shows. Called whenever the texture changes — a framebuffer resized makes
+     * a new one — or every frame, which costs nothing.
+     *
+     * @param node       the surface
+     * @param texture    an OpenGL texture, or 0 to show nothing
+     * @param upsideDown {@code true} for a texture stored bottom row first, as a framebuffer's
+     *                   colour attachment is
+     */
+    public void setSurfaceTexture(int node, int texture, boolean upsideDown) {
+        surfaceTexture[node]    = texture;
+        surfaceUpsideDown[node] = upsideDown;
+    }
+
+    private void drawScreen(int node) {
+        float[] fill = globalStyle.windowFill;
+        aegis.addRoundedRect(layout.x(node), layout.y(node), layout.width(node), layout.height(node), 0.0f,
+            fill[0], fill[1], fill[2], fill[3]);
+    }
+
+    private void drawPanel(int node) {
+        AegisStyle style = globalStyle;   // panels are not dressed by rules: global values only, for now
+        float[] fill = style.panelFill, edge = style.panelBorder;
+        aegis.addRoundedRect(layout.x(node), layout.y(node), layout.width(node), layout.height(node), style.panelRadius,
+            fill[0], fill[1], fill[2], fill[3], edge[0], edge[1], edge[2], edge[3], style.panelBorderWidth);
+    }
+
+    private void drawSurface(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        if (w <= 0.0f || h <= 0.0f) return;
+        if (surfaceTexture[node] != 0) {
+            boolean flip = surfaceUpsideDown[node];
+            aegis.addTexturedQuad(x, y, w, h, 0.0f, flip ? 1.0f : 0.0f, 1.0f, flip ? 0.0f : 1.0f,
+                surfaceTexture[node], 1.0f, 1.0f, 1.0f, 1.0f);
+        } else {
+            float[] fill = style.surfaceFill;
+            aegis.addRoundedRect(x, y, w, h, 0.0f, fill[0], fill[1], fill[2], fill[3]);
+        }
+        if (tree.isFocused(node)) {
+            float[] edge = style.surfaceBorderFocused;
+            aegis.addRoundedRect(x, y, w, h, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                edge[0], edge[1], edge[2], edge[3], style.surfaceBorderWidth);
         }
     }
 

@@ -325,4 +325,24 @@ public final class AegisStyle {
     public final float[] scrollbarThumbHover = { 0.50f, 0.54f, 0.62f, 1.0f };
     /** How thick it is. */
     public float         scrollbarWidth     = 4.0f;
+
+    // Window and panels — step 4a. Global values only.
+    /** Behind the panels: the window itself. */
+    public final float[] windowFill         = { 0.106f, 0.118f, 0.149f, 1.0f };
+    /** A panel's background. */
+    public final float[] panelFill          = { 0.169f, 0.188f, 0.235f, 1.0f };
+    /** A panel's edge. */
+    public final float[] panelBorder        = { 0.227f, 0.255f, 0.314f, 1.0f };
+    /** How round a panel's corners are. */
+    public float         panelRadius        = 4.0f;
+    /** How thick a panel's edge is. */
+    public float         panelBorderWidth   = 1.0f;
+
+    // Surface — step 4a.
+    /** What a surface shows while it has nothing to show. */
+    public final float[] surfaceFill          = { 0.106f, 0.118f, 0.149f, 1.0f };
+    /** Its edge while it has focus: the keys go to what it shows. */
+    public final float[] surfaceBorderFocused = { 0.36f, 0.62f, 0.94f, 1.0f };
+    /** How thick that edge is. */
+    public float         surfaceBorderWidth   = 1.0f;
 }

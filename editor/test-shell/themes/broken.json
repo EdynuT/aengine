@@ -1,6 +1,6 @@
 {
   "name": "Test - broken on purpose",
-  "description": "A test theme for step 3f part 3; it does not ship. Every entry below is one kind of mistake the theme reader must report with its line, except the Stop button's, which is right and turns it red so the theme is visibly loaded. Run with -PtestShell -PthemeFile=broken and read the block in the log.",
+  "description": "A test theme for step 3f part 3; it does not ship. Every entry below is one kind of mistake the theme reader must report with its line, except the Quit item's, which is right and turns it red so the theme is visibly loaded. Run with -PtestShell -PthemeFile=broken and read the block in the log.",
   "format": "1",
 
   "global": {
@@ -18,10 +18,10 @@
   "loopA": "@loopB",
   "loopB": "@loopA",
 
-  "viewport.buttonStop.fill":  "@danger",
-  "viewport.buttonPause.fill": "@loopA",
-  "viewport.buttonPlay.fill":  "@global.surface.raised",
-  "inspector.field.fill":  "@missing",
-  "inspector.field.glow":  "#FFFFFF",
-  "hierarchy.oldButton.fill":  "#FFFFFF"
+  "menuFile.menuItemQuit.text":      "@danger",
+  "menuFile.menuItemSaveScene.text": "@loopA",
+  "menu.menuBarMain.menuFile.text":  "@global.text",
+  "viewport.surface.fill":           "@missing",
+  "viewport.surface.glow":           "#FFFFFF",
+  "hierarchy.buttonOld.fill":        "#FFFFFF"
 }

@@ -1,22 +1,21 @@
 {
   "name":        "Test - outdated",
-  "description": "Test layout, does not ship: a user's layout written before an engine update. It names a widget the update removed (buttonRecord), does not place one the update added (fieldDescription), and carries a property no layout holds. Every one of those is a warning: the layout is still used.",
+  "description": "Test layout, does not ship: a user's layout written before an engine update. It names a widget the update removed (surfaceGame), does not place one the update added (surfaceScene), and carries a property no layout holds. Every one of those is a warning: the layout is still used.",
   "format":      1,
 
   "screens": {
     "editor": {
-      "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
-        { "type": "panel", "panel": "toolbar", "height": 84 },
-        { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
-          { "type": "panel", "panel": "hierarchy", "width": 200 },
+      "root": { "type": "column", "padding": 6, "gap": 6, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "menu",    "height": 28 },
+        { "type": "panel", "panel": "toolbar", "height": 40 },
+        { "type": "row", "grow": 1, "gap": 6, "alignY": "stretch", "children": [
+          { "type": "tabs", "width": 240, "panels": ["hierarchy", "assets"] },
           { "type": "panel", "panel": "viewport", "grow": 1, "colour": "#FF0000", "children": [
-            { "type": "widget", "widget": "buttonStop" },
-            { "type": "widget", "widget": "buttonRecord" },
-            { "type": "widget", "widget": "buttonPlay" },
-            { "type": "widget", "widget": "buttonPause" }
+            { "type": "widget", "widget": "surfaceGame" }
           ]},
-          { "type": "panel", "panel": "inspector", "width": 340 }
-        ]}
+          { "type": "tabs", "width": 320, "panels": ["inspector", "console", "output"] }
+        ]},
+        { "type": "panel", "panel": "status", "height": 24 }
       ]}
     }
   }

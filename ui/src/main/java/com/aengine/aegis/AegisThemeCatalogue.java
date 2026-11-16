@@ -128,6 +128,7 @@ public final class AegisThemeCatalogue {
         palette("surface",        "#242936");   // sunken: inside fields, empty slider track
         palette("surface.raised", "#333B4A");   // raised: a resting button
         palette("surface.hover",  "#454F63");   // raised, under the pointer
+        palette("background",     "#1B1E26");   // behind the panels: the window itself
         palette("border",         "#616B85");
 
         // ── Focus, drawn by every focusable widget but the text field ────────────────────
@@ -292,6 +293,19 @@ public final class AegisThemeCatalogue {
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);
         colour("scrollbar.thumb.hover", "@global.text.dim", s -> s.scrollbarThumbHover);   // under the pointer, or dragged
         size  ("scrollbar.width", "4", (s, v) -> s.scrollbarWidth = v);
+
+        // ── Window and panels: what the screen and each registered panel draw behind
+        //    their widgets — step 4a. Global values only, as the scroll bar's.
+        colour("window.fill",  "@global.background", s -> s.windowFill);
+        colour("panel.fill",   "#2B303C",            s -> s.panelFill);
+        colour("panel.border", "#3A4150",            s -> s.panelBorder);
+        size  ("panel.radius",       "4", (s, v) -> s.panelRadius = v);
+        size  ("panel.border.width", "1", (s, v) -> s.panelBorderWidth = v);
+
+        // ── Surface: an area code draws into, such as the viewport's scene — step 4a.
+        colour("surface.fill",           "@global.background", s -> s.surfaceFill);    // shown while it has nothing to show
+        colour("surface.border.focused", "@global.accent",     s -> s.surfaceBorderFocused);
+        size  ("surface.border.width",   "1", (s, v) -> s.surfaceBorderWidth = v);
     }
 
     private AegisThemeCatalogue() { }

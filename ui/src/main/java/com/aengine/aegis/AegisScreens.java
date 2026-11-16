@@ -111,6 +111,7 @@ public final class AegisScreens {
         }
         int panel = row ? layout.row(AegisLayout.NONE) : layout.column(AegisLayout.NONE);
         layout.setNodeName(panel, name);
+        widgets.markPanel(panel);   // drawn as its background, under its widgets
         panels.put(name, panel);
         return panel;
     }
@@ -184,7 +185,9 @@ public final class AegisScreens {
                 continue;
             }
             Logger.info(Logger.System.UI, "Screen \"%s\" from %s.", screen, file.source());
-            return new Build(file, widgets).node(root, AegisLayout.NONE);
+            int built = new Build(file, widgets).node(root, AegisLayout.NONE);
+            this.widgets.markScreen(built);   // drawn as the window's background
+            return built;
         }
         throw new IllegalStateException("No layout describes the screen \"" + screen + "\" without errors.");
     }

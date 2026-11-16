@@ -47,7 +47,8 @@ tasks.named('run') {
     if (project.hasProperty('testShell')) {
         systemProperty 'aengine.userdata', file('test-shell').absolutePath
     }
-    // ./gradlew :editor:run -PthemeFile=<name> picks a theme by name; "dark" otherwise.
+    // ./gradlew :editor:run -PthemeFile=<name> picks a theme file by name; the factory theme
+    // — the engine's defaults, compiled in — otherwise.
     if (project.hasProperty('themeFile')) {
         systemProperty 'aengine.theme', project.property('themeFile')
     }

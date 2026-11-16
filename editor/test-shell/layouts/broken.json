@@ -5,16 +5,16 @@
 
   "screens": {
     "editor": {
-      "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
-        { "type": "panel", "panel": "toolbar", "height": "84" },
-        { "type": "row", "grow": 1, "gap": 8, "alignY": "middle", "children": [
+      "root": { "type": "column", "padding": 6, "gap": 6, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "toolbar", "height": "40" },
+        { "type": "row", "grow": 1, "gap": 6, "alignY": "middle", "children": [
           { "type": "panel", "panel": "hierarchy", "width": 240 },
           { "type": "panel", "panel": "outliner", "width": 120 },
           { "type": "panel", "panel": "viewport", "grow": 1, "colour": "#FF0000" },
-          { "type": "panel", "panel": "inspector", "width": -300, "children": [
-            { "type": "widget", "widget": "fieldName" },
-            { "type": "widget", "widget": "fieldName" },
-            { "type": "widget", "widget": "buttonStop", "hidden": "yes" }
+          { "type": "panel", "panel": "menu", "width": -300, "children": [
+            { "type": "widget", "widget": "menuBarMain" },
+            { "type": "widget", "widget": "menuBarMain" },
+            { "type": "widget", "widget": "surfaceScene", "hidden": "yes" }
           ]},
           { "type": "panel", "panel": "hierarchy", "width": 100 }
         ]}

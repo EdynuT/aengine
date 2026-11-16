@@ -31,6 +31,10 @@ import static org.lwjgl.glfw.GLFW.*;
  *
  * <p>Yaw and pitch are kept in this system, not in the entity, so they are shared by
  * whichever camera is primary and are not saved with the scene.</p>
+ *
+ * <p>The controls work only while {@link #setInputEnabled input is enabled}. The editor
+ * enables it while its viewport has focus, so Space typed into a text field does not also
+ * raise the camera; a host with no interface leaves it enabled.</p>
  */
 public final class CameraSystem extends System {
 
@@ -53,6 +57,16 @@ public final class CameraSystem extends System {
     private boolean isCursorHidden = false;
 
     private static final int BUTTON_RIGHT = 1; 
+
+    private boolean inputEnabled = true;
+
+    /**
+     * Whether the controls move the camera. Off, the camera keeps its place and stays in step
+     * with its transform, and a cursor captured for looking around is let go.
+     *
+     * @param enabled {@code true} for the controls to work; {@code true} until set
+     */
+    public void setInputEnabled(boolean enabled) { this.inputEnabled = enabled; }
 
     @Override
     public void update(Registry registry, float deltaTime) {
@@ -112,7 +126,7 @@ public final class CameraSystem extends System {
             float speedModifier = movementSpeed * deltaTime;
 
             // 3. State Machine: Is Right Click Engaged?
-            if (Input.isMouseButtonPressed(BUTTON_RIGHT)) {
+            if (inputEnabled && Input.isMouseButtonPressed(BUTTON_RIGHT)) {
                 
                 if (!isCursorHidden && (Math.abs(deltaX) > 0.0f || Math.abs(deltaY) > 0.0f)) {
                     long windowHandle = glfwGetCurrentContext();
@@ -164,10 +178,10 @@ public final class CameraSystem extends System {
 
             // 4. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
             // Works identically in 2D and 3D as requested
-            if (Input.isKeyPressed(Keys.SPACE)) {
+            if (inputEnabled && Input.isKeyPressed(Keys.SPACE)) {
                 movementDelta.add(new Vector3f(verticalUp).mul(speedModifier));
             }
-            if (Input.isKeyPressed(Keys.CTRL_L) || Input.isKeyPressed(Keys.CTRL_R)) {
+            if (inputEnabled && (Input.isKeyPressed(Keys.CTRL_L) || Input.isKeyPressed(Keys.CTRL_R))) {
                 movementDelta.sub(new Vector3f(verticalUp).mul(speedModifier));
             }
 
