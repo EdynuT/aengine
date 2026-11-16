@@ -63,4 +63,15 @@ tasks.named('run') {
     if (project.hasProperty('layoutFile')) {
         systemProperty 'aengine.layout', project.property('layoutFile')
     }
+    // ./gradlew :editor:run -Plocale=<tag> shows the editor in that language — pt-BR — instead
+    // of the system's, until the settings page chooses it (Phase 4).
+    if (project.hasProperty('locale')) {
+        systemProperty 'aengine.locale', project.property('locale')
+    }
+    // ./gradlew :editor:run -PlocaleCheck writes the texts the language shown has left to
+    // translate to build/locale-check/<tag>.json, each with its English, ready to copy into
+    // src/dist/lang/<tag>.json.
+    if (project.hasProperty('localeCheck')) {
+        systemProperty 'aengine.localeCheck', layout.buildDirectory.dir('locale-check').get().asFile.absolutePath
+    }
 }

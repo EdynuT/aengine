@@ -287,6 +287,17 @@ public class Main extends Engine {
         theme     = com.aengine.editor.ShellFiles.loadTheme(themeName);
         aegis.widgets().applyTheme(theme, layoutFrame);
 
+        // Step 3h: show every text in the user's language. English is what the code above
+        // wrote; other languages come from <install>/lang/<tag>.json, keyed by each widget's
+        // address — viewport.buttonStop — so nothing here names a key. The system's language
+        // unless -Plocale=<tag> says otherwise; -PlocaleCheck writes what is left to translate.
+        String localeTag = System.getProperty("aengine.locale", java.util.Locale.getDefault().toLanguageTag());
+        com.aengine.aegis.AegisLocale locale = com.aengine.editor.ShellFiles.loadLocale(localeTag);
+        aegis.widgets().applyLocale(locale);
+        String localeCheck = System.getProperty("aengine.localeCheck");
+        com.aengine.editor.ShellFiles.reportLocale(locale, localeTag,
+            localeCheck != null ? java.nio.file.Path.of(localeCheck) : null);
+
         // Step 3f-5b: with -PthemeWatch, saving the theme file applies it at once. Off by
         // default: an end user's interface never changes because a file was touched. The
         // watcher only raises a flag; the reload runs at the start of a frame, as Ctrl+R's does.

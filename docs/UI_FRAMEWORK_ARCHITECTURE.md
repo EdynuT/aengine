@@ -63,6 +63,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-10 | Menu bar and menus: `ae.menuBar`, `menu`, `menuItem`, `menuCheckItem`, `subMenu`; by pointer, press-and-release, and F10 with the arrows |
 | Step 3g-11 | Dialog: `ae.dialog`, `openDialog`; modal over a dimmed window, Tab kept inside, dragged by its title, Esc or × to cancel, a default button for Enter |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
+| Conventions | One naming scheme for every data file; widgets named by their kind first — `buttonStop`; theme entries `kind.part.property.state` |
+| Step 3h | Localisation: English in code, other languages from `lang/<tag>.json` keyed by widget address; `-PlocaleCheck` lists what is left to translate |
 
 ### The plan ahead
 
@@ -493,8 +495,16 @@ what opens later is already dressed. Theme entries: `dialog.title.text`, `.line`
 atlas, and `TestShell` wraps the frame loop's order of calls. Each widget step adds tests for
 what it decides.
 
-**Step 3h — localisation.** Editor text comes from locale files instead of code (§8).
-*Visible:* switching the language changes every label.
+**3h, localisation.** ✅ English stays in code, where each widget is made; other languages
+come from `<install>/lang/<tag>.json`, keyed by the widget's address, so a change to the
+interface asks for no file to be edited (§8). `AegisLocale` reads a file strictly — a text
+that is not a string, a key that is not an address or answers to no widget, a dropped
+`{count}` are each reported with their line — and falls back from `pt-BR` to `pt` to English.
+`ae.applyLocale` looks every text up and sizes widgets again; `AegisLocale.english()` puts the
+English back. Tabs and combo items gain names for their keys: `addTab(pane, "tabEntities",
+"Entities", content)`, `addComboItem(combo, "lit", "Lit")`, `comboItemName`. The editor
+follows the system language, or `-Plocale=pt-BR`, and says in one line how much is
+translated; `-PlocaleCheck` lists what is not, ready to copy into the file.
 
 **Then Phase 4** migrates the real editor panels one at a time, and **Phase 5** deletes Dear
 ImGui. Both are described in §11.
@@ -1660,6 +1670,7 @@ the layout refuses anything else.
 | Spinner | `spinner` | `spinnerGridSize` | `spinner.*` |
 | Text field, one line or several | `field` | `fieldName`, `fieldNotes` | `field.*` |
 | Tabbed pane | `tabs` | `tabsScene` | `tabs.*` |
+| A tab of one | `tab` | `tabEntities` | — |
 | Split pane | `split` | `splitView` | `split.*` |
 | Tree | `tree` | `treeScene` | `tree.*` |
 | Combo box | `combo` | `comboShading` | `combo.*` |
@@ -1705,54 +1716,82 @@ JSON number and a word is a JSON string, never one written as the other (§7, *V
 
 ## 8. Localisation
 
-**Decision: every piece of editor text comes from a locale file, never from code.** It is
-the rule of §7 applied to words: the editor declares what a label *means*, and a file
-supplies the words for it. The engine is not only for its author, so the editor must be
-usable in other languages.
+**Decision: English is written in code, where each widget is made; every other language
+comes from a locale file, keyed by the widget's address.** The engine is not only for its
+author, so the editor must be usable in other languages — but a key catalogue kept by hand
+beside the code would have to be edited at every change to the interface, and the interface
+changes all the time until it is finished. So the code that makes a widget also says its
+English, as it always has, and the key is not invented: it is the address the theme already
+reaches the widget by (§7, *Conventions*).
+
+```java
+int stop = ae.button(viewport, "buttonStop", "Stop");   // key viewport.buttonStop, English "Stop"
+ae.setTooltip(stop, "Stops the scene and goes back to the saved state.");
+```
+
+Adding, moving or renaming a widget therefore asks for no file to be edited. Until a
+translation says otherwise the widget shows its English, and the editor lists what each
+language has left to translate.
 
 ### What the files are
 
-A locale is identified by a language and a region — `en-US`, `pt-BR`, `pt-PT`, `de-DE`,
-`ja-JP` — the language as an ISO 639 code and the region as an ISO 3166 code. The region
-matters because one language varies between countries.
+A locale is identified by a language and a region — `pt-BR`, `pt-PT`, `de-DE`, `ja-JP` —
+written as a BCP 47 tag, the form Java's `Locale.toLanguageTag()` gives. The region matters
+because one language varies between countries.
 
-Each locale is one JSON file mapping keys to text:
-
-**`en-US.json`**
-
-```json
-{
-  "menu.file":          "File",
-  "menu.file.save":     "Save scene",
-  "inspector.entities": "{count} entities"
-}
-```
+Each locale is one JSON file in `<install>/lang/`, named by its tag, holding the texts that
+differ from English:
 
 **`pt-BR.json`**
 
 ```json
 {
-  "menu.file":          "Arquivo",
-  "menu.file.save":     "Salvar cena",
-  "inspector.entities": "{count} entidades"
+  "name":        "Português (Brasil)",
+  "description": "The editor in Brazilian Portuguese.",
+  "format":      1,
+
+  "viewport.buttonStop":              "Parar",
+  "viewport.buttonStop.tooltip":      "Para a cena e volta ao estado salvo.",
+  "inspector.fieldName.placeholder":  "Nome da entidade",
+  "inspector.comboShading.lit":       "Iluminado",
+  "hierarchy.tabsScene.tabEntities":  "Entidades",
+  "menuFile.menuItemSave":            "Salvar",
+  "dialogAbout.title":                "Sobre o Aegis",
+  "inspector.title":                  "Inspetor"
 }
 ```
 
-Editor code refers to `menu.file`, never to `"File"`. `{count}` is a placeholder filled in at
-display time.
+The key is the widget's address, and a suffix names a text beside its main one:
 
-**`en-US` is the reference locale.** It must contain every key, and it is the catalogue of
-what can be translated — the same role the property catalogue plays in §7.
+| Text | Key |
+|---|---|
+| A button's, a checkbox's, a label's; a menu's title or an item's | the address — `viewport.buttonStop`, `menuFile.menuItemSave` |
+| A text field's placeholder | `.placeholder` — `inspector.fieldName.placeholder` |
+| A tooltip | `.tooltip` — `viewport.buttonStop.tooltip` |
+| A dialog's title | `.title` — `dialogAbout.title` |
+| A panel's title, as a tab where a layout puts it in `"tabs"` | `.title` — `inspector.title` |
+| A tab of a tabbed pane | the tab's name — `hierarchy.tabsScene.tabEntities` |
+| A combo box's item | the item's name — `inspector.comboShading.lit` |
+
+Tabs and combo items have names for this reason: `ae.addTab(pane, "tabEntities", "Entities",
+content)`, `ae.addComboItem(combo, "lit", "Lit")`. Code tells an item by its name —
+`comboItemName` — since its text depends on the language.
+
+Not translated: text code composes and sets with `setLabel`, which code is responsible for; a
+tree's items, which are the user's data; a menu item's shortcut text. `{count}` in an English
+text is a placeholder, and a translation must keep it.
 
 ### Choosing the language
 
-1. The language chosen in the editor's settings, if there is one.
+1. The language chosen in the editor's settings, once they exist (Phase 4); until then,
+   `-Plocale=pt-BR` when running from Gradle.
 2. Otherwise the operating system's language, which Java reports through
    `Locale.getDefault()`.
-3. For each key, a fallback chain: the exact locale (`pt-BR`), then the language alone
-   (`pt`), then `en-US`. A missing Portuguese translation shows English, not a blank.
-4. A key missing even from `en-US` shows the key itself — `menu.file.save` — so the gap is
-   visible instead of silent, consistent with §7.
+3. For each text, a fallback chain: the exact locale (`pt-BR.json`), then the language alone
+   (`pt.json`), then the English in code. A missing translation shows English, never a blank
+   or a key.
+
+English needs no file: it is what the code says.
 
 ### Validation
 
@@ -1760,20 +1799,26 @@ The same structure-or-value rule as §7:
 
 | Situation | Outcome |
 |---|---|
-| `en-US.json` missing or does not parse | Refuse to start — it is the reference |
-| A translation file missing or does not parse | That locale is unavailable, with a warning; English is used |
-| A key missing from a translation | Falls through the chain, with a warning |
-| A placeholder missing from a translation — `{count}` dropped | The translation is used as is, with a warning |
+| The chosen locale has no file | English, with a line of information |
+| A locale file does not parse, or is not an object | That locale is unusable, with a warning; English is used |
+| A text that is not a string, or a key that is not an address | That text is ignored, with a warning naming its line |
+| A key no widget answers to — a widget renamed or removed | Ignored, with a warning |
+| A placeholder missing from a translation — `{count}` dropped | The translation is used as written, with a warning |
+| A text the file does not translate | English, without a warning: counted in one line of information |
+
+**What is left to translate** is listed by `./gradlew :editor:run -PlocaleCheck`: every
+text the chosen locale lacks, each line written as the file would hold it —
+`"viewport.buttonPlay": "Play",` — ready to be copied in and translated.
 
 ### Allocation
 
-Text is looked up when the interface is resolved, not every frame. A label holds a handle to
-its resolved string, the way a widget holds a style handle; switching language resolves
-everything once. Placeholders are filled into a reused `StringBuilder`, which is why
-`addText` takes a `CharSequence`.
+Text is looked up when the locale is applied — `ae.applyLocale(locale)`, once the tree is
+built and again to switch language — never per frame. A widget keeps the English it was
+made with beside the text it shows, so switching back to English, or to another language,
+needs nothing from code.
 
-The mechanism — loading, fallback, placeholders — lives in `:ui`, since it is not specific to
-this editor. The locale files themselves are editor data.
+The mechanism — `AegisLocale`, reading, fallback, placeholders — lives in `:ui`, since it is
+not specific to this editor. The locale files themselves are editor data.
 
 ### What translation demands from the text stack
 
@@ -1798,7 +1843,7 @@ Japanese or Korean, which would need a fallback font behind the main one.
 
 ### Open questions
 
-- **Which languages ship first.** Suggested: `en-US` and `pt-BR`.
+- **Which languages ship first.** Suggested: English, from code, and `pt-BR`.
 - **Which scripts to plan for.** Latin only for now, or East Asian and right-to-left as
   well — this decides the atlas design, so it is worth settling before step 3b-2.
 - ~~**Where the locale files live**~~ — **decided:** with the engine, in `<install>/lang/`.
@@ -1982,7 +2027,7 @@ nobody can review.
 | **3e** ✅ | Button, checkbox, slider, text field and text box behave correctly | L4 |
 | **3f** | `theme.json` drives the colours and `layout.json` the arrangement, each falling back to the factory defaults in code; a broken file is reported precisely and never stops the editor; with the development option on, saving the theme reloads it live | §7 |
 | **3g** | The widget set: label, separator, scroll, tabbed and split panes, spinner, tree, the overlay layer and what sits on it | §6 |
-| **3h** | Editor text comes from locale files, following the system language by default | §8 |
+| **3h** ✅ | Editor text in English from code, other languages from locale files keyed by address, following the system language by default | §8 |
 
 The breakdown of 3b into its five parts is in *The plan ahead* at the top of this document.
 

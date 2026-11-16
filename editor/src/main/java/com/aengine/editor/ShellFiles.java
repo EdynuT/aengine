@@ -1,14 +1,19 @@
 package com.aengine.editor;
 
 import com.aengine.aegis.AegisLayoutFile;
+import com.aengine.aegis.AegisLocale;
 import com.aengine.aegis.AegisTheme;
 import com.aengine.utils.Logger;
+import com.google.gson.JsonPrimitive;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Where the shell's files live, and which of them the editor uses — the one place that knows
@@ -38,6 +43,17 @@ public final class ShellFiles {
     public static Path installDir() {
         String home = System.getProperty("aengine.home");
         return (home != null ? Path.of(home) : Path.of("")).toAbsolutePath().resolve("ui");
+    }
+
+    /**
+     * {@code <install>/lang/}: the locale files, which ship with the engine and change with it
+     * (§8). {@code aengine.home} if set, else the working directory.
+     *
+     * @return the absolute path; it may not exist
+     */
+    public static Path langDir() {
+        String home = System.getProperty("aengine.home");
+        return (home != null ? Path.of(home) : Path.of("")).toAbsolutePath().resolve("lang");
     }
 
     /**
@@ -128,6 +144,84 @@ public final class ShellFiles {
         }
         Logger.info(Logger.System.UI, "No theme \"%s\" found any more; using the factory theme.", name);
         return AegisTheme.factory();
+    }
+
+    /**
+     * The texts for the language {@code tag} names — step 3h: {@code lang/<tag>.json}, with
+     * the language's own file behind it — {@code pt.json} behind {@code pt-BR.json} — and the
+     * English in code behind both. English itself needs no file. A file that is missing is
+     * passed over; one that cannot be used is passed over with a warning; with neither, the
+     * editor speaks English and says so.
+     *
+     * @param tag a BCP 47 tag — {@code "pt-BR"}; the system's when no setting chooses one
+     * @return the locale to apply; {@link AegisLocale#english} when there is no file for it
+     */
+    public static AegisLocale loadLocale(String tag) {
+        Locale wanted = Locale.forLanguageTag(tag);
+        String language = wanted.getLanguage();
+        if (language.isEmpty() || language.equals("en")) {
+            Logger.info(Logger.System.UI, "Texts in English, as written in code.");
+            return AegisLocale.english();
+        }
+        AegisLocale exact = readLocale(langDir().resolve(wanted.toLanguageTag() + ".json"));
+        AegisLocale whole = wanted.getCountry().isEmpty() ? null : readLocale(langDir().resolve(language + ".json"));
+        if (exact == null && whole == null) {
+            Logger.info(Logger.System.UI, "No texts for %s in %s; the editor speaks English.", wanted.toLanguageTag(), langDir());
+            return AegisLocale.english();
+        }
+        return exact != null ? exact.withFallback(whole) : whole;
+    }
+
+    private static AegisLocale readLocale(Path file) {
+        if (!Files.exists(file)) return null;
+        try {
+            AegisLocale locale = AegisLocale.read(file);
+            Logger.info(Logger.System.UI, "Texts \"%s\" from %s.", locale.name(), file);
+            return locale;
+        } catch (IOException e) {
+            Logger.warn(Logger.System.UI, "%s cannot be read (%s); it is passed over.", file, e.getMessage());
+        } catch (AegisLocale.Unusable e) {
+            Logger.warn(Logger.System.UI, "%s; it is passed over.", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Says how far the locale applied has come, in one line — and, for a development run with
+     * {@code -PlocaleCheck}, writes what is left to translate to {@code <checkDir>/<tag>.json},
+     * each text as the locale file would hold it with its English, ready to be copied in.
+     *
+     * @param locale   the locale, once applied
+     * @param tag      the language it is for
+     * @param checkDir where to write what is left, or {@code null} for no listing
+     */
+    public static void reportLocale(AegisLocale locale, String tag, Path checkDir) {
+        Map<String, String> missing = locale.missing();
+        if (locale.source().equals("english")) {
+            if (checkDir != null) Logger.info(Logger.System.UI, "Locale check: the editor speaks English; nothing to translate.");
+            return;
+        }
+        int asked = locale.askedCount();
+        Logger.info(Logger.System.UI, "Texts in %s: %d of %d translated, %d in English%s.", tag,
+            asked - missing.size(), asked, missing.size(),
+            missing.isEmpty() || checkDir != null ? "" : " (-PlocaleCheck lists them)");
+        if (checkDir == null) return;
+
+        StringBuilder out = new StringBuilder("{\n");
+        int i = 0;
+        for (Map.Entry<String, String> e : missing.entrySet()) {
+            out.append("  ").append(new JsonPrimitive(e.getKey())).append(": ")
+               .append(new JsonPrimitive(e.getValue())).append(++i < missing.size() ? ",\n" : "\n");
+        }
+        out.append("}\n");
+        Path file = checkDir.resolve(tag + ".json");
+        try {
+            Files.createDirectories(checkDir);
+            Files.writeString(file, out, StandardCharsets.UTF_8);
+            Logger.info(Logger.System.UI, "Locale check: %d texts left to translate, written to %s.", missing.size(), file);
+        } catch (IOException e) {
+            Logger.warn(Logger.System.UI, "Locale check: %s cannot be written (%s).", file, e.getMessage());
+        }
     }
 
     /**

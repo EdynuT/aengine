@@ -332,6 +332,14 @@ public final class AegisLocale {
     }
 
     /**
+     * How many texts the widgets asked for when the locale was last applied — translated or
+     * not. With {@link #missing}, how far a translation has come.
+     *
+     * @return the count
+     */
+    public int askedCount() { return asked.size(); }
+
+    /**
      * How many texts the file holds that were read without a problem.
      *
      * @return the count
