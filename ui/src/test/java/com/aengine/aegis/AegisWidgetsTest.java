@@ -475,7 +475,7 @@ class AegisWidgetsTest {
         for (String title : titles) {
             int column = layout.column(AegisLayout.NONE);
             ae.button(column, "button" + title, title + " button");
-            ae.addTab(pane, title, column);
+            ae.addTab(pane, "tab" + title, title, column);
             if (title.equals("Scene")) sceneColumn = column;
         }
         return pane;

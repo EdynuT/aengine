@@ -153,6 +153,11 @@ public final class AegisWidgets {
     /** Indexed by layout handle. */
     private final byte[]   kind;
     private final String[] label;   // set once at build time; never built per frame. A text field's placeholder.
+    /**
+     * The English {@link #label} was made with, which a locale translates — step 3h; {@code null}
+     * for a text code set with {@link #setLabel}, which code composes and shows as given.
+     */
+    private final String[] labelEnglish;
     private final boolean[] checked; // checkboxes: ticked or not
 
     // Sliders and spinners: the value, its range, and how far one small step moves it.
@@ -168,6 +173,8 @@ public final class AegisWidgets {
      */
     private static final class TabSet {
         String[] titles   = new String[4];
+        String[] english  = new String[4];   // what code wrote, which a locale translates
+        String[] keys     = new String[4];   // the key it is translated by
         int[]    contents = new int[4];
         int      count;
         int      selected;
@@ -197,6 +204,8 @@ public final class AegisWidgets {
     // Combo boxes: the items, the one chosen, the list a box drops down — and, on the list,
     // the box it belongs to and the item it points at while open.
     private final String[][] comboItems;
+    private final String[][] comboItemNames;     // what each item is called — step 3h: its key's last part
+    private final String[][] comboItemEnglish;   // what code wrote for it, which a locale translates
     private final int[]      comboChosen;
     private final int[]      comboList;
     private final int[]      listOwner;
@@ -277,6 +286,7 @@ public final class AegisWidgets {
     // Tooltips — step 3g-8: each node's text, if it has one; the node under the resting
     // pointer and since when it rested; the one shown, and whether the keyboard showed it.
     private final String[] tooltip;
+    private final String[] tooltipEnglish;   // step 3h: what code wrote, which a locale translates
     private int     tipCandidate = AegisLayout.NONE;
     private long    tipRestingSince;
     private float   tipPointerX = Float.NaN, tipPointerY = Float.NaN;
@@ -420,6 +430,7 @@ public final class AegisWidgets {
         this.tree   = tree;
         this.kind    = new byte[capacity];
         this.label   = new String[capacity];
+        this.labelEnglish = new String[capacity];
         this.checked = new boolean[capacity];
 
         this.sliderValue = new float[capacity];
@@ -430,7 +441,10 @@ public final class AegisWidgets {
         this.tabsOf          = new TabSet[capacity];
         this.itemsOf         = new TreeItems[capacity];
         this.tooltip         = new String[capacity];
+        this.tooltipEnglish  = new String[capacity];
         this.comboItems      = new String[capacity][];
+        this.comboItemNames  = new String[capacity][];
+        this.comboItemEnglish = new String[capacity][];
         this.defaultButton   = new int[capacity];
         this.titleMenu       = new int[capacity];
         this.menuOwner       = new int[capacity];
@@ -532,6 +546,85 @@ public final class AegisWidgets {
              child = layout.nextSibling(child)) {
             dressSubtree(theme, child);
         }
+    }
+
+    /**
+     * Shows every widget's texts in a language — step 3h: labels, titles, menu items, tab
+     * titles, combo items, placeholders and tooltips. Each is looked up by its key — the
+     * widget's address, the path a theme reaches it by, maybe with a suffix — and shows the
+     * English it was made with where the locale has nothing; {@link AegisLocale#english} puts
+     * every one back. Widgets are then sized again, since a word may be longer in another
+     * language.
+     *
+     * <p>Keys, by what the text is:</p>
+     * <ul>
+     *   <li>a button's, a checkbox's or a label's text, a menu's title or an item's —
+     *       the address: {@code viewport.buttonStop}, {@code menuFile.menuItemSave};</li>
+     *   <li>a dialog's title — {@code dialogAbout.title};</li>
+     *   <li>a text field's placeholder — {@code inspector.fieldName.placeholder};</li>
+     *   <li>a tooltip — {@code viewport.buttonStop.tooltip};</li>
+     *   <li>a tab's title — {@code hierarchy.tabsScene.tabEntities}, or {@code inspector.title}
+     *       for a panel a layout file puts in tabs;</li>
+     *   <li>a combo box's item — {@code inspector.comboShading.lit}.</li>
+     * </ul>
+     *
+     * <p>Text code sets with {@link #setLabel} is code's to compose, and shown as given. So are a
+     * tree's items, which are the user's data, and a menu item's shortcut.</p>
+     *
+     * <p>Call it once the tree is built, and again to switch language. Never in the frame loop:
+     * it looks every text up. What the locale holds that no widget asked for, and what it got
+     * wrong, is reported in the log once this is done.</p>
+     *
+     * @param locale the language to show
+     */
+    public void applyLocale(AegisLocale locale) {
+        locale.beginApplying();
+        int nodes = layout.nodeCount();
+        for (int node = 0; node < nodes; node++) {
+            if (kind[node] == TABBED_PANE) {   // its tabs carry their own keys: a layout's pane has no address
+                TabSet tabs = tabsOf[node];
+                for (int i = 0; i < tabs.count; i++) tabs.titles[i] = locale.text(tabs.keys[i], tabs.english[i]);
+            }
+            if (kind[node] == NOT_A_WIDGET && tooltipEnglish[node] == null) continue;
+            String address = addressOf(node);
+            if (address == null) continue;
+            if (labelEnglish[node] != null) {
+                String key = switch (kind[node]) {
+                    case DIALOG_TITLE         -> address + "." + AegisLocale.TITLE;
+                    case TEXT_FIELD, TEXT_BOX -> address + "." + AegisLocale.PLACEHOLDER;
+                    default                   -> address;
+                };
+                label[node] = locale.text(key, labelEnglish[node]);
+            }
+            if (tooltipEnglish[node] != null) {
+                tooltip[node] = locale.text(address + "." + AegisLocale.TOOLTIP, tooltipEnglish[node]);
+            }
+            if (kind[node] == COMBO_BOX) {
+                for (int i = 0; i < comboItems[node].length; i++) {
+                    comboItems[node][i] = locale.text(address + "." + comboItemNames[node][i], comboItemEnglish[node][i]);
+                }
+            }
+        }
+        for (int node = 0; node < nodes; node++) {
+            if (kind[node] != NOT_A_WIDGET) fitToContent(node);
+        }
+        locale.report();
+    }
+
+    /**
+     * Where a node is reached from a file: the names of its path, joined by dots —
+     * {@code viewport.buttonStop}. A widget's is the path it was made with, as the theme reads
+     * it; a tabbed pane's, which may have no name of its own, is read the same way; any other
+     * node's is the names above it now. {@code null} for a node nothing named.
+     */
+    String addressOf(int node) {
+        if (themePath[node] != null) return String.join(".", themePath[node]);
+        ArrayList<String> path = new ArrayList<>();
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
+            String name = layout.nodeName(up);
+            if (name != null) path.add(0, name);
+        }
+        return path.isEmpty() ? null : String.join(".", path);
     }
 
     /** The kind a theme knows a widget by: the first part of the catalogue names that dress it. */
@@ -658,6 +751,7 @@ public final class AegisWidgets {
 
         kind[node]    = BUTTON;
         label[node]   = text;
+        labelEnglish[node] = text;
         styleOf[node] = null;
         fitToContent(node);
         return node;
@@ -686,6 +780,7 @@ public final class AegisWidgets {
 
         kind[node]    = CHECKBOX;
         label[node]   = text;
+        labelEnglish[node] = text;
         checked[node] = false;
         styleOf[node] = null;
         fitToContent(node);
@@ -730,6 +825,7 @@ public final class AegisWidgets {
         int node = namedBox(parent, name);
         kind[node]    = LABEL;
         label[node]   = text;
+        labelEnglish[node] = text;
         styleOf[node] = null;
         fitToContent(node);
         return node;
@@ -744,6 +840,7 @@ public final class AegisWidgets {
      */
     public void setLabel(int node, String text) {
         label[node] = text;
+        labelEnglish[node] = null;   // composed by code, shown as given: a locale leaves it alone
         fitToContent(node);
     }
 
@@ -1196,19 +1293,48 @@ public final class AegisWidgets {
      * shown, it is the pane's second child, growing to fill it; not shown, it hangs nowhere.
      * Build what goes in it before or after — it is an ordinary row or column either way.</p>
      *
+     * <p>The tab's name makes the key a locale translates its title by, after the pane's
+     * address: {@code hierarchy.tabsScene.tabEntities}.</p>
+     *
      * @param pane    the tabbed pane
-     * @param title   what the tab says; kept, so pass a string that does not change
+     * @param name    the tab's name, unique in the pane — {@code "tabEntities"}; see "Conventions"
+     *                in §7
+     * @param title   what the tab says, in English; kept, so pass a string that does not change
      * @param content the row or column the tab shows
      * @return the tab's index, counting from 0
+     * @throws IllegalArgumentException for a name without the {@code tab} prefix, or one the pane
+     *                                  already has
      */
-    public int addTab(int pane, String title, int content) {
+    public int addTab(int pane, String name, String title, int content) {
+        checkWidgetName(name, "tab", "a tab");
+        String key = addressOf(pane) + "." + name;
+        TabSet tabs = tabsOf[pane];
+        for (int i = 0; i < tabs.count; i++) {
+            if (key.equals(tabs.keys[i])) throw new IllegalArgumentException("The pane already has a tab called \"" + name + "\".");
+        }
+        return appendTab(pane, key, title, content);
+    }
+
+    /**
+     * A panel's tab, where a layout file puts panels in {@code "tabs"}: its title is translated
+     * by the panel's {@code panel.title} key.
+     */
+    int addPanelTab(int pane, String panelName, String title, int panel) {
+        return appendTab(pane, panelName + "." + AegisLocale.TITLE, title, panel);
+    }
+
+    private int appendTab(int pane, String key, String title, int content) {
         TabSet tabs = tabsOf[pane];
         if (tabs.count == tabs.titles.length) {
             tabs.titles   = Arrays.copyOf(tabs.titles, tabs.count * 2);
+            tabs.english  = Arrays.copyOf(tabs.english, tabs.count * 2);
+            tabs.keys     = Arrays.copyOf(tabs.keys, tabs.count * 2);
             tabs.contents = Arrays.copyOf(tabs.contents, tabs.count * 2);
         }
         int index = tabs.count++;
         tabs.titles[index]   = title;
+        tabs.english[index]  = title;
+        tabs.keys[index]     = key;
         tabs.contents[index] = content;
         layout.setGrow(content, 1.0f);
         if (index == 0) {
@@ -1219,6 +1345,15 @@ public final class AegisWidgets {
         }
         return index;
     }
+
+    /**
+     * What a tab says, in the language shown.
+     *
+     * @param pane  the tabbed pane
+     * @param index the tab, counting from 0
+     * @return its title
+     */
+    public String tabTitle(int pane, int index) { return tabsOf[pane].titles[index]; }
 
     /**
      * How many tabs a tabbed pane has.
@@ -1895,7 +2030,8 @@ public final class AegisWidgets {
 
     /**
      * A combo box: one item chosen from several, shown in a box whose list drops down when it
-     * is pressed — added to {@code parent}. The first item starts chosen.
+     * is pressed — added to {@code parent}. Give it its items with {@link #addComboItem}; the
+     * first one added starts chosen.
      *
      * <p>It works as Swing's {@code JComboBox} does, not editable. A press opens the list and
      * another closes it; pressing an item in it, or pressing the box and letting go over an
@@ -1909,19 +2045,18 @@ public final class AegisWidgets {
      *
      * @param parent the row or column to add it to
      * @param name   its name, which a theme or a layout file writes — {@code "comboShading"}
-     * @param items  what can be chosen, in order; kept, so pass strings that do not change
      * @return its handle
-     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses,
-     *                                  or no items
+     * @throws IllegalArgumentException for a name without the {@code combo} prefix
      */
-    public int comboBox(int parent, String name, String... items) {
+    public int comboBox(int parent, String name) {
         checkWidgetName(name, "combo", "a combo box");
-        if (items.length == 0) throw new IllegalArgumentException("A combo box needs at least one item.");
         int node = namedBox(parent, name);
         tree.setInteractive(node, true);
         tree.setFocusable(node, true);
         kind[node]        = COMBO_BOX;
-        comboItems[node]  = items.clone();
+        comboItems[node]  = new String[0];
+        comboItemNames[node]   = new String[0];
+        comboItemEnglish[node] = new String[0];
         comboChosen[node] = 0;
 
         int list = layout.box(AegisLayout.NONE);
@@ -1937,6 +2072,51 @@ public final class AegisWidgets {
     }
 
     /**
+     * Adds an item to a combo box, after the ones it has, and sizes the box again to fit it.
+     *
+     * <p>The item's name is what code tells it by — {@link #comboItemName} — whatever language
+     * it is shown in, and the last part of the key a locale translates its text by:
+     * {@code inspector.comboShading.lit}. Name items for what they mean, in camelCase, with no
+     * prefix: they are not widgets.</p>
+     *
+     * @param combo the combo box
+     * @param name  the item's name, unique in the box — {@code "lit"}
+     * @param text  what it says, in English — {@code "Lit"}; kept
+     * @return the item's index, counting from 0
+     * @throws IllegalArgumentException for a name the layout would refuse, one the box already
+     *                                  has, or {@code tooltip}, {@code placeholder} or
+     *                                  {@code title}, which end other keys
+     */
+    public int addComboItem(int combo, String name, String text) {
+        AegisLayout.checkNodeName(name);
+        if (name.equals(AegisLocale.TOOLTIP) || name.equals(AegisLocale.PLACEHOLDER) || name.equals(AegisLocale.TITLE)) {
+            throw new IllegalArgumentException("\"" + name + "\" cannot name an item: it ends another key of the box's.");
+        }
+        for (String other : comboItemNames[combo]) {
+            if (other.equals(name)) throw new IllegalArgumentException("The combo box already has an item called \"" + name + "\".");
+        }
+        int index = comboItems[combo].length;
+        comboItems[combo]       = Arrays.copyOf(comboItems[combo], index + 1);
+        comboItemNames[combo]   = Arrays.copyOf(comboItemNames[combo], index + 1);
+        comboItemEnglish[combo] = Arrays.copyOf(comboItemEnglish[combo], index + 1);
+        comboItems[combo][index]       = text;
+        comboItemNames[combo][index]   = name;
+        comboItemEnglish[combo][index] = text;
+        fitToContent(combo);
+        return index;
+    }
+
+    /**
+     * An item's name, as {@link #addComboItem} was given it — what code compares, since the
+     * text depends on the language.
+     *
+     * @param combo the combo box
+     * @param index the item, counting from 0
+     * @return its name
+     */
+    public String comboItemName(int combo, int index) { return comboItemNames[combo][index]; }
+
+    /**
      * Which item of a combo box is chosen.
      *
      * @param combo the combo box
@@ -1945,7 +2125,7 @@ public final class AegisWidgets {
     public int comboChosen(int combo) { return comboChosen[combo]; }
 
     /**
-     * The text of a combo box's item.
+     * The text of a combo box's item, in the language shown.
      *
      * @param combo the combo box
      * @param index the item, counting from 0
@@ -1987,6 +2167,7 @@ public final class AegisWidgets {
 
     /** Drops a combo box's list down below it — or up above it, when there is no room below. */
     private void openCombo(int combo) {
+        if (comboItems[combo].length == 0) return;
         AegisStyle style = styleOf(combo);
         int list = comboList[combo];
         float h = comboItems[combo].length * comboRowHeight(style) + 4.0f;
@@ -2068,6 +2249,7 @@ public final class AegisWidgets {
         int combo = focused;
         int list = comboList[combo];
         int count = comboItems[combo].length;
+        if (count == 0) return;   // nothing to choose: the keys do nothing
         if (isComboOpen(combo)) {
             int to = listHighlight[list] + pendingLines;
             if (pendingJump < 0) to = 0;
@@ -2143,6 +2325,7 @@ public final class AegisWidgets {
         tree.setKeepsFocus(node, true);
         kind[node]  = MENU_TITLE;
         label[node] = title;
+        labelEnglish[node] = title;
         styleOf[node] = null;
         fitToContent(node);
 
@@ -2197,6 +2380,7 @@ public final class AegisWidgets {
         tree.setKeepsFocus(node, true);
         kind[node]         = MENU_ITEM;
         label[node]        = text;
+        labelEnglish[node] = text;
         itemShortcut[node] = shortcut;
         itemSubMenu[node]  = AegisLayout.NONE;
         itemChecks[node]   = false;
@@ -2456,6 +2640,7 @@ public final class AegisWidgets {
         tree.setKeepsFocus(bar, true);
         kind[bar]       = DIALOG_TITLE;
         label[bar]      = title;
+        labelEnglish[bar] = title;
         themePath[bar]  = List.of(name);
         themeNamed[bar] = false;
         styleOf[bar]    = null;
@@ -2571,8 +2756,15 @@ public final class AegisWidgets {
      */
     public void setTooltip(int node, String text) {
         tooltip[node] = text;
+        tooltipEnglish[node] = text;
         if (text == null && tipShown == node) tipShown = AegisLayout.NONE;
     }
+
+    /** What a widget's text says now, in the language shown; for tests. */
+    String shownText(int node) { return label[node]; }
+
+    /** What a node's tooltip says now, in the language shown; for tests. */
+    String shownTooltip(int node) { return tooltip[node]; }
 
     /** The node whose tooltip is shown, or NONE; for tests. */
     int tooltipShown() { return tipShown; }
@@ -2706,7 +2898,10 @@ public final class AegisWidgets {
      * @param node a text field or text box
      * @param text the hint; kept, so pass a string that does not change
      */
-    public void setPlaceholder(int node, String text) { label[node] = text; }
+    public void setPlaceholder(int node, String text) {
+        label[node] = text;
+        labelEnglish[node] = text;
+    }
 
     /**
      * Where a text field's caret is: 0 before the first character, the length after the last.
@@ -2751,13 +2946,17 @@ public final class AegisWidgets {
         overlayCount = 0;
         Arrays.fill(kind, NOT_A_WIDGET);
         Arrays.fill(label, null);
+        Arrays.fill(labelEnglish, null);
         Arrays.fill(checked, false);
         Arrays.fill(fieldText, null);
         Arrays.fill(themePath, null);
         Arrays.fill(tabsOf, null);
         Arrays.fill(itemsOf, null);
         Arrays.fill(tooltip, null);
+        Arrays.fill(tooltipEnglish, null);
         Arrays.fill(comboItems, null);
+        Arrays.fill(comboItemNames, null);
+        Arrays.fill(comboItemEnglish, null);
         tipShown = AegisLayout.NONE;
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
@@ -4393,7 +4592,9 @@ public final class AegisWidgets {
         float textY = y + (h - aegis.lineHeight()) * 0.5f;
         float[] ink = style.comboText;
         aegis.pushClipRect(x, y, w - style.comboArrowWidth, h);
-        aegis.addTextTop(x + style.comboPaddingX, textY, comboItems[node][comboChosen[node]], ink[0], ink[1], ink[2], ink[3]);
+        if (comboItems[node].length > 0) {
+            aegis.addTextTop(x + style.comboPaddingX, textY, comboItems[node][comboChosen[node]], ink[0], ink[1], ink[2], ink[3]);
+        }
         aegis.popClipRect();
 
         arrowText.setLength(0);

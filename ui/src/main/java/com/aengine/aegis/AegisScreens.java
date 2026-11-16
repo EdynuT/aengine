@@ -320,7 +320,7 @@ public final class AegisScreens {
                     int pane = AegisScreens.this.widgets.tabbedPane(parent);
                     for (String name : node.tabs()) {
                         int panel = panels.get(name);
-                        AegisScreens.this.widgets.addTab(pane, titles.getOrDefault(name, name), panel);
+                        AegisScreens.this.widgets.addPanelTab(pane, name, titles.getOrDefault(name, name), panel);
                         inTabs.add(panel);
                     }
                     applySizes(node, pane);

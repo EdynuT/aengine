@@ -1246,13 +1246,13 @@ public class Main extends Engine {
         layout.setPadding(entitiesTab, 6.0f);
         ae.label(entitiesTab, "labelEntitiesHint", "Entities go here");
         ae.button(entitiesTab, "buttonAddEntity", "Add entity");
-        ae.addTab(tabsScene, "Entities", entitiesTab);
+        ae.addTab(tabsScene, "tabEntities", "Entities", entitiesTab);
 
         int layersTab = layout.column(com.aengine.aegis.AegisLayout.NONE);
         layout.setPadding(layersTab, 6.0f);
         ae.label(layersTab, "labelLayersHint", "Layers go here");
         ae.checkbox(layersTab, "checkboxLockLayers", "Lock layers");
-        ae.addTab(tabsScene, "Layers", layersTab);
+        ae.addTab(tabsScene, "tabLayers", "Layers", layersTab);
 
         // Step 3g-6: a tree — the scene's hierarchy. Items are added under a parent item, or
         // under NO_ITEM for the top level, and start closed; World is opened from code. Press
@@ -1403,7 +1403,11 @@ public class Main extends Engine {
         // ae.comboChosen(comboShading) reads the choice; ae.wasChanged(comboShading) reports
         // the user's.
         ae.label(layoutInspector, "labelShading", "Shading");
-        comboShading = ae.comboBox(layoutInspector, "comboShading", "Lit", "Unlit", "Wireframe", "Normals");
+        comboShading = ae.comboBox(layoutInspector, "comboShading");
+        ae.addComboItem(comboShading, "lit", "Lit");
+        ae.addComboItem(comboShading, "unlit", "Unlit");
+        ae.addComboItem(comboShading, "wireframe", "Wireframe");
+        ae.addComboItem(comboShading, "normals", "Normals");
 
         // Step 3g-7: a popup — anything built under a root, shown above everything else with
         // ae.showPopup(root, x, y). Built once here, with NONE as its parent; shown when the

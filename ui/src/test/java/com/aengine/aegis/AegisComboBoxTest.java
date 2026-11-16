@@ -18,7 +18,11 @@ class AegisComboBoxTest {
     private int combo;
 
     private void build() {
-        combo = ae.comboBox(shell.root, "comboShading", "Lit", "Unlit", "Wireframe", "Normals");
+        combo = ae.comboBox(shell.root, "comboShading");
+        ae.addComboItem(combo, "lit", "Lit");
+        ae.addComboItem(combo, "unlit", "Unlit");
+        ae.addComboItem(combo, "wireframe", "Wireframe");
+        ae.addComboItem(combo, "normals", "Normals");
         shell.frame();
     }
 
