@@ -46,6 +46,8 @@ tasks.named('run') {
     // for the user's own, so trying one never touches ~/.local/share/AEngine. They do not ship.
     if (project.hasProperty('testShell')) {
         systemProperty 'aengine.userdata', file('test-shell').absolutePath
+        // ...and the arrangement the user makes there is never written over them.
+        systemProperty 'aengine.layoutReadOnly', 'true'
     }
     // ./gradlew :editor:run -PthemeFile=<name> picks a theme file by name; the factory theme
     // — the engine's defaults, compiled in — otherwise.

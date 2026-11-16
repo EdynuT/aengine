@@ -1402,6 +1402,22 @@ the theme says how something looks, the layout where and whether it appears. Hid
 shows the same as not placing it, but keeps its arrangement written, ready to come back by
 turning `true` to `false`. The root of a screen cannot be hidden.
 
+**A node can be resizable** with `"resizable": true` — step 4c. The user then drags the
+edge it shares with the growing sibling beside it, as a split pane's divider: dragged, the
+node takes room from the growers, never going below 80 pixels and never leaving them less.
+**F8** gives the keyboard to the edges in turn, as Swing's split pane does; the arrows move
+the one that has it, ten pixels a step, fifty with Shift, and Esc, Enter or Tab give the
+keyboard back. A resizable node must be a child of a row, with a `width`, or of a column,
+with a `height`, beside a sibling with `grow`; one that is not is a warning and stays fixed.
+The edge is drawn only while pointed at, dragged — `split.line.hover` — or held by the
+keyboard — the focus ring's colour.
+
+**What the user arranges is written down**, a second after they let go: the screen as the
+file described it, with the sizes the user left, into `layouts/<name>.json` in the user's
+directory, under `"screens"`. Only that screen: the file's other screens are kept, and
+screens it does not hold go on coming from the installation's layout, so an update that
+improves them still reaches the user. `-PtestShell` never writes over its test layouts.
+
 **Panel names are unique across the whole engine**, not per screen, so a theme path stays
 `panel.widget` — `settingsGeneral.fontSize.border` — with no screen in it; a panel belongs to
 one screen. **Widget names are unique across the engine too**, since a layout names a widget
@@ -2125,11 +2141,15 @@ scene plays. The tools change nothing yet: there are no gizmos to use them.
 physics thread, and says it must not change underneath the systems. Switching it while the
 editor runs is engine work to plan first.
 
+**4c-1 ✅ — docks the user resizes.** `"resizable": true` in the layout (§7): the user
+drags a dock's edge, or moves it with F8 and the arrows, and the arrangement is written to
+their `layout.json` a second later. The factory layout makes the left column, the assets,
+the console and output, and the inspector resizable. `screens.describe(screen)` gives a
+built screen as a file would write it; `ae.wasLayoutChanged()` says when to.
+
 **Next**, in an order to be agreed:
 
-- **4c, docks the user resizes.** Dividers between docks, the arrangement written back to the
-  user's `layout.json`, panels closed and reopened from a View menu, and *Restore default
-  layout*.
+- **4c-2, panels closed and reopened** from a View menu, and *Restore default layout*.
 - **What any panel will need:** nodes removed and reused, for panels whose content changes; a
   label updated without allocating; a context menu; undo and redo.
 - **The panels themselves**, as they are decided, with what each asks of the framework.

@@ -4,12 +4,18 @@ import com.aengine.aegis.AegisLayoutFile;
 import com.aengine.aegis.AegisLocale;
 import com.aengine.aegis.AegisTheme;
 import com.aengine.utils.Logger;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.stream.JsonReader;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -258,5 +264,99 @@ public final class ShellFiles {
         }
         inLine.add(FactoryLayout.read());
         return inLine.toArray(new AegisLayoutFile[0]);
+    }
+
+    /**
+     * Writes a screen the user rearranged into their own {@code layouts/<name>.json} — step 4c.
+     *
+     * <p>Only that screen is written, under {@code "screens"}: the file's other screens are kept
+     * as they are, and screens it does not hold go on coming from the installation's layout,
+     * so an update that improves them still reaches the user (§7). A file that does not exist
+     * yet, or cannot be read, is started anew. Written to a temporary file first and then moved
+     * over the old one, so a crash halfway never leaves half a layout.</p>
+     *
+     * <p>Not written when {@code aengine.layoutReadOnly} is set, as {@code -PtestShell} sets it,
+     * so trying a test layout never changes it.</p>
+     *
+     * @param name   the file's name without {@code .json} — {@code "default"}
+     * @param screen the screen's name — {@code "editor"}
+     * @param object what {@link com.aengine.aegis.AegisScreens#describe} gives for it
+     */
+    public static void saveLayout(String name, String screen, JsonObject object) {
+        if (Boolean.getBoolean("aengine.layoutReadOnly")) {
+            Logger.info(Logger.System.UI, "Arrangement not written: the test shell's layouts are read only.");
+            return;
+        }
+        Path file = userDir().resolve("layouts").resolve(name + ".json");
+        JsonObject top = null;
+        if (Files.exists(file)) {
+            try (java.io.Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                JsonReader json = new JsonReader(reader);
+                json.setLenient(true);
+                JsonElement read = JsonParser.parseReader(json);
+                if (read.isJsonObject() && read.getAsJsonObject().get("screens") instanceof JsonObject) top = read.getAsJsonObject();
+            } catch (IOException | RuntimeException e) {
+                Logger.warn(Logger.System.UI, "%s cannot be read (%s); it is written anew.", file, e.getMessage());
+            }
+        }
+        if (top == null) {
+            top = new JsonObject();
+            top.addProperty("name", "Your arrangement");
+            top.addProperty("description", "Written by the editor when you resize or close panels. Only the screens"
+                + " you changed are here; the others come from the engine's layout. View > Restore default layout,"
+                + " or deleting this file, goes back to the engine's.");
+            top.addProperty("format", com.aengine.aegis.AegisLayoutFile.FORMAT);
+            top.add("screens", new JsonObject());
+        }
+        top.getAsJsonObject("screens").add(screen, object);
+        writeJson(file, top);
+    }
+
+    /**
+     * Takes a screen out of the user's own {@code layouts/<name>.json}, so it comes from the
+     * installation's layout again — View &gt; Restore default layout. With no screen left, the
+     * file is deleted.
+     *
+     * @param name   the file's name without {@code .json}
+     * @param screen the screen's name
+     */
+    public static void forgetLayout(String name, String screen) {
+        if (Boolean.getBoolean("aengine.layoutReadOnly")) return;
+        Path file = userDir().resolve("layouts").resolve(name + ".json");
+        if (!Files.exists(file)) return;
+        try (java.io.Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            JsonReader json = new JsonReader(reader);
+            json.setLenient(true);
+            JsonElement read = JsonParser.parseReader(json);
+            if (read.isJsonObject() && read.getAsJsonObject().get("screens") instanceof JsonObject screens) {
+                screens.remove(screen);
+                reader.close();
+                if (screens.size() == 0) {
+                    Files.delete(file);
+                    Logger.info(Logger.System.UI, "Layout %s deleted: it held no other screen.", file);
+                } else {
+                    writeJson(file, read.getAsJsonObject());
+                }
+                return;
+            }
+        } catch (IOException | RuntimeException e) {
+            Logger.warn(Logger.System.UI, "%s cannot be read (%s); it is left as it is.", file, e.getMessage());
+            return;
+        }
+        Logger.warn(Logger.System.UI, "%s holds no screens; it is left as it is.", file);
+    }
+
+    private static void writeJson(Path file, JsonObject top) {
+        String text = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(top) + "\n";
+        try {
+            Files.createDirectories(file.getParent());
+            Path temporary = file.resolveSibling(file.getFileName() + ".tmp");
+            Files.writeString(temporary, text, StandardCharsets.UTF_8);
+            Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Logger.info(Logger.System.UI, "Arrangement written to %s.", file);
+        } catch (IOException e) {
+            Logger.warn(Logger.System.UI, "%s cannot be written (%s); the arrangement is kept until the editor closes.",
+                file, e.getMessage());
+        }
     }
 }

@@ -96,6 +96,7 @@ public final class AegisLayoutFile {
         private final List<String> tabs     = new ArrayList<>();
         private boolean hasChildren;      // a panel with "children" rearranges its widgets
         private boolean hidden;           // "hidden": true — checked, but kept out of the tree
+        private boolean resizable;        // "resizable": true — the user drags its edge (4c)
 
         float width = Float.NaN, height = Float.NaN, grow = Float.NaN, gap = Float.NaN, padding = Float.NaN;
         AegisLayout.Align alignX, alignY;
@@ -123,6 +124,9 @@ public final class AegisLayoutFile {
 
         /** @return whether the file hides it: checked like any node, but not built into the screen */
         public boolean hidden() { return hidden; }
+
+        /** @return whether the user resizes it by dragging the edge it shares with a growing neighbour */
+        public boolean resizable() { return resizable; }
 
         /** @return a tabs node's panels, in tab order; empty for the others */
         public List<String> tabs() { return Collections.unmodifiableList(tabs); }
@@ -443,6 +447,12 @@ public final class AegisLayoutFile {
                     node.hidden = value.getAsBoolean();
                 } else {
                     error(keyLine, node.label() + ": hidden is true or false, written without quotes; got " + value);
+                }
+            } else if (key.equals("resizable") && type != Type.WIDGET) {
+                if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()) {
+                    node.resizable = value.getAsBoolean();
+                } else {
+                    error(keyLine, node.label() + ": resizable is true or false, written without quotes; got " + value);
                 }
             } else if (key.equals("panels") && type == Type.TABS) {
                 readTabs(node, value, path, keyLine);

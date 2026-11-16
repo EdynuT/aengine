@@ -1,6 +1,8 @@
 package com.aengine.aegis;
 
 import com.aengine.utils.Logger;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -67,6 +69,10 @@ public final class AegisScreens {
     private final Set<Integer> inTabs = new HashSet<>();
 
     private final AegisWidgets widgets;
+
+    /** What each built screen was built from — the file's root — and each built node of it: what describe() writes. */
+    private final Map<String, AegisLayoutFile.Node> builtFrom = new HashMap<>();
+    private final Map<String, Map<AegisLayoutFile.Node, Integer>> builtNodes = new HashMap<>();
 
     AegisScreens(AegisLayout layout, AegisWidgets widgets) {
         this.layout  = layout;
@@ -185,8 +191,12 @@ public final class AegisScreens {
                 continue;
             }
             Logger.info(Logger.System.UI, "Screen \"%s\" from %s.", screen, file.source());
-            int built = new Build(file, widgets).node(root, AegisLayout.NONE);
+            Build build = new Build(file, widgets);
+            int built = build.node(root, AegisLayout.NONE);
             this.widgets.markScreen(built);   // drawn as the window's background
+            builtFrom.put(screen, root);
+            builtNodes.put(screen, build.handles);
+            build.registerDocks(root, null);
             return built;
         }
         throw new IllegalStateException("No layout describes the screen \"" + screen + "\" without errors.");
@@ -274,10 +284,110 @@ public final class AegisScreens {
         return true;
     }
 
+    // -----------------------------------------------------------------------------------
+    // Writing down — step 4c
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A built screen as a layout file would write it, with the arrangement the user has made
+     * since: the sizes of the docks they resized. What {@code layout.json} holds for the
+     * screen, under {@code "screens"} — {@code { "root": ... }}.
+     *
+     * @param screen a screen {@link #build} built
+     * @return the screen's object, ready to write
+     * @throws IllegalArgumentException if no screen of that name was built
+     */
+    public JsonObject describe(String screen) {
+        AegisLayoutFile.Node root = builtFrom.get(screen);
+        if (root == null) throw new IllegalArgumentException("No screen \"" + screen + "\" has been built.");
+        JsonObject out = new JsonObject();
+        out.add("root", describe(root, null, builtNodes.get(screen)));
+        return out;
+    }
+
+    private JsonObject describe(AegisLayoutFile.Node node, AegisLayoutFile.Node parent, Map<AegisLayoutFile.Node, Integer> handles) {
+        JsonObject o = new JsonObject();
+        o.addProperty("type", node.type().name().toLowerCase());
+        if (node.type() == AegisLayoutFile.Type.PANEL)  o.addProperty("panel", node.name());
+        if (node.type() == AegisLayoutFile.Type.WIDGET) o.addProperty("widget", node.name());
+        if (node.type() == AegisLayoutFile.Type.TABS) {
+            JsonArray panels = new JsonArray();
+            for (String tab : node.tabs()) panels.add(tab);
+            o.add("panels", panels);
+        }
+        float width = node.width(), height = node.height();
+        Integer handle = handles.get(node);
+        if (node.resizable() && handle != null && parent != null) {
+            // The size the user left it at, along its parent.
+            if (parent.type() == AegisLayoutFile.Type.ROW && !Float.isNaN(width))     width  = layout.requestedWidth(handle);
+            if (parent.type() == AegisLayoutFile.Type.COLUMN && !Float.isNaN(height)) height = layout.requestedHeight(handle);
+        }
+        number(o, "width", width);
+        number(o, "height", height);
+        number(o, "grow", node.grow());
+        number(o, "padding", node.padding());
+        number(o, "gap", node.gap());
+        if (node.alignX() != null) o.addProperty("alignX", node.alignX().name().toLowerCase());
+        if (node.alignY() != null) o.addProperty("alignY", node.alignY().name().toLowerCase());
+        if (node.resizable()) o.addProperty("resizable", true);
+        if (node.hidden())    o.addProperty("hidden", true);
+        if (!node.children().isEmpty() || node.hasChildren()) {
+            JsonArray children = new JsonArray();
+            for (AegisLayoutFile.Node child : node.children()) children.add(describe(child, node, handles));
+            o.add("children", children);
+        }
+        return o;
+    }
+
+    /** A size, written whole when it is whole — 260, not 260.0; left out when the file had none. */
+    private static void number(JsonObject o, String key, float value) {
+        if (Float.isNaN(value)) return;
+        if (value == Math.rint(value)) o.addProperty(key, (int) value);
+        else o.addProperty(key, value);
+    }
+
     /** One screen being built: the file it comes from, and what has been placed so far. */
     private final class Build {
         private final AegisLayoutFile file;
         private final Map<String, Integer> widgets;
+
+        /** Every node of the file made or found, with its handle. */
+        final Map<AegisLayoutFile.Node, Integer> handles = new HashMap<>();
+
+        /**
+         * Hands the widgets every node the file makes resizable, with the side its handle is on
+         * — towards the nearest growing sibling, after it if there is one. A resizable node must
+         * hold a size along its parent and stand beside a sibling that grows; one that does not
+         * is a warning, and stays fixed.
+         */
+        void registerDocks(AegisLayoutFile.Node node, AegisLayoutFile.Node parent) {
+            Integer handle = handles.get(node);
+            if (node.resizable() && handle != null && !node.hidden()) {
+                if (parent == null || (parent.type() != AegisLayoutFile.Type.ROW && parent.type() != AegisLayoutFile.Type.COLUMN)) {
+                    file.problem(node, node.label() + " is resizable, but only a child of a row or a column has an edge to drag; it stays as it is");
+                } else {
+                    boolean across = parent.type() == AegisLayoutFile.Type.ROW;
+                    float size = across ? node.width() : node.height();
+                    int at = parent.children().indexOf(node);
+                    int after = -1, before = -1;
+                    for (int k = at + 1; k < parent.children().size() && after < 0; k++) if (grows(parent.children().get(k))) after = k;
+                    for (int k = at - 1; k >= 0 && before < 0; k--) if (grows(parent.children().get(k))) before = k;
+                    if (Float.isNaN(size)) {
+                        file.problem(node, node.label() + " is resizable, but has no " + (across ? "width" : "height")
+                            + " for the user to change; it stays as it is");
+                    } else if (after < 0 && before < 0) {
+                        file.problem(node, node.label() + " is resizable, but nothing beside it grows to give it room; it stays as it is");
+                    } else {
+                        AegisScreens.this.widgets.addDock(handle, after >= 0 && (before < 0 || after - at <= at - before));
+                    }
+                }
+            }
+            for (AegisLayoutFile.Node child : node.children()) registerDocks(child, node);
+        }
+
+        private boolean grows(AegisLayoutFile.Node node) {
+            return !node.hidden() && !Float.isNaN(node.grow()) && node.grow() > 0.0f;
+        }
 
         /** Widgets the file placed, so the ones it did not can go back where code made them. */
         private final Set<Integer> placed = new HashSet<>();
@@ -303,6 +413,12 @@ public final class AegisScreens {
                 hide(node);
                 return AegisLayout.NONE;
             }
+            int made = placeShown(node, parent);
+            if (made != AegisLayout.NONE) handles.put(node, made);
+            return made;
+        }
+
+        private int placeShown(AegisLayoutFile.Node node, int parent) {
             return switch (node.type()) {
                 case ROW, COLUMN -> {
                     int made = node.type() == AegisLayoutFile.Type.ROW ? layout.row(parent) : layout.column(parent);

@@ -44,6 +44,12 @@ public final class EditorShell {
     private final AegisWidgets ae;
 
     private final int root;
+    private final AegisScreens screens;
+    private final String layoutName;
+
+    /** When to write the arrangement down: a second after the user last changed it; 0 for not due. */
+    private long layoutSaveDue;
+    private static final long LAYOUT_SAVE_DELAY = 1_000_000_000L;
 
     // Step 3f-5: the theme on screen, the name it was asked for by — null for the factory
     // theme — and whether a reload has been asked for, run at the start of the next frame.
@@ -83,7 +89,7 @@ public final class EditorShell {
         layout = aegis.layout();
         tree   = aegis.tree();
         ae     = aegis.widgets();
-        AegisScreens screens = aegis.screens();
+        screens = aegis.screens();
         ae.setClipboard(window);
 
         // ── Panels. Each is registered under its name, which the layout file and the theme
@@ -160,7 +166,8 @@ public final class EditorShell {
         layout.setPadding(status, 4.0f);
 
         // ── The screen, from the first layout in line that describes it usably.
-        AegisLayoutFile[] layouts = ShellFiles.loadLayouts(System.getProperty("aengine.layout", "default"));
+        layoutName = System.getProperty("aengine.layout", "default");
+        AegisLayoutFile[] layouts = ShellFiles.loadLayouts(layoutName);
         root = screens.build("editor", layouts);
         for (AegisLayoutFile file : layouts) file.report();
 
@@ -271,6 +278,11 @@ public final class EditorShell {
 
         ae.update(root);
 
+        // The arrangement the user changed — a dock resized — is written down a second after
+        // the last change, so a drag is one write, not one per frame.
+        if (ae.wasLayoutChanged()) layoutSaveDue = System.nanoTime() + LAYOUT_SAVE_DELAY;
+        if (layoutSaveDue != 0 && System.nanoTime() >= layoutSaveDue) saveLayout();
+
         if (ae.wasActivated(menuItemSaveScene)) saveAsked = true;
         if (ae.wasActivated(menuItemQuit))      quitAsked = true;
 
@@ -363,8 +375,15 @@ public final class EditorShell {
     /** @return the viewport's height in pixels, as last solved */
     public float viewportHeight() { return layout.height(surfaceScene); }
 
-    /** Releases what Aegis holds on the GPU, and stops the theme watcher. */
+    /** Writes the arrangement into the user's layout file. */
+    private void saveLayout() {
+        layoutSaveDue = 0;
+        ShellFiles.saveLayout(layoutName, "editor", screens.describe("editor"));
+    }
+
+    /** Writes down an arrangement change not yet written, releases what Aegis holds, stops the theme watcher. */
     public void cleanup() {
+        if (layoutSaveDue != 0) saveLayout();
         if (themeWatcher != null) themeWatcher.close();
         aegis.cleanup();
     }

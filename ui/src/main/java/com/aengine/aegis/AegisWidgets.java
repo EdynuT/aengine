@@ -247,6 +247,25 @@ public final class AegisWidgets {
     /** Whether each widget can be used; a disabled one is drawn faded and reached by nothing. */
     private final boolean[] disabled;
 
+    // Docks the user resizes — step 4c: each node, and whether its handle is its trailing edge
+    // (a grower comes after it) rather than its leading one. While one is dragged: its index,
+    // its size and the pointer where the drag began, and how large it may grow. While one has
+    // the keyboard (F8): its index, and what had focus before.
+    private static final int   MAX_DOCKS = 32;
+    private static final float DOCK_MIN = 80.0f;          // no dock, and no grower beside it, smaller
+    private static final float DOCK_HANDLE = 6.0f;        // the least room a handle takes hold of
+    private static final float DOCK_KEY_STEP = 10.0f;     // an arrow; Shift for five
+    private final int[]     dockNode  = new int[MAX_DOCKS];
+    private final boolean[] dockAfter = new boolean[MAX_DOCKS];
+    private int     dockCount;
+    private int     dockDragged = -1;
+    private float   dockGrabSize, dockGrabAlong, dockMax;
+    private int     dockFocused = -1;
+    private int     dockFocusBefore = AegisLayout.NONE;
+    private boolean pendingF8, pendingDockLeave;
+    private int     pendingDockSteps;
+    private boolean layoutChanged;
+
     /** What each surface shows: an OpenGL texture, or 0 for nothing yet. */
     private final int[]     surfaceTexture;
     /** Whether a surface's texture is stored bottom row first, as a framebuffer's is. */
@@ -3005,6 +3024,7 @@ public final class AegisWidgets {
         Arrays.fill(toggleGroup, 0);
         Arrays.fill(disabled, false);
         lastToggleGroup = 0;
+        clearDocks();
         tipShown = AegisLayout.NONE;
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
@@ -3042,6 +3062,22 @@ public final class AegisWidgets {
      * @param repeat whether this is a repeat of a held key rather than a fresh press
      */
     public void key(int key, int mods, boolean repeat) {
+        // F8 hands the keyboard to the docks' handles, one after another, as Swing's split
+        // pane does; while one has it, the arrows move it and Esc, Enter or Tab give it back.
+        if (key == Keys.F8) {
+            if (!repeat) pendingF8 = true;
+            return;
+        }
+        if (dockFocused >= 0) {
+            int step = (mods & Keys.MOD_SHIFT) != 0 ? 5 : 1;
+            switch (key) {
+                case Keys.LEFT, Keys.UP    -> pendingDockSteps -= step;
+                case Keys.RIGHT, Keys.DOWN -> pendingDockSteps += step;
+                case Keys.ESCAPE, Keys.ENTER, Keys.TAB -> { if (!repeat) pendingDockLeave = true; }
+                default -> { return; }   // a key the handle has no use for is dropped
+            }
+            return;
+        }
         if (key == Keys.F1 && (mods & Keys.MOD_CONTROL) != 0) {
             if (!repeat) pendingTipToggle = true;
             return;
@@ -3623,6 +3659,8 @@ public final class AegisWidgets {
         // A press on a scroll bar is the bar's, not a click on what lies under it, and it
         // does not take focus away from where it was.
         dragScrollBar(root);
+        layoutChanged = false;
+        updateDocks(root);
 
         // Tab stays inside a modal overlay while one is open.
         int focusRoot = tree.topModal() != AegisLayout.NONE ? tree.topModal() : root;
@@ -4311,6 +4349,7 @@ public final class AegisWidgets {
      */
     public void draw(int root) {
         drawNode(root);
+        drawDocks(root);
         drawOverlays();
         drawTooltip();
     }
@@ -4982,6 +5021,212 @@ public final class AegisWidgets {
             float y = Math.round(layout.y(node) + (layout.height(node) - t) * 0.5f);
             aegis.addRoundedRect(layout.x(parent) + pad, y, layout.width(parent) - pad * 2.0f, t, 0.0f,
                 line[0], line[1], line[2], line[3]);
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Docks the user resizes — step 4c
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * Makes a node resizable by the user, from the edge it shares with the growing sibling
+     * beside it — a layout file's {@code "resizable": true}. {@link AegisScreens#build} calls it.
+     *
+     * @param node  a child of a row, with a width, or of a column, with a height
+     * @param after whether the growing sibling comes after it, so its handle is its trailing edge
+     */
+    void addDock(int node, boolean after) {
+        if (dockCount == MAX_DOCKS) throw new IllegalStateException("More than " + MAX_DOCKS + " resizable docks.");
+        dockNode[dockCount]  = node;
+        dockAfter[dockCount] = after;
+        dockCount++;
+    }
+
+    /** Forgets every dock, before a screen is built again. */
+    void clearDocks() {
+        dockCount = 0;
+        dockDragged = -1;
+        dockFocused = -1;
+    }
+
+    /**
+     * Whether the user changed the arrangement this frame — let go of a dock they dragged, or
+     * moved one with the arrows — so the editor can write it down.
+     *
+     * @return {@code true} on that frame
+     */
+    public boolean wasLayoutChanged() { return layoutChanged; }
+
+    /** Records an arrangement change made from elsewhere — a panel closed — for {@link #wasLayoutChanged}. */
+    void layoutChanged() { layoutChanged = true; }
+
+    /** The dock whose handle has the keyboard, or -1; for tests. */
+    int focusedDock() { return dockFocused; }
+
+    /** The sibling across a dock's handle, or NONE when there is none. */
+    private int dockNeighbour(int i) {
+        int node = dockNode[i];
+        if (dockAfter[i]) return layout.nextSibling(node);
+        int parent = layout.parent(node);
+        int previous = AegisLayout.NONE;
+        for (int c = layout.firstChild(parent); c != node && c != AegisLayout.NONE; c = layout.nextSibling(c)) previous = c;
+        return previous;
+    }
+
+    /** Whether a dock is on screen, with a sibling to share its edge with. */
+    private boolean dockShown(int i) {
+        int node = dockNode[i];
+        return layout.parent(node) != AegisLayout.NONE && dockNeighbour(i) != AegisLayout.NONE
+            && layout.width(node) > 0.0f && layout.height(node) > 0.0f;
+    }
+
+    /** A dock's handle: the strip between it and its neighbour, at least {@link #DOCK_HANDLE} wide. {x, y, w, h}. */
+    private void dockStrip(int i, float[] out) {
+        int node = dockNode[i], parent = layout.parent(node), other = dockNeighbour(i);
+        boolean across = layout.isRow(parent);
+        float from, to;
+        if (dockAfter[i]) {
+            from = across ? layout.x(node) + layout.width(node) : layout.y(node) + layout.height(node);
+            to   = across ? layout.x(other) : layout.y(other);
+        } else {
+            from = across ? layout.x(other) + layout.width(other) : layout.y(other) + layout.height(other);
+            to   = across ? layout.x(node) : layout.y(node);
+        }
+        if (to - from < DOCK_HANDLE) {
+            float middle = (from + to) * 0.5f;
+            from = middle - DOCK_HANDLE * 0.5f;
+            to   = middle + DOCK_HANDLE * 0.5f;
+        }
+        float pad = layout.padding(parent);
+        if (across) {
+            out[0] = from; out[1] = layout.y(parent) + pad; out[2] = to - from; out[3] = layout.height(parent) - pad * 2.0f;
+        } else {
+            out[0] = layout.x(parent) + pad; out[1] = from; out[2] = layout.width(parent) - pad * 2.0f; out[3] = to - from;
+        }
+    }
+
+    private final float[] strip = new float[4];
+
+    /** The dock whose handle is under a point, or -1 — only where nothing else is: no overlay, no widget. */
+    private int dockAt(int root, float px, float py) {
+        if (tree.topModal() != AegisLayout.NONE) return -1;
+        for (int i = 0; i < dockCount; i++) {
+            if (!dockShown(i)) continue;
+            dockStrip(i, strip);
+            if (px < strip[0] || px >= strip[0] + strip[2] || py < strip[1] || py >= strip[1] + strip[3]) continue;
+            int under = tree.nodeUnder(root, px, py);
+            int parent = layout.parent(dockNode[i]);
+            if (under == parent || under == dockNode[i] || under == dockNeighbour(i)) return i;
+        }
+        return -1;
+    }
+
+    /** How much room the growers beside a dock have, all together: what it may take from them. */
+    private float growersRoom(int i) {
+        int node = dockNode[i], parent = layout.parent(node);
+        boolean across = layout.isRow(parent);
+        float room = 0.0f;
+        for (int c = layout.firstChild(parent); c != AegisLayout.NONE; c = layout.nextSibling(c)) {
+            if (c != node && layout.grow(c) > 0.0f) room += across ? layout.width(c) : layout.height(c);
+        }
+        return room;
+    }
+
+    /** Sets a dock's size along its parent, kept within its bounds; the size set. */
+    private float resizeDock(int i, float size) {
+        int node = dockNode[i];
+        float clamped = Math.round(clamp(size, DOCK_MIN, Math.max(DOCK_MIN, dockMax)));
+        if (layout.isRow(layout.parent(node))) layout.setWidth(node, clamped);
+        else layout.setHeight(node, clamped);
+        return clamped;
+    }
+
+    private float dockSize(int i) {
+        int node = dockNode[i];
+        return layout.isRow(layout.parent(node)) ? layout.width(node) : layout.height(node);
+    }
+
+    /**
+     * A dock's handle pressed and dragged, as a split pane's divider is: the dock grows or
+     * shrinks with the pointer, never below {@link #DOCK_MIN}, and never leaving its growing
+     * neighbours less. The press is the handle's: nothing under it is clicked, and focus stays.
+     * F8 gives the keyboard to the handles in turn.
+     */
+    private void updateDocks(int root) {
+        if (tree.pointerWentDown() && dockDragged < 0) {
+            int i = dockAt(root, tree.pointerX(), tree.pointerY());
+            if (i >= 0) {
+                boolean across = layout.isRow(layout.parent(dockNode[i]));
+                dockDragged   = i;
+                dockGrabSize  = dockSize(i);
+                dockGrabAlong = across ? tree.pointerX() : tree.pointerY();
+                dockMax       = dockGrabSize + growersRoom(i) - DOCK_MIN;
+                tree.capture(layout.parent(dockNode[i]));
+                tree.focus(lastFocused);
+            }
+        }
+        if (dockDragged >= 0) {
+            int i = dockDragged;
+            if (!tree.pointerDown()) {
+                dockDragged = -1;
+                if (dockSize(i) != dockGrabSize) layoutChanged = true;
+            } else {
+                boolean across = layout.isRow(layout.parent(dockNode[i]));
+                float moved = (across ? tree.pointerX() : tree.pointerY()) - dockGrabAlong;
+                resizeDock(i, dockGrabSize + (dockAfter[i] ? moved : -moved));
+            }
+        }
+
+        // The keyboard: F8 to the next shown handle, and out after the last.
+        if (pendingF8) {
+            pendingF8 = false;
+            int next = dockFocused + 1;
+            while (next < dockCount && !dockShown(next)) next++;
+            if (next < dockCount) {
+                if (dockFocused < 0) dockFocusBefore = tree.focused();
+                dockFocused = next;
+                tree.focus(AegisLayout.NONE);
+            } else if (dockFocused >= 0) {
+                pendingDockLeave = true;
+            }
+        }
+        if (dockFocused >= 0 && pendingDockSteps != 0) {
+            int i = dockFocused;
+            dockGrabSize = dockSize(i);
+            dockMax = dockGrabSize + growersRoom(i) - DOCK_MIN;
+            float moved = pendingDockSteps * DOCK_KEY_STEP;
+            if (resizeDock(i, dockGrabSize + (dockAfter[i] ? moved : -moved)) != dockGrabSize) layoutChanged = true;
+        }
+        pendingDockSteps = 0;
+        if (pendingDockLeave || (dockFocused >= 0 && tree.focused() != AegisLayout.NONE)) {
+            if (pendingDockLeave && dockFocused >= 0) tree.focus(dockFocusBefore);
+            dockFocused = -1;
+        }
+        pendingDockLeave = false;
+    }
+
+    /**
+     * Each dock's handle, lit while under the pointer or dragged — {@code split.line.hover} —
+     * and in the focus ring's colour while it has the keyboard. At rest, nothing: the gap
+     * between docks shows the window.
+     */
+    private void drawDocks(int root) {
+        AegisStyle style = globalStyle;
+        int hovered = tree.pressed() == AegisLayout.NONE ? dockAt(root, tree.pointerX(), tree.pointerY()) : -1;
+        for (int i = 0; i < dockCount; i++) {
+            boolean focus = i == dockFocused;
+            if (!(i == dockDragged || i == hovered || focus) || !dockShown(i)) continue;
+            dockStrip(i, strip);
+            boolean across = layout.isRow(layout.parent(dockNode[i]));
+            float[] ink = focus ? style.focusRing : style.splitLineHover;
+            float t = focus ? Math.max(style.focusRingWidth, style.splitLineWidth) : style.splitLineWidth;
+            if (across) {
+                float x = Math.round(strip[0] + (strip[2] - t) * 0.5f);
+                aegis.addRoundedRect(x, strip[1], t, strip[3], t * 0.5f, ink[0], ink[1], ink[2], ink[3]);
+            } else {
+                float y = Math.round(strip[1] + (strip[3] - t) * 0.5f);
+                aegis.addRoundedRect(strip[0], y, strip[2], t, t * 0.5f, ink[0], ink[1], ink[2], ink[3]);
+            }
         }
     }
 

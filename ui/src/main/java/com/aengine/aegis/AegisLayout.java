@@ -344,6 +344,22 @@ public final class AegisLayout {
      */
     public float padding(int node) { return padding[node]; }
 
+    /**
+     * The space between a row's or column's children.
+     *
+     * @param node the handle
+     * @return the gap in pixels
+     */
+    public float gap(int node) { return gap[node]; }
+
+    /**
+     * How large a share of spare room a node takes.
+     *
+     * @param node the handle
+     * @return its grow factor, 0 when it keeps the size it asks for
+     */
+    public float grow(int node) { return grow[node]; }
+
     // -----------------------------------------------------------------------------------
     // Scrolling — step 3g-2
     // -----------------------------------------------------------------------------------

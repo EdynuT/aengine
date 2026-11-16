@@ -26,8 +26,10 @@ public final class FactoryLayout {
      * toolbar across the top, the status bar across the bottom; between them the hierarchy
      * over the assets on the left, the viewport over the console and output in the middle,
      * taking the room the sides leave, and the inspector the whole height on the right. Every
-     * dock is a {@code "tabs"}, so each shows its title and more panels can share it. Sizes
-     * and spacing between panels are here; spacing inside a panel is its code's.
+     * dock is a {@code "tabs"}, so each shows its title and more panels can share it, and the
+     * docks beside the viewport and the hierarchy are {@code "resizable"}: the user drags the
+     * edge they share with them. Sizes and spacing between panels are here; spacing inside a
+     * panel is its code's.
      */
     private static final String TEXT = """
         {
@@ -41,15 +43,15 @@ public final class FactoryLayout {
                 { "type": "panel", "panel": "menu",    "height": 28 },
                 { "type": "panel", "panel": "toolbar", "height": 40 },
                 { "type": "row", "grow": 1, "gap": 6, "alignY": "stretch", "children": [
-                  { "type": "column", "width": 260, "gap": 6, "alignX": "stretch", "children": [
+                  { "type": "column", "width": 260, "resizable": true, "gap": 6, "alignX": "stretch", "children": [
                     { "type": "tabs", "grow": 1, "panels": ["hierarchy"] },
-                    { "type": "tabs", "grow": 1, "panels": ["assets"] }
+                    { "type": "tabs", "height": 280, "resizable": true, "panels": ["assets"] }
                   ]},
                   { "type": "column", "grow": 1, "gap": 6, "alignX": "stretch", "children": [
                     { "type": "tabs", "grow": 1, "panels": ["viewport"] },
-                    { "type": "tabs", "height": 200, "panels": ["console", "output"] }
+                    { "type": "tabs", "height": 200, "resizable": true, "panels": ["console", "output"] }
                   ]},
-                  { "type": "tabs", "width": 320, "panels": ["inspector"] }
+                  { "type": "tabs", "width": 320, "resizable": true, "panels": ["inspector"] }
                 ]},
                 { "type": "panel", "panel": "status", "height": 24 }
               ]}
