@@ -183,6 +183,87 @@ class AegisWidgetsTest {
     }
 
     @Test
+    void theScrollBarIsDraggedAndKeepsFocusWhereItWas() {
+        int pane = scrollingPane();
+        int first = layout.firstChild(pane);
+        shell.tab();
+        assertEquals(first, shell.tree.focused());
+
+        // Take hold of the bar: in the right padding, near the top, where it rests unscrolled.
+        float barX = layout.x(pane) + layout.width(pane) - 4.0f;
+        float top  = layout.y(pane) + layout.padding(pane);
+        shell.pointerAt(barX, top + 2.0f);
+        shell.frame();
+        shell.press();
+        shell.frame();
+        assertEquals(first, shell.tree.focused(), "a scroll bar is not something focus goes to");
+
+        shell.pointerAt(barX + 300.0f, top + 2.0f + 1000.0f);   // far past the end, and off the pane
+        shell.frame();
+        assertEquals(layout.scrollRange(pane), layout.scrollOffset(pane), "it follows the pointer to the end");
+
+        shell.pointerAt(barX, top - 500.0f);
+        shell.frame();
+        assertEquals(0.0f, layout.scrollOffset(pane));
+
+        shell.release();
+        shell.frame();
+        shell.pointerAt(barX, top + 60.0f);
+        shell.frame();
+        assertEquals(0.0f, layout.scrollOffset(pane), "let go, it no longer follows");
+        for (int child = first; child != AegisLayout.NONE; child = layout.nextSibling(child)) {
+            assertFalse(ae.wasActivated(child));
+        }
+    }
+
+    @Test
+    void aPressBesideTheBarScrollsOneView() {
+        int pane = scrollingPane();
+        shell.frame();
+        float barX = layout.x(pane) + layout.width(pane) - 4.0f;
+        float view = layout.height(pane) - layout.padding(pane) * 2.0f;
+
+        shell.pointerAt(barX, layout.y(pane) + layout.height(pane) - layout.padding(pane) - 2.0f);
+        shell.frame();
+        shell.press();
+        shell.frame();
+        shell.release();
+        shell.frame();
+        assertEquals(view - shell.aegis.lineHeight(), layout.scrollOffset(pane), 0.001f);
+    }
+
+    @Test
+    void pageKeysScrollThePaneAroundTheFocusedWidget() {
+        int pane = scrollingPane();
+        shell.tab();
+        float page = layout.height(pane) - layout.padding(pane) * 2.0f - shell.aegis.lineHeight();
+
+        shell.key(Keys.PAGE_DOWN);
+        assertEquals(page, layout.scrollOffset(pane), 0.001f);
+        shell.key(Keys.PAGE_UP);
+        assertEquals(0.0f, layout.scrollOffset(pane));
+    }
+
+    @Test
+    void aFocusedPaneWithNothingFocusableInsideScrollsByKeys() {
+        int pane = layout.column(shell.root);
+        layout.setSize(pane, 300.0f, 100.0f);
+        layout.setScrollable(pane, true);
+        shell.tree.setFocusable(pane, true);
+        for (int i = 0; i < 20; i++) ae.label(pane, "line" + i, "Line " + i);
+
+        shell.tab();
+        assertEquals(pane, shell.tree.focused());
+        shell.key(Keys.DOWN);
+        assertEquals(shell.aegis.lineHeight(), layout.scrollOffset(pane), 0.001f);
+        shell.key(Keys.END);
+        assertEquals(layout.scrollRange(pane), layout.scrollOffset(pane));
+        shell.key(Keys.HOME);
+        assertEquals(0.0f, layout.scrollOffset(pane));
+        assertDoesNotThrow(shell::draw);
+    }
+
+    @Test
     void everyKindDrawsWithoutAWindow() {
         ae.button(shell.root, "aButton", "Button");
         ae.checkbox(shell.root, "aCheckbox", "Checkbox");

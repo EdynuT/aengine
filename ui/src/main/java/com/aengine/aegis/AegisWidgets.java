@@ -220,6 +220,13 @@ public final class AegisWidgets {
     private int     pendingSteps;       // slider steps asked for this frame, + or -
     private int     pendingJump;        // -1 Home, +1 End, 0 none
     private float   pendingWheel;       // the wheel's turn this frame, as scroll() was handed it
+    private int     pendingPages;       // PageUp and PageDown this frame, - or +
+    private int     pendingLines;       // Up and Down this frame, - or +, for a focused scrolling pane
+
+    // A scroll bar being dragged: whose it is, and where on the bar the pointer took hold,
+    // from the bar's start, so the bar does not jump under the pointer.
+    private int   barDragged = AegisLayout.NONE;
+    private float barGrab;
 
     // This frame's outcome.
     private int     activated = AegisLayout.NONE;   // a button, activated
@@ -797,6 +804,9 @@ public final class AegisWidgets {
      *   <li>Tab and Shift+Tab move focus, and repeat when held.</li>
      *   <li>Enter and Space act on the focused widget: a button fires, a checkbox flips. On the
      *       press only, so holding them does not fire again and again.</li>
+     *   <li>PageUp and PageDown scroll the scrolling row or column the focused widget is in, a
+     *       view at a time. A scrolling pane that itself has focus also takes the arrows, a
+     *       line at a time, and Home and End. See {@link AegisLayout#setScrollable}.</li>
      *   <li>While a text field has focus, the editing keys are its own and are applied at
      *       once, in the order they arrive — see {@link #editKey}. Tab and Enter still do what
      *       they do everywhere.</li>
@@ -828,6 +838,14 @@ public final class AegisWidgets {
             pendingJump = -1;
         } else if (!repeat && key == Keys.END) {
             pendingJump = +1;
+        } else if (key == Keys.PAGE_DOWN) {
+            pendingPages++;                            // repeats count, like the arrows
+        } else if (key == Keys.PAGE_UP) {
+            pendingPages--;
+        } else if (key == Keys.DOWN) {
+            pendingLines++;
+        } else if (key == Keys.UP) {
+            pendingLines--;
         }
     }
 
@@ -1329,6 +1347,10 @@ public final class AegisWidgets {
         changed = edited;
         edited  = AegisLayout.NONE;
 
+        // A press on a scroll bar is the bar's, not a click on what lies under it, and it
+        // does not take focus away from where it was.
+        dragScrollBar(root);
+
         if (pendingFocusMove > 0) tree.focusNext(root);
         if (pendingFocusMove < 0) tree.focusPrevious(root);
 
@@ -1379,6 +1401,7 @@ public final class AegisWidgets {
         // The wheel: a text box under the pointer scrolls its lines; otherwise the nearest
         // scrolling row or column under it that has somewhere to go.
         if (pendingWheel != 0.0f) wheel(root, pendingWheel);
+        scrollByKeys(focused);
 
         // The undo history belongs to the field with focus: once focus is elsewhere it is gone.
         // A second without an edit ends the block being typed, so the next word is its own undo.
@@ -1404,6 +1427,8 @@ public final class AegisWidgets {
         pendingSteps     = 0;
         pendingJump      = 0;
         pendingWheel     = 0.0f;
+        pendingPages     = 0;
+        pendingLines     = 0;
     }
 
     /** Moves a slider to the value under the pointer's x, and reports a change if there was one. */
@@ -1656,6 +1681,124 @@ public final class AegisWidgets {
         }
     }
 
+    /**
+     * PageUp and PageDown scroll the nearest scrolling row or column around the focused widget
+     * that can move, by a view less one line, so the last line before stays in sight as the
+     * first after. A scrolling pane that has focus itself — one made focusable because nothing
+     * in it is — also moves a line by the arrows along its direction, and to its ends by Home
+     * and End.
+     */
+    private void scrollByKeys(int focused) {
+        if (focused == AegisLayout.NONE) return;
+        float line = aegis.lineHeight();
+
+        if (layout.isContainer(focused) && layout.isScrollable(focused)) {
+            int lines = layout.isRow(focused) ? pendingSteps : pendingLines;
+            float to = layout.scrollOffset(focused) + lines * line;
+            if (pendingJump < 0) to = 0.0f;
+            if (pendingJump > 0) to = layout.scrollRange(focused);
+            layout.setScrollOffset(focused, to);
+        }
+
+        if (pendingPages == 0) return;
+        for (int up = focused; up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (!layout.isContainer(up) || !layout.isScrollable(up) || layout.scrollRange(up) <= 0.0f) continue;
+            float page = Math.max(line, scrollView(up) - line);
+            layout.setScrollOffset(up, layout.scrollOffset(up) + pendingPages * page);   // kept in range by the solve
+            return;
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // The scroll bar — step 3g-2b
+    // -----------------------------------------------------------------------------------
+
+    /** How long the part of a scrolling row or column that shows content is: its length less its padding. */
+    private float scrollView(int node) {
+        return (layout.isRow(node) ? layout.width(node) : layout.height(node)) - layout.padding(node) * 2.0f;
+    }
+
+    /** Where the view starts along the way a row or column scrolls: its edge plus its padding. */
+    private float scrollViewStart(int node) {
+        return (layout.isRow(node) ? layout.x(node) : layout.y(node)) + layout.padding(node);
+    }
+
+    /** How long a scroll bar is: the share of the content in view, and never too short to take hold of. */
+    private float barLength(int node) {
+        float view = scrollView(node);
+        float len  = Math.max(globalStyle.scrollbarWidth * 4.0f, view * view / layout.scrollContent(node));
+        return Math.min(len, view);
+    }
+
+    /** Where a scroll bar starts, along the way its pane scrolls. */
+    private float barStart(int node) {
+        float range = layout.scrollRange(node);
+        float t = range > 0.0f ? layout.scrollOffset(node) / range : 0.0f;
+        return scrollViewStart(node) + (scrollView(node) - barLength(node)) * t;
+    }
+
+    /**
+     * Whether a point is in the strip a pane's scroll bar runs in: along its far edge — the
+     * right of a column, the bottom of a row — as wide as the padding there, or as the bar
+     * where the padding is narrower. The whole strip takes hold, not just the thin bar drawn
+     * in it, so it is not a four-pixel target.
+     */
+    private boolean inBarStrip(int node, float px, float py) {
+        if (layout.scrollRange(node) <= 0.0f) return false;
+        float strip = Math.max(layout.padding(node), globalStyle.scrollbarWidth);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        if (px < x || px >= x + w || py < y || py >= y + h) return false;
+        return layout.isRow(node) ? py >= y + h - strip : px >= x + w - strip;
+    }
+
+    /** The scrolling row or column whose bar strip is under a point, innermost first, or NONE. */
+    private int barAt(int root, float px, float py) {
+        for (int up = layout.nodeAt(root, px, py); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (layout.isContainer(up) && layout.isScrollable(up) && inBarStrip(up, px, py)) return up;
+        }
+        return AegisLayout.NONE;
+    }
+
+    /**
+     * The scroll bar under the pointer, pressed and dragged — as a {@code JScrollBar} is: a
+     * press on the bar takes hold of it, and it then follows the pointer, wherever the pointer
+     * goes, until the button comes up; a press in the strip beside the bar scrolls one view
+     * towards the pointer.
+     *
+     * <p>The pane takes the pointer's capture for as long as the drag lasts, so nothing under
+     * the pointer lights up or is clicked, and focus stays where it was before the press: a
+     * scroll bar is not something focus goes to.</p>
+     */
+    private void dragScrollBar(int root) {
+        if (tree.pointerWentDown()) {
+            int pane = barAt(root, tree.pointerX(), tree.pointerY());
+            if (pane != AegisLayout.NONE) {
+                float along = layout.isRow(pane) ? tree.pointerX() : tree.pointerY();
+                float start = barStart(pane), length = barLength(pane);
+                tree.capture(pane);
+                tree.focus(lastFocused);
+                if (along >= start && along < start + length) {
+                    barDragged = pane;
+                    barGrab    = along - start;
+                } else {
+                    float page = Math.max(aegis.lineHeight(), scrollView(pane) - aegis.lineHeight());
+                    layout.setScrollOffset(pane, layout.scrollOffset(pane) + (along < start ? -page : page));
+                }
+            }
+        }
+        if (barDragged == AegisLayout.NONE) return;
+        if (!tree.pointerDown()) {
+            barDragged = AegisLayout.NONE;
+            return;
+        }
+        int pane = barDragged;
+        float along  = layout.isRow(pane) ? tree.pointerX() : tree.pointerY();
+        float travel = scrollView(pane) - barLength(pane);
+        if (travel <= 0.0f) return;
+        float t = (along - barGrab - scrollViewStart(pane)) / travel;
+        layout.setScrollOffset(pane, clamp(t, 0.0f, 1.0f) * layout.scrollRange(pane));
+    }
+
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -1744,30 +1887,33 @@ public final class AegisWidgets {
         }
         if (scrolls) {
             aegis.popClipRect();
-            drawScrollIndicator(root);
+            drawScrollBar(root);
         }
     }
 
     /**
-     * Where a scrolling row or column is: a thin bar along its far edge — the right of a
-     * column, the bottom of a row — as long as the share of the content in view, at the place
-     * the view is. Drawn only when there is something to scroll to; centred in the padding
-     * when the padding has room for it.
+     * A scrolling row or column's bar: thin, along its far edge — the right of a column, the
+     * bottom of a row — as long as the share of the content in view, at the place the view is.
+     * Lighter under the pointer and while dragged. Drawn only when there is something to
+     * scroll to; centred in the padding when the padding has room for it.
      */
-    private void drawScrollIndicator(int node) {
-        float range = layout.scrollRange(node);
-        if (range <= 0.0f) return;
+    private void drawScrollBar(int node) {
         AegisStyle style = globalStyle;   // containers are not dressed: global values only, for now
+
+        // A pane that has focus itself — one with nothing focusable in it — shows it.
+        if (tree.isFocused(node)) {
+            drawFocusRing(style, layout.x(node), layout.y(node), layout.width(node), layout.height(node), 0.0f);
+        }
+        if (layout.scrollRange(node) <= 0.0f) return;
         boolean across = layout.isRow(node);
-        float pad   = layout.padding(node);
-        float t     = style.scrollbarWidth;
-        float view  = (across ? layout.width(node) : layout.height(node)) - pad * 2.0f;
-        float total = layout.scrollContent(node);
-        float len   = Math.max(t * 4.0f, view * view / total);
-        float at    = (across ? layout.x(node) : layout.y(node)) + pad
-                    + (view - len) * (layout.scrollOffset(node) / range);
-        float edge  = (Math.max(pad, t) + t) * 0.5f;   // from the far edge to the bar's far side
-        float[] ink = style.scrollbarThumb;
+        float t    = style.scrollbarWidth;
+        float len  = barLength(node);
+        float at   = barStart(node);
+        float edge = (Math.max(layout.padding(node), t) + t) * 0.5f;   // from the far edge to the bar's far side
+
+        boolean lit = barDragged == node
+            || (tree.pressed() == AegisLayout.NONE && inBarStrip(node, tree.pointerX(), tree.pointerY()));
+        float[] ink = lit ? style.scrollbarThumbHover : style.scrollbarThumb;
         if (across) {
             aegis.addRoundedRect(at, layout.y(node) + layout.height(node) - edge, len, t, t * 0.5f,
                 ink[0], ink[1], ink[2], ink[3]);

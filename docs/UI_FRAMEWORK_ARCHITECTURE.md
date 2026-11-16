@@ -52,6 +52,8 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-1 | Label and separator; the format stays 1 until release |
 | Step 3f-4e | `"hidden": true` on any layout node: checked, but kept out of the tree — not drawn, no room, no focus |
 | Step 3g-2a | Scrolling rows and columns: content cut off at the padding, the wheel, focus scrolled into view, a thin position bar |
+| Tests | JUnit in `ui/src/test`, run by `./gradlew test` with no window (`Aegis.headless`); every step from here adds its own |
+| Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
 
@@ -284,7 +286,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-2a.**
+3g-2b.**
 
 | Group | Widgets |
 |---|---|
@@ -296,7 +298,7 @@ against Swing's list; each keyboard-operable like the rest. **Started — we sto
 
 The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅ label and
 separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
-**3g-2b** a draggable bar and PageUp/PageDown; **3g-3** spinner; **3g-4** tabbed pane, which the layout's
+**3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** spinner; **3g-4** tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
@@ -330,6 +332,22 @@ focus is scrolled into view**, so Tab never lands out of sight; a thin bar on th
 shows where the view is. Theme entries `scrollbar.thumb` and `scrollbar.width` — global only for
 now, since panels are not dressed by rules. Anything drawn by hand rather than by
 `ae.draw()` cuts itself off, as the scaffolding's plain box in the inspector does.
+
+**3g-2b, the scroll bar and the keyboard.** The bar is dragged as a `JScrollBar` is: a press on
+it takes hold and it follows the pointer until the button comes up, wherever the pointer goes;
+a press beside it, in the same strip, scrolls one view towards the pointer. The strip is the
+whole padding along the far edge, not the four pixels drawn. While dragged, the pane holds the
+pointer's capture (`tree.capture`), so nothing under it lights up or is clicked, and **focus
+stays where it was** — a scroll bar is not something focus goes to. From the keyboard,
+**PageUp and PageDown** scroll the nearest scrolling pane around the focused widget, by a view
+less one line. A pane with nothing focusable inside — a log of labels — is made focusable
+itself (`tree.setFocusable(pane, true)`), and then also takes the arrows, a line at a time,
+and Home and End, with a focus ring around it. New theme entry: `scrollbar.thumb.hover`.
+
+**Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
+`Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its
+atlas, and `TestShell` wraps the frame loop's order of calls. Each widget step adds tests for
+what it decides.
 
 **Step 3h — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.

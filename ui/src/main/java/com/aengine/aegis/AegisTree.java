@@ -73,6 +73,7 @@ public final class AegisTree {
     private int focused = AegisLayout.NONE;
 
     private boolean buttonWasDown;
+    private boolean wentDown;                 // this frame only: the button went down
 
     // The pointer as last handed to update(), for widgets that follow it — a slider's drag.
     private float pointerX;
@@ -151,6 +152,7 @@ public final class AegisTree {
         boolean justPressed  =  buttonDown && !buttonWasDown;
         boolean justReleased = !buttonDown &&  buttonWasDown;
         buttonWasDown = buttonDown;
+        wentDown      = justPressed;
 
         clicked = AegisLayout.NONE;
 
@@ -222,6 +224,34 @@ public final class AegisTree {
      * @return the handle
      */
     public int pressed() { return pressed; }
+
+    /**
+     * Whether the primary button is held, as last handed to {@link #update}.
+     *
+     * @return {@code true} while it is down
+     */
+    public boolean pointerDown() { return buttonWasDown; }
+
+    /**
+     * Whether the primary button went down this frame — the start of a press, wherever it
+     * landed, on a node that reacts or not.
+     *
+     * @return {@code true} in the frame the press began
+     */
+    public boolean pointerWentDown() { return wentDown; }
+
+    /**
+     * Hands the pointer's capture to a node, as if the press had begun on it, until the button
+     * comes up. For what is dragged without being a node of its own — a scroll bar in a pane's
+     * padding, a divider between two panes: while it is held nothing else is hovered, and
+     * letting go clicks nothing, unless the node is itself interactive and the pointer is on it.
+     *
+     * @param node the node to hold the capture
+     */
+    public void capture(int node) {
+        pressed = node;
+        hovered = AegisLayout.NONE;
+    }
 
     /**
      * The pointer's x as last handed to {@link #update} — what a drag follows.

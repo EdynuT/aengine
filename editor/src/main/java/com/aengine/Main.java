@@ -1177,8 +1177,9 @@ public class Main extends Engine {
         // Step 3g-2: the inspector scrolls. It holds more than its height once a label and a
         // separator join the fields, and an inspector only grows as entities get components.
         // A column scrolls up and down: the wheel over it moves its content, Tab into a field
-        // out of sight brings it into view, and a thin bar on its right shows where it is. It
-        // takes the height the layout gives it rather than asking for its content's.
+        // out of sight brings it into view, and the thin bar on its right shows where it is
+        // and can be dragged. PageUp and PageDown scroll it while one of its fields has focus.
+        // It takes the height the layout gives it rather than asking for its content's.
         layout.setScrollable(layoutInspector, true);
 
         layoutFieldA = layout.box(layoutInspector);
