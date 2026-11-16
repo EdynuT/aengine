@@ -21,9 +21,7 @@ import com.aengine.ecs.systems.CameraSystem;
 import com.aengine.ecs.systems.PhysicsSystem;
 import com.aengine.ecs.systems.ScriptSystem;
 import com.aengine.editor.EditorState;
-import com.aengine.editor.EntityFactory;
 import com.aengine.editor.SceneSerializer;
-import com.aengine.graphics.AssetManager;
 import com.aengine.graphics.Camera;
 import com.aengine.graphics.Renderer2D;
 import com.aengine.graphics.Renderer3D;
@@ -77,20 +75,9 @@ public class Main extends Engine {
     private AudioSystem audioSystem;
 
 
-    // =========================================================================
-    // Editor state — pre-allocated scratch buffers to avoid per-frame GC churn.
-    // dragFloat3 / colorEdit4 require float[] arrays as in/out parameters.
-    // =========================================================================
-
-    private static final float[]  EDITOR_POS   = new float[3];
-    private static final float[]  EDITOR_ROT   = new float[3];
-    private static final float[]  EDITOR_SCALE = new float[3];
-    private static final float[]  EDITOR_COLOR = new float[4];
-
     // --- Editor Drag & Drop State ---
     private boolean isDraggingEntity = false;
     private float dragLastX, dragLastY;   // where the pointer was last frame, while dragging
-    private int pendingDeleteEntity = -1;
     private int lastWindowWidth = -1;
     private int lastWindowHeight = -1;
 
@@ -364,9 +351,9 @@ public class Main extends Engine {
 
     @Override
     protected void onDebugRender(int viewportTextureID) {
-        // The interface first: it is drawn now, and Dear ImGui's remaining windows render on
-        // top of it when the frame ends. Over one of them the pointer is ImGui's, and while one
-        // of its fields is typed into the keys are.
+        // The interface, drawn by Aegis. Dear ImGui still runs until Phase 5 removes it, but
+        // opens no window any more; were one open, the pointer over it and the keys typed into
+        // it would be ImGui's.
         shell.frame(getWindow().getWidth(), getWindow().getHeight(), viewportTextureID,
             DebugOverlay.ENABLED && ImGui.getIO().getWantCaptureMouse(),
             DebugOverlay.ENABLED && ImGui.getIO().getWantCaptureKeyboard());
@@ -415,214 +402,6 @@ public class Main extends Engine {
                 isDraggingEntity = false; // Mouse released, end the drag
             }
         }
-
-        if (!DebugOverlay.ENABLED) return;
-
-        // ── Engine Stats ──────────────────────────────────────────────────────
-        ImGui.begin("Engine Stats", DebugOverlay.showEnginePanel());
-        ImGui.text(String.format("State    : %s", currentState.name()));
-        ImGui.text(String.format("FPS      : %d", FPSTracker.getCurrentFPS()));
-        ImGui.text(String.format("Mode     : %s", RenderMode.active()));
-        ImGui.text(String.format("Entities : %d", registry.getEntityCount()));
-        ImGui.separator();
-        ImGui.textDisabled("Project: " + (activeProjectPath != null ? activeProjectPath : "—"));
-        ImGui.end();
-
-        // ── Physics Debug ─────────────────────────────────────────────────────
-        ImGui.begin("Physics Debug", DebugOverlay.showPhysicsPanel());
-        boolean alive = physicsThread != null && physicsThread.isAlive();
-        ImGui.text("Thread   : " + (alive ? "Running @ 120 Hz" : "Stopped"));
-        ImGui.separator();
-        ImGui.textDisabled("Tip: use Logger.TRACE to see per-step grid stats");
-        ImGui.end();
-
-        // ── Scene Hierarchy ───────────────────────────────────────────────────
-        renderHierarchyPanel();
-
-        // ── Properties ───────────────────────────────────────────────────────
-        renderPropertiesPanel();
-    }
-
-    // =========================================================================
-    // Viewport context menu — right-click on the scene image
-    // =========================================================================
-
-    @Override
-    protected void onViewportContextMenu() {
-        if (ImGui.beginMenu("Add Entity")) {
-            if (ImGui.menuItem("Quad (2D)")) {
-                synchronized (physicsThread.getSyncLock()) {
-                    int id = EntityFactory.createQuad(registry, 0.0f, 0.0f);
-                    EditorState.select(id);
-                }
-            }
-            if (ImGui.menuItem("Cube (3D)")) {
-                synchronized (physicsThread.getSyncLock()) {
-                    int id = EntityFactory.createCube(registry, 0.0f, 0.0f, 0.0f);
-                    EditorState.select(id);
-                }
-            }
-            ImGui.endMenu();
-        }
-
-        ImGui.separator();
-
-        if (ImGui.menuItem("Save Scene")) {
-            saveCurrentScene();
-        }
-    }
-
-    // =========================================================================
-    // Scene Hierarchy panel
-    // =========================================================================
-
-    private void renderHierarchyPanel() {
-        ImGui.begin("Scene Hierarchy");
-
-        if (ImGui.button("+ Add Entity")) {
-            synchronized (physicsThread.getSyncLock()) {
-                int id = (RenderMode.active() == RenderMode.MODE_2D)
-                    ? EntityFactory.createQuad(registry, 0.0f, 0.0f)
-                    : EntityFactory.createCube(registry, 0.0f, 0.0f, 0.0f);
-                EditorState.select(id);
-            }
-        }
-        ImGui.sameLine();
-        if (ImGui.button("Save Scene")) {
-            saveCurrentScene();
-        }
-
-        ImGui.separator();
-
-        // List all renderable entities (have both Transform + Sprite)
-        var entities = registry.getEntitiesWith(TransformComponent.class, SpriteComponent.class);
-        for (int i = 0; i < entities.size(); i++) {
-            int entityId = entities.get(i);
-            String label = EditorState.getEntityName(entityId);
-
-            boolean isSelected = EditorState.getSelectedEntity() == entityId;
-            if (ImGui.selectable(label + "##" + entityId, isSelected)) {
-                EditorState.select(entityId);
-            }
-
-            // Right-click on a hierarchy item → context menu
-            if (ImGui.beginPopupContextItem("##ectx_" + entityId)) {
-                if (ImGui.menuItem("Select")) {
-                    EditorState.select(entityId);
-                }
-                ImGui.separator();
-                if (ImGui.menuItem("Delete")) {
-                    pendingDeleteEntity = entityId;
-                }
-                ImGui.endPopup();
-            }
-        }
-
-        ImGui.end();
-
-        // Deferred entity deletion — applied after the hierarchy loop to avoid modifying the registry mid-frame
-        if (pendingDeleteEntity != -1) {
-            synchronized (physicsThread.getSyncLock()) {
-                if (EditorState.getSelectedEntity() == pendingDeleteEntity) {
-                    EditorState.deselect();
-                }
-                registry.destroyEntity(pendingDeleteEntity);
-            }
-            pendingDeleteEntity = -1;
-        }
-    }
-
-    // =========================================================================
-    // Properties panel — edit selected entity's components
-    // =========================================================================
-
-    private void renderPropertiesPanel() {
-        ImGui.begin("Properties");
-
-        if (!EditorState.hasSelection()) {
-            ImGui.textDisabled("No entity selected.");
-            ImGui.end();
-            return;
-        }
-
-        int sel = EditorState.getSelectedEntity();
-        ImGui.text(EditorState.getEntityName(sel) + "  (ID: " + sel + ")");
-        ImGui.separator();
-
-        // --- Transform ---
-        TransformComponent t = registry.getComponent(sel, TransformComponent.class);
-        if (t != null && ImGui.collapsingHeader("Transform")) {
-
-            EDITOR_POS[0] = t.position.x; EDITOR_POS[1] = t.position.y; EDITOR_POS[2] = t.position.z;
-            if (ImGui.dragFloat3("Position", EDITOR_POS, 0.1f)) {
-                synchronized (physicsThread.getSyncLock()) {
-                    t.position.set(EDITOR_POS[0], EDITOR_POS[1], EDITOR_POS[2]);
-                }
-            }
-
-            EDITOR_ROT[0] = t.rotation.x; EDITOR_ROT[1] = t.rotation.y; EDITOR_ROT[2] = t.rotation.z;
-            if (ImGui.dragFloat3("Rotation", EDITOR_ROT, 0.5f)) {
-                t.rotation.set(EDITOR_ROT[0], EDITOR_ROT[1], EDITOR_ROT[2]);
-            }
-
-            EDITOR_SCALE[0] = t.scale.x; EDITOR_SCALE[1] = t.scale.y; EDITOR_SCALE[2] = t.scale.z;
-            if (ImGui.dragFloat3("Scale", EDITOR_SCALE, 0.05f, 0.01f, 100.0f)) {
-                t.scale.set(EDITOR_SCALE[0], EDITOR_SCALE[1], EDITOR_SCALE[2]);
-            }
-        }
-
-        // --- Sprite ---
-        SpriteComponent s = registry.getComponent(sel, SpriteComponent.class);
-        if (s != null && ImGui.collapsingHeader("Sprite")) {
-
-            EDITOR_COLOR[0] = s.color.x; EDITOR_COLOR[1] = s.color.y;
-            EDITOR_COLOR[2] = s.color.z; EDITOR_COLOR[3] = s.color.w;
-            if (ImGui.colorEdit4("Color", EDITOR_COLOR)) {
-                s.color.set(EDITOR_COLOR[0], EDITOR_COLOR[1], EDITOR_COLOR[2], EDITOR_COLOR[3]);
-            }
-
-            ImGui.spacing();
-            String currentTex = s.texturePath != null ? s.texturePath : "None";
-            ImGui.text("Texture: " + currentTex);
-
-            // Expandable texture browser — lists all .atex files in the baked textures dir
-            if (ImGui.treeNode("Assign Texture##" + sel)) {
-                File bakedTexDir = FileSystem.resolve("assets://baked/textures");
-                if (bakedTexDir != null && bakedTexDir.isDirectory()) {
-                    File[] texFiles = bakedTexDir.listFiles(
-                        f -> f.isFile() && f.getName().endsWith(".atex"));
-                    if (texFiles != null && texFiles.length > 0) {
-                        for (File texFile : texFiles) {
-                            String vPath = "assets://baked/textures/" + texFile.getName();
-                            boolean isCurrent = vPath.equals(s.texturePath);
-                            if (ImGui.selectable(texFile.getName() + "##tex_" + texFile.getName(),
-                                                 isCurrent)) {
-                                s.texturePath = vPath;
-                                s.texture = AssetManager.getTexture(vPath);
-                            }
-                        }
-                    } else {
-                        ImGui.textDisabled("No .atex files found.");
-                        ImGui.textDisabled("Drop a texture into assets/src/textures/");
-                        ImGui.textDisabled("and rebuild to bake it.");
-                    }
-                } else {
-                    ImGui.textDisabled("Baked textures directory not found.");
-                }
-                ImGui.treePop();
-            }
-
-            // Clear texture (revert to solid colour)
-            if (s.texturePath != null) {
-                ImGui.spacing();
-                if (ImGui.button("Remove Texture##" + sel)) {
-                    s.texture = null;
-                    s.texturePath = null;
-                }
-            }
-        }
-
-        ImGui.end();
     }
 
     // =========================================================================

@@ -2104,8 +2104,10 @@ the screen's root as the window's. Theme entries, global only: `window.fill`, `p
 `.border`, `.radius`, `.border.width`; `surface.fill`, `.border.focused`, `.border.width`;
 and the palette's `background`.
 
-While ImGui still draws windows, it draws **on top**: over one of them the pointer is
-ImGui's, and while one of its fields is typed into the keys are. The ImGui viewport's
+After 4c the remaining ImGui windows — Engine Stats, Physics Debug, Scene Hierarchy,
+Properties — were removed too: they were not to be migrated, and only covered the screen.
+Dear ImGui itself still starts, opening no window, until Phase 5 drops it. Were a window open,
+it would draw on top, and the pointer over it and the keys typed into it would be ImGui's. The ImGui viewport's
 right-click menu (Add Entity, Save Scene) is gone with it; the right button now looks around.
 
 **4b ✅ — icons and the toolbar.** An icon set is an **icon font and a map** from the engine's
