@@ -22,6 +22,10 @@ import static org.lwjgl.glfw.GLFW.*;
  *       held between -89.9 and 89.9 degrees); in 2D, pans the view.</li>
  *   <li><b>Shift + right mouse button + drag</b> — in 3D, slides sideways and forwards
  *       instead of turning.</li>
+ *   <li><b>Right mouse button held + W A S D</b> — flies at 6 units per second: in 3D forward,
+ *       left, back and right along where the camera looks; in 2D up, left, down and right.
+ *       Held with the button, as in Unity, Unreal and Godot, so the letters stay free to type
+ *       and to use as shortcuts otherwise.</li>
  *   <li><b>Space / Ctrl</b> — moves straight up / down at 6 units per second, in 2D and 3D.</li>
  * </ul>
  *
@@ -176,7 +180,23 @@ public final class CameraSystem extends System {
                 }
             }
 
-            // 4. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
+            // 4. Flying with W A S D while the right button is held
+            if (inputEnabled && Input.isMouseButtonPressed(BUTTON_RIGHT)) {
+                float ahead = 0.0f, aside = 0.0f;
+                if (Input.isKeyPressed(Keys.W)) ahead += 1.0f;
+                if (Input.isKeyPressed(Keys.S)) ahead -= 1.0f;
+                if (Input.isKeyPressed(Keys.D)) aside += 1.0f;
+                if (Input.isKeyPressed(Keys.A)) aside -= 1.0f;
+                if (is2DMode) {
+                    movementDelta.x += aside * speedModifier;
+                    movementDelta.y += ahead * speedModifier;
+                } else {
+                    movementDelta.fma(ahead * speedModifier, forwardDirection);
+                    movementDelta.fma(aside * speedModifier, rightDirection);
+                }
+            }
+
+            // 5. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
             // Works identically in 2D and 3D as requested
             if (inputEnabled && Input.isKeyPressed(Keys.SPACE)) {
                 movementDelta.add(new Vector3f(verticalUp).mul(speedModifier));

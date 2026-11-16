@@ -2069,8 +2069,9 @@ titles, except:
 
 **The viewport owns the camera controls.** The camera takes the keys only while the
 viewport has focus — a left or right press on it, or Tab — and gives them up as soon as
-anything else is focused, so Space typed into a field no longer raises it. The wheel zooms
-only over the viewport. Esc leaves the editor only while the viewport has focus and nothing
+anything else is focused, so Space typed into a field no longer raises it. With the right
+button held, W A S D fly the camera, as in Unity, Unreal and Godot. The wheel zooms only over
+the viewport. Esc leaves the editor only while the viewport has focus and nothing
 is open over it.
 
 Panels and the screen are now drawn by `ae.draw()`: a registered panel as its background,
