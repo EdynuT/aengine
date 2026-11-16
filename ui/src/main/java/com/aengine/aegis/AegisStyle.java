@@ -241,6 +241,31 @@ public final class AegisStyle {
     /** How far its shadow falls. */
     public float         overlayShadowOffset = 4.0f;
 
+    // ── Combo box ───────────────────────────────────────────────────────────
+
+    /** The box, resting. */
+    public final float[] comboFill          = { 0.20f, 0.23f, 0.29f, 1.0f };
+    /** The box under the pointer. */
+    public final float[] comboHover         = { 0.27f, 0.31f, 0.39f, 1.0f };
+    /** Its outline. */
+    public final float[] comboBorder        = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** The chosen item's text, in the box and in the list. */
+    public final float[] comboText          = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The arrow at its right. */
+    public final float[] comboArrow         = { 0.50f, 0.54f, 0.62f, 1.0f };
+    /** Behind the item the open list points at. */
+    public final float[] comboHighlight     = { 0.36f, 0.62f, 0.94f, 1.0f };
+    /** That item's text. */
+    public final float[] comboHighlightText = { 1.00f, 1.00f, 1.00f, 1.0f };
+    /** Space left and right of the text. */
+    public float         comboPaddingX      = 10.0f;
+    /** Space above and below the text, in the box and in each row of the list. */
+    public float         comboPaddingY      = 6.0f;
+    /** How round its corners are. */
+    public float         comboRadius        = 4.0f;
+    /** The room the arrow takes. */
+    public float         comboArrowWidth    = 20.0f;
+
     // ── Tooltip ─────────────────────────────────────────────────────────────
 
     /** Its background. */

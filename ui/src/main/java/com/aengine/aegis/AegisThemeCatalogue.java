@@ -247,6 +247,19 @@ public final class AegisThemeCatalogue {
         size  ("overlay.radius",        "6", (s, v) -> s.overlayRadius = v);
         size  ("overlay.shadow.offset", "4", (s, v) -> s.overlayShadowOffset = v);
 
+        // ── Combo box, and its list ───────────────────────────────────────────────────
+        colour("combo.fill",           "@global.surface.raised", s -> s.comboFill);
+        colour("combo.fill.hover",     "@global.surface.hover",  s -> s.comboHover);
+        colour("combo.border",         "@global.border",         s -> s.comboBorder);
+        colour("combo.text",           "@global.text",           s -> s.comboText);
+        colour("combo.arrow",          "@global.text.dim",       s -> s.comboArrow);
+        colour("combo.highlight",      "@global.accent",         s -> s.comboHighlight);       // the item the open list points at
+        colour("combo.highlight.text", "#FFFFFF",                s -> s.comboHighlightText);
+        size  ("combo.padding.x",      "10", (s, v) -> s.comboPaddingX = v);
+        size  ("combo.padding.y",      "6",  (s, v) -> s.comboPaddingY = v);
+        size  ("combo.radius",         "4",  (s, v) -> s.comboRadius = v);
+        size  ("combo.arrow.width",    "20", (s, v) -> s.comboArrowWidth = v);
+
         // ── Tooltip. Global values only: it belongs to no panel. ─────────────────────────
         colour("tooltip.fill",    "#1A1C26",        s -> s.tooltipFill);
         colour("tooltip.border",  "@global.border", s -> s.tooltipBorder);

@@ -59,6 +59,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-6 | Tree: `ae.treeView` and `addTreeItem`; pointer, double click, the arrow keys, type-ahead; sized to its open items, the selection kept in view |
 | Step 3g-7 | The overlay layer: roots drawn above everything and given the pointer first; `ae.showPopup`, closed by a press outside or Esc; modal ones for dialogs |
 | Step 3g-8 | Tooltips: `ae.setTooltip` on any node; after the pointer rests, at once moving on from one, Ctrl+F1 from the keyboard |
+| Step 3g-9 | Combo box: `ae.comboBox`, its list dropped down on the overlay layer; chosen by pointer, press-and-release, the arrows, letters |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -292,7 +293,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-8.**
+3g-9.**
 
 | Group | Widgets |
 |---|---|
@@ -307,7 +308,7 @@ separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by whe
 **3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** ✅ split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** ✅ tree; **3g-7** ✅ the overlay layer; **3g-8** ✅
-tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
+tooltip; **3g-9** ✅ combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
 waits for the panels that ask for it, in Phase 4.
 
 **The format stays 1 until release.** Theme and layout files keep `"format": 1` while the
@@ -436,6 +437,20 @@ action does. Drawn above everything, even overlays; wrapped at `tooltip.width`, 
 stay in the window, above the pointer when there is no room below. Theme entries, global only:
 `tooltip.fill`, `.border`, `.text`, `.padding`, `.radius`, `.width`. Swing's four-second
 dismiss is left out: a note the user is reading should not vanish.
+
+**3g-9, combo box.** `ae.comboBox(parent, name, items...)`, as a `JComboBox` that is not
+editable: a box showing the chosen item and an arrow, sized to its longest item. A press opens
+its list — a popup on the overlay layer, below the box, or above it when there is no room —
+and another press closes it; pressing an item chooses it, and so does pressing the box and
+letting go over an item, as in Swing. A press elsewhere closes the list; the press that closes
+it from the box itself does not open it again. A stop of Tab: closed, Up and Down, Home and
+End and a letter choose at once; Enter, Space, Alt+Down or F4 open the list, where the same
+keys move through the items, Enter or Space choose, and Esc or Tab close it with the choice
+unchanged. Pressing the list leaves focus on the box. `comboChosen`, `setComboChosen`,
+`comboItem`, `comboItemCount`, `isComboOpen`; `wasChanged` on the user's choice. Theme entries:
+`combo.fill`, `.fill.hover`, `.border`, `.text`, `.arrow`, `.highlight`, `.highlight.text`,
+`.padding.x`, `.padding.y`, `.radius`, `.arrow.width`. An editable combo — a text field with a
+list — waits for a panel that asks for one.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

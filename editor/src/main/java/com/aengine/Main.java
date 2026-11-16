@@ -129,6 +129,7 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int shadingCombo;       // step 3g-9: a combo box, from ae.comboBox()
     private int showPopupButton;    // step 3g-7: a popup on the overlay layer, from ae.showPopup()
     private int examplePopup;
     private int closePopupButton;
@@ -1314,6 +1315,15 @@ public class Main extends Engine {
         // ae.spinnerValue(). A label says what it is, as for the name field.
         gridSizeLabel   = ae.label(layoutInspector, "gridSizeLabel", "Grid size");
         gridSizeSpinner = ae.spinner(layoutInspector, "gridSizeSpinner", 0.25f, 16.0f, 1.0f, 0.25f);
+
+        // Step 3g-9: a combo box — one item chosen from several, from a list that drops down.
+        // A press opens the list, a press on an item chooses it. From the keyboard: Up and
+        // Down (or a letter) choose at once; Enter, Space, Alt+Down or F4 open the list, which
+        // the same keys then move through, Enter choosing and Esc closing it unchanged.
+        // ae.comboChosen(shadingCombo) reads the choice; ae.wasChanged(shadingCombo) reports
+        // the user's.
+        ae.label(layoutInspector, "shadingLabel", "Shading");
+        shadingCombo = ae.comboBox(layoutInspector, "shadingCombo", "Lit", "Unlit", "Wireframe", "Normals");
 
         // Step 3g-7: a popup — anything built under a root, shown above everything else with
         // ae.showPopup(root, x, y). Built once here, with NONE as its parent; shown when the

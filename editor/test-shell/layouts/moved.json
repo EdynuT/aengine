@@ -27,6 +27,10 @@
             { "type": "widget", "widget": "inspectorSeparator" },
             { "type": "widget", "widget": "nameLabel" },
             { "type": "widget", "widget": "nameField" },
+            { "type": "row", "gap": 8, "children": [
+              { "type": "widget", "widget": "shadingLabel" },
+              { "type": "widget", "widget": "shadingCombo" }
+            ]},
             { "type": "widget", "widget": "showPopupButton" }
           ]},
           { "type": "panel", "panel": "viewport", "grow": 1, "children": [

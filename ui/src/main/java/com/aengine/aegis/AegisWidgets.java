@@ -78,6 +78,9 @@ public final class AegisWidgets {
 
     private static final byte TREE_VIEW    = 13;  // step 3g-6: items in levels, opened and closed
 
+    private static final byte COMBO_BOX    = 14;  // step 3g-9: a choice of items, from a list that drops down
+    private static final byte COMBO_LIST   = 15;  //            the list, a root shown as a popup
+
     /** "No item" — the parent of a tree's top level, and what is selected in a tree with none. */
     public static final int NO_ITEM = -1;
 
@@ -182,6 +185,17 @@ public final class AegisWidgets {
     }
 
     private final TreeItems[] itemsOf;
+
+    // Combo boxes: the items, the one chosen, the list a box drops down — and, on the list,
+    // the box it belongs to and the item it points at while open.
+    private final String[][] comboItems;
+    private final int[]      comboChosen;
+    private final int[]      comboList;
+    private final int[]      listOwner;
+    private final int[]      listHighlight;
+
+    /** Alt+Down or F4 this frame: open the focused combo box's list. */
+    private boolean pendingOpenList;
 
     // The last press on a tree item, to tell a double click.
     private int  treePressItem = NO_ITEM;
@@ -380,6 +394,11 @@ public final class AegisWidgets {
         this.tabsOf          = new TabSet[capacity];
         this.itemsOf         = new TreeItems[capacity];
         this.tooltip         = new String[capacity];
+        this.comboItems      = new String[capacity][];
+        this.comboChosen     = new int[capacity];
+        this.comboList       = new int[capacity];
+        this.listOwner       = new int[capacity];
+        this.listHighlight   = new int[capacity];
         this.themeNamed      = new boolean[capacity];
 
         this.fieldText      = new StringBuilder[capacity];
@@ -477,6 +496,7 @@ public final class AegisWidgets {
             case TAB_BAR              -> "tabs";
             case DIVIDER              -> "split";
             case TREE_VIEW            -> "tree";
+            case COMBO_BOX            -> "combo";
             default                   -> "";
         };
     }
@@ -505,6 +525,12 @@ public final class AegisWidgets {
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
             case TREE_VIEW -> fitTree(node, style);
+            case COMBO_BOX -> {
+                float widest = 0.0f;
+                for (String item : comboItems[node]) widest = Math.max(widest, (float) Math.ceil(aegis.measure(item)));
+                fit(node, widest + style.comboPaddingX * 2.0f + style.comboArrowWidth,
+                    line + style.comboPaddingY * 2.0f);
+            }
             case DIVIDER -> {
                 // Its room along the way the split pane lays its sides out; across, it is stretched.
                 if (layout.isRow(layout.parent(node))) fit(node, style.splitSize, 0.0f);
@@ -1769,6 +1795,209 @@ public final class AegisWidgets {
     }
 
     // -----------------------------------------------------------------------------------
+    // Combo box — step 3g-9
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A combo box: one item chosen from several, shown in a box whose list drops down when it
+     * is pressed — added to {@code parent}. The first item starts chosen.
+     *
+     * <p>It works as Swing's {@code JComboBox} does, not editable. A press opens the list and
+     * another closes it; pressing an item in it, or pressing the box and letting go over an
+     * item, chooses it. A press anywhere else closes the list. It is a stop of Tab: with focus,
+     * Up and Down choose the item before and after, Home and End the first and last, and a
+     * letter the next item starting with it. Enter, Space, Alt+Down or F4 open the list; while
+     * it is open the same keys move through it, Enter or Space choose, and Esc or Tab close it
+     * leaving the choice as it was.</p>
+     *
+     * <p>Sized to its longest item, plus room for its arrow.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "shadingCombo"}
+     * @param items  what can be chosen, in order; kept, so pass strings that do not change
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses,
+     *                                  or no items
+     */
+    public int comboBox(int parent, String name, String... items) {
+        if (items.length == 0) throw new IllegalArgumentException("A combo box needs at least one item.");
+        int node = namedBox(parent, name);
+        tree.setInteractive(node, true);
+        tree.setFocusable(node, true);
+        kind[node]        = COMBO_BOX;
+        comboItems[node]  = items.clone();
+        comboChosen[node] = 0;
+
+        int list = layout.box(AegisLayout.NONE);
+        tree.setInteractive(list, true);
+        tree.setKeepsFocus(list, true);
+        kind[list]      = COMBO_LIST;
+        listOwner[list] = node;
+        comboList[node] = list;
+
+        styleOf[node] = null;
+        fitToContent(node);
+        return node;
+    }
+
+    /**
+     * Which item of a combo box is chosen.
+     *
+     * @param combo the combo box
+     * @return the item's index, counting from 0
+     */
+    public int comboChosen(int combo) { return comboChosen[combo]; }
+
+    /**
+     * The text of a combo box's item.
+     *
+     * @param combo the combo box
+     * @param index the item, counting from 0
+     * @return what it says
+     */
+    public String comboItem(int combo, int index) { return comboItems[combo][index]; }
+
+    /**
+     * How many items a combo box has.
+     *
+     * @param combo the combo box
+     * @return the count
+     */
+    public int comboItemCount(int combo) { return comboItems[combo].length; }
+
+    /**
+     * Chooses an item from code. Not reported by {@link #wasChanged}.
+     *
+     * @param combo the combo box
+     * @param index the item, counting from 0
+     * @throws IndexOutOfBoundsException for an index the box has no item at
+     */
+    public void setComboChosen(int combo, int index) {
+        if (index < 0 || index >= comboItems[combo].length) {
+            throw new IndexOutOfBoundsException("Item " + index + " of a combo box with " + comboItems[combo].length + ".");
+        }
+        comboChosen[combo] = index;
+    }
+
+    /**
+     * Whether a combo box's list is open.
+     *
+     * @param combo the combo box
+     * @return {@code true} while it is shown
+     */
+    public boolean isComboOpen(int combo) { return isOverlayOpen(comboList[combo]); }
+
+    private float comboRowHeight(AegisStyle style) { return aegis.lineHeight() + style.comboPaddingY * 2.0f; }
+
+    /** Drops a combo box's list down below it — or up above it, when there is no room below. */
+    private void openCombo(int combo) {
+        AegisStyle style = styleOf(combo);
+        int list = comboList[combo];
+        float h = comboItems[combo].length * comboRowHeight(style) + 4.0f;
+        layout.setSize(list, layout.width(combo), h);
+        float y = layout.y(combo) + layout.height(combo) + 2.0f;
+        if (boundsH() > 0.0f && y + h > boundsH()) y = layout.y(combo) - h - 2.0f;
+        listHighlight[list] = comboChosen[combo];
+        openOverlay(list, layout.x(combo), y, false, combo);
+    }
+
+    /** Chooses an item because the user did: reports it if it is another. */
+    private void userChoosesItem(int combo, int index) {
+        if (index < 0 || index >= comboItems[combo].length || index == comboChosen[combo]) return;
+        comboChosen[combo] = index;
+        changed = combo;
+    }
+
+    /** The item of an open list under a point, or -1. */
+    private int listItemAt(int list, float px, float py) {
+        if (px < layout.x(list) || px >= layout.x(list) + layout.width(list)) return -1;
+        int owner = listOwner[list];
+        int row = (int) Math.floor((py - layout.y(list) - 2.0f) / comboRowHeight(styleOf(owner)));
+        return row >= 0 && row < comboItems[owner].length ? row : -1;
+    }
+
+    /** The next item after {@code from}, going around, whose text starts with a letter; or -1. */
+    private int itemStartingWith(String[] items, int from, int codepoint) {
+        char c = Character.toLowerCase((char) codepoint);
+        for (int k = 1; k <= items.length; k++) {
+            int i = Math.floorMod(from + k, items.length);
+            if (!items[i].isEmpty() && Character.toLowerCase(items[i].charAt(0)) == c) return i;
+        }
+        return -1;
+    }
+
+    /** A combo box's pointer and keys, and its list's, for this frame. */
+    private void updateCombo(int pressed, int focused) {
+        // A press on a box opens its list, or closes it — unless that same press just closed it
+        // from outside the list, which counts as the closing.
+        if (pressed != AegisLayout.NONE && kind[pressed] == COMBO_BOX && pressed != lastPressed) {
+            if (isComboOpen(pressed))           closeOverlay(comboList[pressed]);
+            else if (dismissedOwner != pressed) openCombo(pressed);
+        }
+        // Let go over an item, having pressed the box: chosen, as in Swing.
+        if (lastPressed != AegisLayout.NONE && kind[lastPressed] == COMBO_BOX && pressed == AegisLayout.NONE
+                && isComboOpen(lastPressed)) {
+            int list = comboList[lastPressed];
+            int item = listItemAt(list, tree.pointerX(), tree.pointerY());
+            if (item >= 0 && layout.nodeAt(list, tree.pointerX(), tree.pointerY()) != AegisLayout.NONE) {
+                userChoosesItem(lastPressed, item);
+                closeOverlay(list);
+            }
+        }
+        // An item clicked in an open list.
+        int clicked = tree.clicked();
+        if (clicked != AegisLayout.NONE && kind[clicked] == COMBO_LIST) {
+            int item = listItemAt(clicked, tree.pointerX(), tree.pointerY());
+            if (item >= 0) {
+                userChoosesItem(listOwner[clicked], item);
+                closeOverlay(clicked);
+            }
+        }
+        // The pointer over an open list points at the item under it.
+        int hovered = tree.hovered();
+        if (hovered != AegisLayout.NONE && kind[hovered] == COMBO_LIST) {
+            int item = listItemAt(hovered, tree.pointerX(), tree.pointerY());
+            if (item >= 0) listHighlight[hovered] = item;
+        }
+
+        // A list stays open only while its box has focus or is being pressed.
+        for (int i = overlayCount - 1; i >= 0; i--) {
+            int list = overlayNode[i];
+            if (kind[list] == COMBO_LIST && focused != listOwner[list] && pressed != listOwner[list]) {
+                closeOverlay(list);
+            }
+        }
+
+        if (focused == AegisLayout.NONE || kind[focused] != COMBO_BOX) return;
+        int combo = focused;
+        int list = comboList[combo];
+        int count = comboItems[combo].length;
+        if (isComboOpen(combo)) {
+            int to = listHighlight[list] + pendingLines;
+            if (pendingJump < 0) to = 0;
+            if (pendingJump > 0) to = count - 1;
+            for (int i = 0; i < pendingTypedCount; i++) {
+                int found = itemStartingWith(comboItems[combo], to, pendingTyped[i]);
+                if (found >= 0) to = found;
+            }
+            listHighlight[list] = Math.max(0, Math.min(count - 1, to));
+        } else {
+            if (pendingOpenList) {
+                openCombo(combo);
+                return;
+            }
+            int to = comboChosen[combo] + pendingLines;
+            if (pendingJump < 0) to = 0;
+            if (pendingJump > 0) to = count - 1;
+            for (int i = 0; i < pendingTypedCount; i++) {
+                int found = itemStartingWith(comboItems[combo], to, pendingTyped[i]);
+                if (found >= 0) to = found;
+            }
+            userChoosesItem(combo, Math.max(0, Math.min(count - 1, to)));
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
     // Tooltips — step 3g-8
     // -----------------------------------------------------------------------------------
 
@@ -1951,7 +2180,7 @@ public final class AegisWidgets {
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
      * box, a label, a separator, a spinner, a tabbed pane or its bar, a split pane or its
-     * divider, or a tree.
+     * divider, a tree, or a combo box or its list.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -1972,6 +2201,7 @@ public final class AegisWidgets {
         Arrays.fill(tabsOf, null);
         Arrays.fill(itemsOf, null);
         Arrays.fill(tooltip, null);
+        Arrays.fill(comboItems, null);
         tipShown = AegisLayout.NONE;
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
@@ -2022,7 +2252,10 @@ public final class AegisWidgets {
         boolean shift = (mods & Keys.MOD_SHIFT) != 0;
         boolean ctrl  = (mods & Keys.MOD_CONTROL) != 0;
 
-        if (ctrl && key == Keys.TAB) {
+        boolean alt = (mods & Keys.MOD_ALT) != 0;
+        if ((alt && key == Keys.DOWN) || (!repeat && key == Keys.F4 && !alt)) {
+            pendingOpenList = true;
+        } else if (ctrl && key == Keys.TAB) {
             pendingTabSwitch += shift ? -1 : +1;
         } else if (ctrl && (key == Keys.PAGE_DOWN || key == Keys.PAGE_UP)) {
             pendingTabSwitch += key == Keys.PAGE_DOWN ? +1 : -1;
@@ -2075,8 +2308,10 @@ public final class AegisWidgets {
             return;
         }
 
-        if (focused != AegisLayout.NONE && kind[focused] == TREE_VIEW) {
-            if (pendingTypedCount < pendingTyped.length) pendingTyped[pendingTypedCount++] = codepoint;
+        if (focused != AegisLayout.NONE && (kind[focused] == TREE_VIEW || kind[focused] == COMBO_BOX)) {
+            if (codepoint != ' ' && isAllowed(codepoint) && pendingTypedCount < pendingTyped.length) {
+                pendingTyped[pendingTypedCount++] = codepoint;
+            }
             return;
         }
         if (codepoint == '+')      pendingSteps++;
@@ -2599,6 +2834,8 @@ public final class AegisWidgets {
         // moves only the caret, so dragging selects from where the press began. Dragging past
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
+        updateCombo(pressed, focused);
+
         // A tree pressed selects, opens and closes, on the press.
         if (pressed != AegisLayout.NONE && kind[pressed] == TREE_VIEW && pressed != lastPressed) {
             pressTree(pressed);
@@ -2608,6 +2845,7 @@ public final class AegisWidgets {
             for (int i = 0; i < pendingTypedCount; i++) treeTypeAhead(focused, pendingTyped[i]);
         }
         pendingTypedCount = 0;
+        pendingOpenList   = false;
 
         // A divider pressed follows the pointer, every frame the press lasts.
         if (pressed != AegisLayout.NONE && kind[pressed] == DIVIDER) {
@@ -3157,6 +3395,16 @@ public final class AegisWidgets {
                     activatedByKeyboard = true;
                 }
             }
+            case COMBO_BOX -> {
+                if (!byKeyboard) break;
+                int list = comboList[node];
+                if (isOverlayOpen(list)) {
+                    userChoosesItem(node, listHighlight[list]);
+                    closeOverlay(list);
+                } else {
+                    openCombo(node);
+                }
+            }
             case TREE_VIEW -> {
                 if (byKeyboard && itemsOf[node].selected != NO_ITEM) {
                     activated = node;
@@ -3231,6 +3479,8 @@ public final class AegisWidgets {
         if (kind[root] == TAB_BAR)    drawTabBar(root);
         if (kind[root] == DIVIDER)    drawDivider(root);
         if (kind[root] == TREE_VIEW)  drawTree(root);
+        if (kind[root] == COMBO_BOX)  drawCombo(root);
+        if (kind[root] == COMBO_LIST) drawComboList(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -3528,6 +3778,54 @@ public final class AegisWidgets {
             drawFocusRing(style, ringX + inset, y + inset, ringW - inset * 2.0f, h - inset * 2.0f,
                 Math.max(0.0f, style.tabsRadius - inset));
         }
+    }
+
+    /**
+     * A combo box: like a button, the chosen item at the left and the arrow at the right; the
+     * focus ring while it has focus.
+     */
+    private void drawCombo(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        float[] fill = tree.isHovered(node) || isComboOpen(node) ? style.comboHover : style.comboFill;
+        float[] border = style.comboBorder;
+        aegis.addRoundedRect(x, y, w, h, style.comboRadius, fill[0], fill[1], fill[2], fill[3],
+            border[0], border[1], border[2], border[3], 1.0f);
+
+        float textY = y + (h - aegis.lineHeight()) * 0.5f;
+        float[] ink = style.comboText;
+        aegis.pushClipRect(x, y, w - style.comboArrowWidth, h);
+        aegis.addTextTop(x + style.comboPaddingX, textY, comboItems[node][comboChosen[node]], ink[0], ink[1], ink[2], ink[3]);
+        aegis.popClipRect();
+
+        arrowText.setLength(0);
+        arrowText.append(AegisFont.ARROW_DOWN);
+        float[] a = style.comboArrow;
+        aegis.addTextTop(Math.round(x + w - style.comboArrowWidth + (style.comboArrowWidth - aegis.measure(arrowText)) * 0.5f),
+            textY, arrowText, a[0], a[1], a[2], a[3]);
+
+        if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.comboRadius);
+    }
+
+    /** A combo box's open list, on its overlay background: a row per item, the one pointed at filled. */
+    private void drawComboList(int list) {
+        int owner = listOwner[list];
+        AegisStyle style = styleOf(owner);
+        float x = layout.x(list), y = layout.y(list) + 2.0f, w = layout.width(list);
+        float rowH = comboRowHeight(style);
+        String[] items = comboItems[owner];
+        aegis.pushClipRect(layout.x(list), layout.y(list), w, layout.height(list));
+        for (int i = 0; i < items.length; i++) {
+            float rowY = y + i * rowH;
+            boolean lit = i == listHighlight[list];
+            if (lit) {
+                float[] hl = style.comboHighlight;
+                aegis.addRoundedRect(x + 2.0f, rowY, w - 4.0f, rowH, 3.0f, hl[0], hl[1], hl[2], hl[3]);
+            }
+            float[] ink = lit ? style.comboHighlightText : style.comboText;
+            aegis.addTextTop(x + style.comboPaddingX, rowY + style.comboPaddingY, items[i], ink[0], ink[1], ink[2], ink[3]);
+        }
+        aegis.popClipRect();
     }
 
     /**
