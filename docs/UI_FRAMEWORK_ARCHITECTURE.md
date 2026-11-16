@@ -67,6 +67,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3h | Localisation: English in code, other languages from `lang/<tag>.json` keyed by widget address; `-PlocaleCheck` lists what is left to translate |
 | Step 4a | The editor's own screen, arranged as Godot's and Unity's; the scene in an Aegis viewport that owns the camera's keys; the scaffolding deleted |
 | Step 4b | Icons by name from an icon font; toggle buttons and groups; disabled widgets; the toolbar's tools and Play, Pause, Stop |
+| Step 4c | Docks the user resizes by their edge or F8; panels closed and reopened from the View menu; the arrangement written to the user's `layout.json`; Restore default layout |
 
 ### The plan ahead
 
@@ -509,7 +510,8 @@ follows the system language, or `-Plocale=pt-BR`, and says in one line how much 
 translated; `-PlocaleCheck` lists what is not, ready to copy into the file.
 
 **Phase 4** builds the editor's own screen — 4a ✅ the factory arrangement and the viewport,
-4b ✅ icons and the toolbar — and **Phase 5** deletes Dear ImGui. Both are described in §11.
+4b ✅ icons and the toolbar, 4c ✅ docks resized, closed and restored — and **Phase 5**
+deletes Dear ImGui. Both are described in §11.
 
 ### Open decisions
 
@@ -1409,6 +1411,10 @@ node takes room from the growers, never going below 80 pixels and never leaving 
 the one that has it, ten pixels a step, fifty with Shift, and Esc, Enter or Tab give the
 keyboard back. A resizable node must be a child of a row, with a `width`, or of a column,
 with a `height`, beside a sibling with `grow`; one that is not is a warning and stays fixed.
+
+**A tabs node can list the panels the user closed** with `"closed": ["output"]` — names out
+of its `"panels"`, written by the editor from the View menu; a closed panel is not on the
+bar, and with every panel closed the dock takes no room.
 The edge is drawn only while pointed at, dragged — `split.line.hover` — or held by the
 keyboard — the focus ring's colour.
 
@@ -2147,9 +2153,23 @@ their `layout.json` a second later. The factory layout makes the left column, th
 the console and output, and the inspector resizable. `screens.describe(screen)` gives a
 built screen as a file would write it; `ae.wasLayoutChanged()` says when to.
 
+**4c-2 ✅ — panels closed and reopened.** The View menu has a check item per dock —
+Hierarchy, Assets, Inspector, Console, Output — ticked while it is open, as Unity's Window
+menu, and *Restore default layout*. Only a panel shown as a tab can be closed
+(`screens.isPanelClosable`): closing the shown tab shows the next open one, and closing the
+last hides the dock, and every row or column left with nothing shown, so the docks beside it
+take the room; opening a panel brings its dock back and shows it. A tabs node writes what the
+user closed as `"closed": ["output"]`, each one of its `"panels"`; a name that is not is a
+warning. Nodes are hidden by `layout.setHidden`, Swing's `setVisible`: no room, no gap,
+nothing hit, their place among siblings kept.
+
+*Restore default layout* takes the editor screen out of the user's file — deleting it when
+nothing else is left in it — and `screens.rebuild` builds the screen again from the next in
+line: the panels move to the new arrangement, back to what code gave them, and the old rows,
+columns and tabbed panes are dropped, then the theme and the language are applied again.
+
 **Next**, in an order to be agreed:
 
-- **4c-2, panels closed and reopened** from a View menu, and *Restore default layout*.
 - **What any panel will need:** nodes removed and reused, for panels whose content changes; a
   label updated without allocating; a context menu; undo and redo.
 - **The panels themselves**, as they are decided, with what each asks of the framework.

@@ -180,6 +180,7 @@ public final class AegisWidgets {
         String[] titles   = new String[4];
         String[] english  = new String[4];   // what code wrote, which a locale translates
         String[] keys     = new String[4];   // the key it is translated by
+        boolean[] closed  = new boolean[4];  // step 4c: a tab closed is not on the bar
         int[]    contents = new int[4];
         int      count;
         int      selected;
@@ -1382,6 +1383,7 @@ public final class AegisWidgets {
             tabs.titles   = Arrays.copyOf(tabs.titles, tabs.count * 2);
             tabs.english  = Arrays.copyOf(tabs.english, tabs.count * 2);
             tabs.keys     = Arrays.copyOf(tabs.keys, tabs.count * 2);
+            tabs.closed   = Arrays.copyOf(tabs.closed, tabs.count * 2);
             tabs.contents = Arrays.copyOf(tabs.contents, tabs.count * 2);
         }
         int index = tabs.count++;
@@ -1466,11 +1468,82 @@ public final class AegisWidgets {
         TabSet tabs = tabsOf[bar];
         float x = layout.x(bar);
         for (int i = 0; i < tabs.count; i++) {
+            if (tabs.closed[i]) continue;
             float w = tabWidth(style, tabs.titles[i]);
             if (px >= x && px < x + w) return i;
             x += w + style.tabsGap;
         }
         return -1;
+    }
+
+    /** The open tab {@code steps} open tabs on from {@code from}, wrapping round; {@code from} itself for none. */
+    private static int stepOpenTab(TabSet tabs, int from, int steps) {
+        if (steps == 0 || tabs.count == 0) return from;
+        int at = from, dir = steps > 0 ? 1 : -1;
+        for (int left = Math.abs(steps); left > 0; ) {
+            int tries = 0;
+            do {
+                at = Math.floorMod(at + dir, tabs.count);
+            } while (tabs.closed[at] && ++tries < tabs.count);
+            if (tabs.closed[at]) return from;
+            left--;
+        }
+        return at;
+    }
+
+    /**
+     * Closes a tab or opens it again — step 4c, a panel closed from the View menu. A closed tab
+     * is not on the bar and cannot be shown; closing the one shown shows the next open one.
+     * With every tab closed the pane is hidden, and so is each row or column above it left
+     * with nothing shown, so the docks beside take the room; opening one brings them back.
+     *
+     * @param pane  the tabbed pane
+     * @param index the tab, counting from 0
+     * @param open  {@code false} to close it
+     */
+    public void setTabOpen(int pane, int index, boolean open) {
+        TabSet tabs = tabsOf[pane];
+        int column = kind[pane] == TAB_BAR ? layout.parent(pane) : pane;
+        if (tabs.closed[index] == !open) return;
+        tabs.closed[index] = !open;
+        if (!open) {
+            if (index == tabs.selected) {
+                int next = stepOpenTab(tabs, index, 1);
+                if (next != index) {
+                    selectTab(column, next);
+                } else {
+                    // None open: the pane goes, and the panel it showed with it.
+                    for (int up = tree.focused(); up != AegisLayout.NONE; up = layout.parent(up)) {
+                        if (up == column) { tree.focus(AegisLayout.NONE); break; }
+                    }
+                    layout.setHidden(column, true);
+                    for (int up = layout.parent(column); up != AegisLayout.NONE && kind[up] != SCREEN; up = layout.parent(up)) {
+                        if (!allChildrenHidden(up)) break;
+                        layout.setHidden(up, true);
+                    }
+                }
+            }
+        } else {
+            // Opened, it is shown, as a panel picked from Unity's Window menu is.
+            for (int up = column; up != AegisLayout.NONE; up = layout.parent(up)) layout.setHidden(up, false);
+            if (tabs.selected != index) selectTab(column, index);
+        }
+    }
+
+    /**
+     * Whether a tab is open.
+     *
+     * @param pane  the tabbed pane
+     * @param index the tab, counting from 0
+     * @return {@code false} once {@link #setTabOpen} closed it
+     */
+    public boolean isTabOpen(int pane, int index) { return !tabsOf[pane].closed[index]; }
+
+    private boolean allChildrenHidden(int node) {
+        for (int c = layout.firstChild(node); c != AegisLayout.NONE; c = layout.nextSibling(c)) {
+            if (!layout.isHidden(c)) return false;
+        }
+        return true;
     }
 
     private float tabWidth(AegisStyle style, String title) {
@@ -3750,12 +3823,11 @@ public final class AegisWidgets {
         int bar = tabBarAround(focused);
         if (bar != AegisLayout.NONE) {
             TabSet tabs = tabsOf[bar];
-            int to = tabs.selected;
-            if (tabs.count > 0) to = Math.floorMod(to + pendingTabSwitch, tabs.count);
-            if (focused == bar && tabs.count > 0) {
-                to = Math.floorMod(to + pendingSteps, tabs.count);
-                if (pendingJump < 0) to = 0;
-                if (pendingJump > 0) to = tabs.count - 1;
+            int to = stepOpenTab(tabs, tabs.selected, pendingTabSwitch);
+            if (focused == bar) {
+                to = stepOpenTab(tabs, to, pendingSteps);
+                if (pendingJump < 0) to = stepOpenTab(tabs, -1, 1);
+                if (pendingJump > 0) to = stepOpenTab(tabs, tabs.count, -1);
             }
             userSelectsTab(bar, to);
             focused = tree.focused();   // it went to the bar, if it was in the panel put away
@@ -4356,6 +4428,7 @@ public final class AegisWidgets {
 
     /** One node and everything under it. */
     private void drawNode(int root) {
+        if (layout.isHidden(root)) return;
         // A disabled widget, and all it holds, is drawn faded.
         boolean faded = disabled[root];
         if (faded) aegis.setOpacity(globalStyle.disabledOpacity);
@@ -4655,6 +4728,7 @@ public final class AegisWidgets {
 
         aegis.pushClipRect(x, y, w, h);
         for (int i = 0; i < tabs.count; i++) {
+            if (tabs.closed[i]) continue;
             float tabW = tabWidth(style, tabs.titles[i]);
             boolean shown = i == tabs.selected;
             float[] fill = shown ? style.tabsSelected : i == over ? style.tabsHover : style.tabsFill;
@@ -5042,6 +5116,35 @@ public final class AegisWidgets {
         dockCount++;
     }
 
+    /**
+     * Drops a screen's old arrangement — its rows, columns and tabbed panes, with whatever of
+     * theirs still hangs on them — so nothing dresses, translates, draws or focuses it again.
+     * The panels must already be taken off it. The nodes stay used: the layout has no way to
+     * give one back, which a restore now and then can afford.
+     */
+    void discard(int root) {
+        for (int up = tree.focused(); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (up == root) { tree.focus(AegisLayout.NONE); break; }
+        }
+        discardNode(root);
+    }
+
+    private void discardNode(int node) {
+        // A tabbed pane's contents are panels, already taken off: not followed.
+        ArrayList<Integer> children = new ArrayList<>();
+        for (int child = layout.firstChild(node); child != AegisLayout.NONE; child = layout.nextSibling(child)) {
+            children.add(child);
+        }
+        for (int child : children) discardNode(child);
+        if (kind[node] == TABBED_PANE || kind[node] == TAB_BAR || kind[node] == SCREEN) {
+            kind[node] = NOT_A_WIDGET;
+            tabsOf[node] = null;
+            tree.setInteractive(node, false);
+            tree.setFocusable(node, false);
+        }
+        layout.detach(node);
+    }
+
     /** Forgets every dock, before a screen is built again. */
     void clearDocks() {
         dockCount = 0;
@@ -5066,18 +5169,25 @@ public final class AegisWidgets {
     /** The sibling across a dock's handle, or NONE when there is none. */
     private int dockNeighbour(int i) {
         int node = dockNode[i];
-        if (dockAfter[i]) return layout.nextSibling(node);
+        if (dockAfter[i]) {
+            int next = layout.nextSibling(node);
+            while (next != AegisLayout.NONE && layout.isHidden(next)) next = layout.nextSibling(next);
+            return next;
+        }
         int parent = layout.parent(node);
         int previous = AegisLayout.NONE;
-        for (int c = layout.firstChild(parent); c != node && c != AegisLayout.NONE; c = layout.nextSibling(c)) previous = c;
+        for (int c = layout.firstChild(parent); c != node && c != AegisLayout.NONE; c = layout.nextSibling(c)) {
+            if (!layout.isHidden(c)) previous = c;
+        }
         return previous;
     }
 
     /** Whether a dock is on screen, with a sibling to share its edge with. */
     private boolean dockShown(int i) {
         int node = dockNode[i];
-        return layout.parent(node) != AegisLayout.NONE && dockNeighbour(i) != AegisLayout.NONE
-            && layout.width(node) > 0.0f && layout.height(node) > 0.0f;
+        if (layout.parent(node) == AegisLayout.NONE || dockNeighbour(i) == AegisLayout.NONE) return false;
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (layout.isHidden(up)) return false;
+        return layout.width(node) > 0.0f && layout.height(node) > 0.0f;
     }
 
     /** A dock's handle: the strip between it and its neighbour, at least {@link #DOCK_HANDLE} wide. {x, y, w, h}. */
@@ -5127,7 +5237,7 @@ public final class AegisWidgets {
         boolean across = layout.isRow(parent);
         float room = 0.0f;
         for (int c = layout.firstChild(parent); c != AegisLayout.NONE; c = layout.nextSibling(c)) {
-            if (c != node && layout.grow(c) > 0.0f) room += across ? layout.width(c) : layout.height(c);
+            if (c != node && !layout.isHidden(c) && layout.grow(c) > 0.0f) room += across ? layout.width(c) : layout.height(c);
         }
         return room;
     }

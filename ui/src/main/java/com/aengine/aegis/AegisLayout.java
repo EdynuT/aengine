@@ -125,6 +125,7 @@ public final class AegisLayout {
     // Step 3g-2: a row or column that scrolls along the way it stacks, how far it is scrolled,
     // and — written by the solve — how long its content is and how far it can scroll.
     private final boolean[] scrollable;
+    private final boolean[] hidden;    // step 4c: out of the solve — no room, no gap, nothing hit
     private final float[]   scrollOffset;
     private final float[]   scrollContent;
     private final float[]   scrollRange;
@@ -176,6 +177,7 @@ public final class AegisLayout {
         contentWidth  = new float[capacity];
         contentHeight = new float[capacity];
         scrollable    = new boolean[capacity];
+        hidden        = new boolean[capacity];
         scrollOffset  = new float[capacity];
         scrollContent = new float[capacity];
         scrollRange   = new float[capacity];
@@ -345,12 +347,41 @@ public final class AegisLayout {
     public float padding(int node) { return padding[node]; }
 
     /**
+     * Takes a node out of its parent's layout, or puts it back — step 4c, Swing's
+     * {@code setVisible}. Hidden, it takes no room and no gap, and nothing under it is hit;
+     * its parent lays the others out as if it were not there. It keeps its place among its
+     * siblings, so showing it again puts it back where it was. Not hidden until set.
+     *
+     * @param node the handle
+     * @param on   {@code true} to hide it
+     */
+    public void setHidden(int node, boolean on) {
+        if (hidden[node] == on) return;
+        hidden[node] = on;
+        version++;
+    }
+
+    /**
+     * Whether a node is hidden with {@link #setHidden}.
+     *
+     * @param node the handle
+     * @return {@code true} while hidden
+     */
+    public boolean isHidden(int node) { return hidden[node]; }
+
+    /**
      * The space between a row's or column's children.
      *
      * @param node the handle
      * @return the gap in pixels
      */
     public float gap(int node) { return gap[node]; }
+
+    /** @return how a row or column aligns its children across X; for putting it back as it was */
+    Align alignX(int node) { return alignX[node]; }
+
+    /** @return how a row or column aligns its children across Y */
+    Align alignY(int node) { return alignY[node]; }
 
     /**
      * How large a share of spare room a node takes.
@@ -692,6 +723,7 @@ public final class AegisLayout {
         float along = 0.0f, across = 0.0f;
         int children = 0;
         for (int child = firstChild[node]; child != NONE; child = nextSibling[child]) {
+            if (hidden[child]) continue;
             measure(child);
             along  += horizontal ? askedWidth(child) : askedHeight(child);
             across  = Math.max(across, horizontal ? askedHeight(child) : askedWidth(child));
@@ -820,6 +852,7 @@ public final class AegisLayout {
         // siblings the later — the one drawn on top — is the one that answers.
         int deepest = root;
         for (int child = firstChild[root]; child != NONE; child = nextSibling[child]) {
+            if (hidden[child]) continue;
             int hit = nodeAt(child, px, py);
             if (hit != NONE) deepest = hit;
         }
@@ -869,6 +902,7 @@ public final class AegisLayout {
         alignY[node]          = Align.START;
         name[node]            = null;
         scrollable[node]      = false;
+        hidden[node]          = false;
         scrollOffset[node]    = 0.0f;
         scrollContent[node]   = 0.0f;
         scrollRange[node]     = 0.0f;
@@ -926,6 +960,7 @@ public final class AegisLayout {
         float totalGrow = 0.0f;
         int   children  = 0;
         for (int child = firstChild[node]; child != NONE; child = nextSibling[child]) {
+            if (hidden[child]) continue;
             asked     += horizontal ? askedWidth(child) : askedHeight(child);
             totalGrow += grow[child];
             children++;
@@ -960,6 +995,11 @@ public final class AegisLayout {
         // rounded, so rounding never accumulates — see the class comment.
         float cursor = (horizontal ? innerX : innerY) + shift;
         for (int child = firstChild[node]; child != NONE; child = nextSibling[child]) {
+            if (hidden[child]) {
+                solvedWidth[child]  = 0.0f;   // nothing to hit or draw where it was
+                solvedHeight[child] = 0.0f;
+                continue;
+            }
             float main = horizontal ? askedWidth(child) : askedHeight(child);
             if (totalGrow > 0.0f) main += spare * (grow[child] / totalGrow);
 

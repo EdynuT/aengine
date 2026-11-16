@@ -73,6 +73,17 @@ public final class AegisScreens {
     /** What each built screen was built from — the file's root — and each built node of it: what describe() writes. */
     private final Map<String, AegisLayoutFile.Node> builtFrom = new HashMap<>();
     private final Map<String, Map<AegisLayoutFile.Node, Integer>> builtNodes = new HashMap<>();
+    private final Map<String, Integer> builtRoots = new HashMap<>();
+
+    /**
+     * Each panel as code made it, before any layout file set its size, spacing or alignment —
+     * kept at the first build, so building again starts every panel from code's word, not from
+     * the arrangement it leaves. {padding, gap, alignX ordinal, alignY ordinal}.
+     */
+    private final Map<Integer, float[]> asCodeMadeIt = new HashMap<>();
+
+    /** Each panel shown as a tab — step 4c: the tabbed pane holding it, and its tab there. */
+    private final Map<String, int[]> tabOf = new HashMap<>();
 
     AegisScreens(AegisLayout layout, AegisWidgets widgets) {
         this.layout  = layout;
@@ -191,12 +202,20 @@ public final class AegisScreens {
                 continue;
             }
             Logger.info(Logger.System.UI, "Screen \"%s\" from %s.", screen, file.source());
+            for (int panel : panels.values()) {
+                asCodeMadeIt.computeIfAbsent(panel, p -> new float[] { layout.padding(p), layout.gap(p),
+                    layout.alignX(p).ordinal(), layout.alignY(p).ordinal() });
+            }
             Build build = new Build(file, widgets);
             int built = build.node(root, AegisLayout.NONE);
             this.widgets.markScreen(built);   // drawn as the window's background
             builtFrom.put(screen, root);
             builtNodes.put(screen, build.handles);
+            builtRoots.put(screen, built);
             build.registerDocks(root, null);
+            // The panels the user closed, once the whole screen stands: closing the last tab of
+            // a dock hides the rows and columns left with nothing shown, which needs them all.
+            build.closeClosed(root);
             return built;
         }
         throw new IllegalStateException("No layout describes the screen \"" + screen + "\" without errors.");
@@ -314,6 +333,9 @@ public final class AegisScreens {
             JsonArray panels = new JsonArray();
             for (String tab : node.tabs()) panels.add(tab);
             o.add("panels", panels);
+            JsonArray closed = new JsonArray();
+            for (String tab : node.tabs()) if (!isPanelOpen(tab)) closed.add(tab);
+            if (!closed.isEmpty()) o.add("closed", closed);
         }
         float width = node.width(), height = node.height();
         Integer handle = handles.get(node);
@@ -337,6 +359,93 @@ public final class AegisScreens {
             o.add("children", children);
         }
         return o;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Closing panels, and building again — step 4c
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * Whether the user can close a panel: it is shown as a tab, in a layout's {@code "tabs"}.
+     * The others — the viewport, the menu bar — stand where the layout puts them for good.
+     *
+     * @param name a registered panel's name
+     * @return {@code true} for a panel shown as a tab
+     */
+    public boolean isPanelClosable(String name) { return tabOf.containsKey(name); }
+
+    /**
+     * Whether a panel is open — on its screen, or closed by the user.
+     *
+     * @param name a registered panel's name
+     * @return {@code false} once {@link #setPanelOpen} closed it; {@code true} for a panel that
+     *         cannot be closed
+     */
+    public boolean isPanelOpen(String name) {
+        int[] at = tabOf.get(name);
+        return at == null || widgets.isTabOpen(at[0], at[1]);
+    }
+
+    /**
+     * Closes a panel shown as a tab, or opens it again — a View menu's item. Closing the last
+     * open tab of a dock hides the dock, and the docks beside it take the room; opening a
+     * panel shows it, bringing its dock back. The arrangement then counts as changed, to be
+     * written down.
+     *
+     * @param name a registered panel's name; one that is not {@link #isPanelClosable} is left alone
+     * @param open {@code false} to close it
+     */
+    public void setPanelOpen(String name, boolean open) {
+        int[] at = tabOf.get(name);
+        if (at == null || widgets.isTabOpen(at[0], at[1]) == open) return;
+        widgets.setTabOpen(at[0], at[1], open);
+        widgets.layoutChanged();
+    }
+
+    /**
+     * Builds a screen again from the files in line, in place of the one built before — View
+     * &gt; Restore default layout, after the user's own file has let go of it. The panels come
+     * off the old arrangement and go into the new; the old rows, columns and tabbed panes are
+     * dropped. Apply the theme and the language again afterwards: the new tabbed panes have
+     * neither yet.
+     *
+     * @param screen a screen built before
+     * @param inLine the files to take it from, as for {@link #build}
+     * @return the screen's new root
+     * @throws IllegalArgumentException if the screen was never built
+     */
+    public int rebuild(String screen, AegisLayoutFile... inLine) {
+        Integer old = builtRoots.get(screen);
+        if (old == null) throw new IllegalArgumentException("No screen \"" + screen + "\" has been built.");
+        for (int panel : panels.values()) {
+            if (isUnder(panel, old) || inTabs.contains(panel)) {
+                layout.detach(panel);
+                layout.setHidden(panel, false);
+                inTabs.remove(panel);
+                // Back to what code gave it: no size, no grow — a tab made it grow — and its own spacing.
+                layout.setSize(panel, 0.0f, 0.0f);
+                layout.setGrow(panel, 0.0f);
+                float[] code = asCodeMadeIt.get(panel);
+                if (code != null) {
+                    layout.setPadding(panel, code[0]);
+                    layout.setGap(panel, code[1]);
+                    layout.setAlignX(panel, AegisLayout.Align.values()[(int) code[2]]);
+                    layout.setAlignY(panel, AegisLayout.Align.values()[(int) code[3]]);
+                }
+            }
+        }
+        tabOf.clear();
+        widgets.discard(old);
+        widgets.clearDocks();
+        builtFrom.remove(screen);
+        builtNodes.remove(screen);
+        builtRoots.remove(screen);
+        return build(screen, inLine);
+    }
+
+    private boolean isUnder(int node, int above) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (up == above) return true;
+        return false;
     }
 
     /** A size, written whole when it is whole — 260, not 260.0; left out when the file had none. */
@@ -383,6 +492,15 @@ public final class AegisScreens {
                 }
             }
             for (AegisLayoutFile.Node child : node.children()) registerDocks(child, node);
+        }
+
+        /** Closes the tabs the file says the user closed. */
+        void closeClosed(AegisLayoutFile.Node node) {
+            for (String name : node.closed()) {
+                int[] at = tabOf.get(name);
+                if (at != null) AegisScreens.this.widgets.setTabOpen(at[0], at[1], false);
+            }
+            for (AegisLayoutFile.Node child : node.children()) closeClosed(child);
         }
 
         private boolean grows(AegisLayoutFile.Node node) {
@@ -439,8 +557,9 @@ public final class AegisScreens {
                     int pane = AegisScreens.this.widgets.tabbedPane(parent);
                     for (String name : node.tabs()) {
                         int panel = panels.get(name);
-                        AegisScreens.this.widgets.addPanelTab(pane, name, titles.getOrDefault(name, name), panel);
+                        int index = AegisScreens.this.widgets.addPanelTab(pane, name, titles.getOrDefault(name, name), panel);
                         inTabs.add(panel);
+                        tabOf.put(name, new int[] { pane, index });
                     }
                     applySizes(node, pane);
                     yield pane;

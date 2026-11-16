@@ -94,6 +94,7 @@ public final class AegisLayoutFile {
         private final int    line;
         private final List<Node>   children = new ArrayList<>();
         private final List<String> tabs     = new ArrayList<>();
+        private final List<String> closed   = new ArrayList<>();   // tabs: the panels the user closed (4c)
         private boolean hasChildren;      // a panel with "children" rearranges its widgets
         private boolean hidden;           // "hidden": true — checked, but kept out of the tree
         private boolean resizable;        // "resizable": true — the user drags its edge (4c)
@@ -130,6 +131,9 @@ public final class AegisLayoutFile {
 
         /** @return a tabs node's panels, in tab order; empty for the others */
         public List<String> tabs() { return Collections.unmodifiableList(tabs); }
+
+        /** @return a tabs node's panels the user closed, each one of {@link #tabs}; empty for the others */
+        public List<String> closed() { return Collections.unmodifiableList(closed); }
 
         /** @return the width asked for, or {@code NaN} if the file does not set it */
         public float width() { return width; }
@@ -456,6 +460,8 @@ public final class AegisLayoutFile {
                 }
             } else if (key.equals("panels") && type == Type.TABS) {
                 readTabs(node, value, path, keyLine);
+            } else if (key.equals("closed") && type == Type.TABS) {
+                readClosed(node, value, keyLine);
             } else {
                 // Declared and never used: a warning, not a reason to set the screen aside.
                 findings.problem(keyLine, node.label() + ": \"" + key + "\" is not something a "
@@ -466,6 +472,14 @@ public final class AegisLayoutFile {
 
         if (type == Type.TABS && object.get("panels") == null) {
             error(at, "tabs needs \"panels\": a list of panel names");
+        }
+        // A closed panel must be one of the tabs; one that is not is ignored, with a warning.
+        for (int i = node.closed.size() - 1; i >= 0; i--) {
+            String closed = node.closed.get(i);
+            if (!node.tabs.contains(closed)) {
+                findings.problem(line(path), "tabs: \"" + closed + "\" is closed but is not one of its \"panels\"; it is ignored");
+                node.closed.remove(i);
+            }
         }
         return node;
     }
@@ -497,6 +511,21 @@ public final class AegisLayoutFile {
                 node.tabs.add(slot.name);
             }
             path.remove(path.size() - 1);
+        }
+    }
+
+    /** A tabs node's {@code "closed"}: panel names, strictly text. A wrong value is a warning: every panel stays open. */
+    private void readClosed(Node node, JsonElement value, int keyLine) {
+        if (!value.isJsonArray()) {
+            findings.problem(keyLine, "tabs: \"closed\" is a list of panel names, [\"output\"]; got " + value + "; every panel stays open");
+            return;
+        }
+        for (JsonElement e : value.getAsJsonArray()) {
+            if (!isString(e)) {
+                findings.problem(keyLine, "tabs: a closed panel's name is text in quotes; got " + e + "; it is ignored");
+            } else if (!node.closed.contains(e.getAsString())) {
+                node.closed.add(e.getAsString());
+            }
         }
     }
 

@@ -140,7 +140,7 @@ public final class AegisTree {
 
     /** Whether a node or anything above it is out of reach. */
     private boolean isOutOfReach(int node) {
-        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (disabled[up]) return true;
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (disabled[up] || layout.isHidden(up)) return true;
         return false;
     }
 

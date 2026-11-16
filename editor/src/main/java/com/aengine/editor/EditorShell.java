@@ -43,8 +43,14 @@ public final class EditorShell {
     private final AegisTree tree;
     private final AegisWidgets ae;
 
-    private final int root;
+    private int root;
     private final AegisScreens screens;
+    private AegisLocale locale;
+
+    /** The docks the View menu closes and opens, by panel name, with their menu items (4c). */
+    private static final String[] DOCKS = { "hierarchy", "assets", "inspector", "console", "output" };
+    private final int[] menuItemDocks = new int[DOCKS.length];
+    private final int menuItemRestoreLayout;
     private final String layoutName;
 
     /** When to write the arrangement down: a second after the user last changed it; 0 for not due. */
@@ -105,6 +111,17 @@ public final class EditorShell {
         menuItemSaveScene = ae.menuItem(menuFile, "menuItemSaveScene", "Save scene", "Ctrl+S");
         ae.separator(menuFile, "separatorFile");
         menuItemQuit = ae.menuItem(menuFile, "menuItemQuit", "Quit");
+
+        // View (4c): a check item per dock, ticked while it is open — Unity's Window menu —
+        // and Restore default layout, which forgets the user's arrangement.
+        int menuView = ae.menu(menuBarMain, "menuView", "View");
+        menuItemDocks[0] = ae.menuCheckItem(menuView, "menuItemHierarchy", "Hierarchy");
+        menuItemDocks[1] = ae.menuCheckItem(menuView, "menuItemAssets",    "Assets");
+        menuItemDocks[2] = ae.menuCheckItem(menuView, "menuItemInspector", "Inspector");
+        menuItemDocks[3] = ae.menuCheckItem(menuView, "menuItemConsole",   "Console");
+        menuItemDocks[4] = ae.menuCheckItem(menuView, "menuItemOutput",    "Output");
+        ae.separator(menuView, "separatorView");
+        menuItemRestoreLayout = ae.menuItem(menuView, "menuItemRestoreLayout", "Restore default layout");
 
         // Toolbar (4b): the tools on the left, Play, Pause and Stop in the middle, as Unity's
         // and Godot's. Each is an icon alone, so each has a tooltip saying what it does.
@@ -188,10 +205,36 @@ public final class EditorShell {
 
         // ── The language: the system's, unless -Plocale=<tag> says otherwise.
         String tag = System.getProperty("aengine.locale", java.util.Locale.getDefault().toLanguageTag());
-        AegisLocale locale = ShellFiles.loadLocale(tag);
+        locale = ShellFiles.loadLocale(tag);
         ae.applyLocale(locale);
         String check = System.getProperty("aengine.localeCheck");
         ShellFiles.reportLocale(locale, tag, check != null ? Path.of(check) : null);
+        showDocksInMenu();
+    }
+
+    /** Ticks each dock's View item while it is open; one the layout does not put in tabs cannot be closed. */
+    private void showDocksInMenu() {
+        for (int i = 0; i < DOCKS.length; i++) {
+            ae.setChecked(menuItemDocks[i], screens.isPanelOpen(DOCKS[i]));
+            ae.setEnabled(menuItemDocks[i], screens.isPanelClosable(DOCKS[i]));
+        }
+    }
+
+    /**
+     * View &gt; Restore default layout: the user's arrangement of the editor screen is
+     * forgotten — taken out of their file — and the screen is built again from the next in
+     * line, the installation's or the factory's, then dressed and translated again.
+     */
+    private void restoreLayout() {
+        layoutSaveDue = 0;
+        ShellFiles.forgetLayout(layoutName, "editor");
+        AegisLayoutFile[] layouts = ShellFiles.loadLayouts(layoutName);
+        root = screens.rebuild("editor", layouts);
+        for (AegisLayoutFile file : layouts) file.report();
+        ae.applyTheme(theme, root);
+        ae.applyLocale(locale);
+        showDocksInMenu();
+        Logger.info(Logger.System.UI, "Layout restored.");
     }
 
     /** A dock's panel with nothing in it yet but its title. */
@@ -278,13 +321,26 @@ public final class EditorShell {
 
         ae.update(root);
 
-        // The arrangement the user changed — a dock resized — is written down a second after
-        // the last change, so a drag is one write, not one per frame.
+        if (ae.wasActivated(menuItemSaveScene)) saveAsked = true;
+        if (ae.wasActivated(menuItemQuit))      quitAsked = true;
+
+        // View: a dock's item closes it or opens it again; the item has already flipped.
+        for (int i = 0; i < DOCKS.length; i++) {
+            if (ae.wasActivated(menuItemDocks[i])) screens.setPanelOpen(DOCKS[i], ae.isChecked(menuItemDocks[i]));
+        }
+        boolean restore = ae.wasActivated(menuItemRestoreLayout);
+
+        // The arrangement the user changed — a dock resized or closed — is written down a
+        // second after the last change, so a drag is one write, not one per frame.
         if (ae.wasLayoutChanged()) layoutSaveDue = System.nanoTime() + LAYOUT_SAVE_DELAY;
         if (layoutSaveDue != 0 && System.nanoTime() >= layoutSaveDue) saveLayout();
 
-        if (ae.wasActivated(menuItemSaveScene)) saveAsked = true;
-        if (ae.wasActivated(menuItemQuit))      quitAsked = true;
+        // Restored after this frame's input is read, before it is drawn: the new screen is
+        // solved here so nothing is drawn from the old one.
+        if (restore) {
+            restoreLayout();
+            layout.solve(root, 0.0f, 0.0f, width, height);
+        }
 
         // Play pressed starts the scene; pressed again, it stops it, as Unity's does. Its
         // pressed look, and Pause's, are set back by showPlayState() once the editor acts.

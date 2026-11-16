@@ -168,4 +168,95 @@ class AegisDockTest {
         AegisLayoutFile again = AegisLayoutFile.parse(new StringReader(top.toString()), "written");
         assertEquals(240.0f, again.screen("editor").children().get(0).width());
     }
+
+    // ── Panels closed and opened — 4c-2 ─────────────────────────────────────────────
+
+    /** A column: the middle grows above a dock of tabs holding left and right. */
+    private static final String TABBED = """
+        { "format": 1, "screens": { "editor": { "root": { "type": "column", "gap": 10, "alignX": "stretch", "children": [
+          { "type": "panel", "panel": "middle", "grow": 1 },
+          { "type": "tabs", "height": 200, "resizable": true, "panels": ["left", "right"] }
+        ] } } } }
+        """;
+
+    @Test
+    void onlyPanelsInTabsCanBeClosed() throws Exception {
+        build(TABBED);
+        assertTrue(screens.isPanelClosable("left"));
+        assertFalse(screens.isPanelClosable("middle"));
+        screens.setPanelOpen("middle", false);
+        assertTrue(screens.isPanelOpen("middle"), "left alone");
+    }
+
+    @Test
+    void closingTheShownTabShowsTheNextAndTheLastHidesTheDock() throws Exception {
+        build(TABBED);
+        int pane = layout.parent(left);
+        screens.setPanelOpen("left", false);
+        shell.frame();
+        assertFalse(screens.isPanelOpen("left"));
+        assertEquals(1, ae.selectedTab(pane), "the next open tab is shown");
+
+        screens.setPanelOpen("right", false);
+        shell.frame();
+        assertTrue(layout.isHidden(pane), "nothing open: the dock goes");
+        assertEquals(600.0f, layout.height(middle), "and the grower takes its room");
+
+        screens.setPanelOpen("right", true);
+        shell.frame();
+        assertFalse(layout.isHidden(pane), "opened, it comes back");
+        assertEquals(1, ae.selectedTab(pane), "showing the panel opened");
+        assertTrue(layout.height(middle) < 600.0f);
+    }
+
+    @Test
+    void aClosedTabIsReachedByNeitherPointerNorKeys() throws Exception {
+        build(TABBED);
+        int pane = layout.parent(right) != AegisLayout.NONE ? layout.parent(right) : layout.parent(left);
+        screens.setPanelOpen("right", false);
+        tree.focus(layout.firstChild(pane));
+        shell.key(Keys.RIGHT);
+        assertEquals(0, ae.selectedTab(pane), "the arrows pass a closed tab by");
+    }
+
+    @Test
+    void closedPanelsAreWrittenDownAndReadBack() throws Exception {
+        build(TABBED);
+        screens.setPanelOpen("left", false);
+        JsonObject tabs = screens.describe("editor").getAsJsonObject("root").getAsJsonArray("children").get(1).getAsJsonObject();
+        assertEquals("[\"left\"]", tabs.get("closed").toString());
+
+        JsonObject top = new JsonObject();
+        top.addProperty("format", 1);
+        JsonObject all = new JsonObject();
+        all.add("editor", screens.describe("editor"));
+        top.add("screens", all);
+        AegisLayoutFile again = AegisLayoutFile.parse(new StringReader(top.toString()), "written");
+        assertEquals(java.util.List.of("left"), again.screen("editor").children().get(1).closed());
+    }
+
+    @Test
+    void aClosedNameThatIsNotATabIsIgnored() throws Exception {
+        AegisLayoutFile file = AegisLayoutFile.parse(new StringReader("""
+            { "format": 1, "screens": { "editor": { "root": { "type": "tabs", "panels": ["left"], "closed": ["right", 3] } } } }
+            """), "test");
+        assertTrue(file.screen("editor").closed().isEmpty());
+    }
+
+    @Test
+    void aScreenIsBuiltAgainAndThePanelsMoveToTheNewArrangement() throws Exception {
+        build(TABBED);
+        screens.setPanelOpen("left", false);
+        int newRoot = screens.rebuild("editor", AegisLayoutFile.parse(new StringReader(THREE), "factory"));
+        layout.attach(newRoot, shell.root);
+        layout.setGrow(newRoot, 1.0f);
+        shell.frame();
+
+        assertEquals(newRoot, layout.parent(left), "back in a row, by the new file");
+        assertFalse(screens.isPanelClosable("left"), "no longer in tabs");
+        assertEquals(200.0f, layout.width(left));
+        tree.focus(button);
+        drag(205.0f, 300.0f, 225.0f);
+        assertEquals(220.0f, layout.width(left), "the new docks are the ones dragged");
+    }
 }

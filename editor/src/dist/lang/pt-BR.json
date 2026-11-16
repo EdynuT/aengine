@@ -6,6 +6,13 @@
   "menu.menuBarMain.menuFile": "Arquivo",
   "menuFile.menuItemSaveScene": "Salvar cena",
   "menuFile.menuItemQuit": "Sair",
+  "menu.menuBarMain.menuView": "Exibir",
+  "menuView.menuItemHierarchy": "Hierarquia",
+  "menuView.menuItemAssets": "Assets",
+  "menuView.menuItemInspector": "Inspetor",
+  "menuView.menuItemConsole": "Console",
+  "menuView.menuItemOutput": "Saída",
+  "menuView.menuItemRestoreLayout": "Restaurar layout padrão",
 
   "toolbar.toggleSelect.tooltip": "Selecionar",
   "toolbar.toggleMove.tooltip": "Mover",
