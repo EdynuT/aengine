@@ -271,6 +271,13 @@ public final class AegisThemeCatalogue {
         size  ("menu.gap",            "28", (s, v) -> s.menuGap = v);                       // text to shortcut
         size  ("menu.check.width",    "18", (s, v) -> s.menuCheckWidth = v);
 
+        // ── Dialog: its title bar, and the outline of its default button ───────────────
+        colour("dialog.title",           "@global.text",   s -> s.dialogTitle);
+        colour("dialog.line",            "@global.border", s -> s.dialogLine);         // under the title bar
+        colour("dialog.close.hover",     "#C04040",        s -> s.dialogCloseHover);
+        colour("dialog.default",         "@global.accent", s -> s.dialogDefault);      // the default button's outline
+        size  ("dialog.title.padding.y", "6", (s, v) -> s.dialogTitlePaddingY = v);
+
         // ── Tooltip. Global values only: it belongs to no panel. ─────────────────────────
         colour("tooltip.fill",    "#1A1C26",        s -> s.tooltipFill);
         colour("tooltip.border",  "@global.border", s -> s.tooltipBorder);

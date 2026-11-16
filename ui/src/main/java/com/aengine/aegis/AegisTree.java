@@ -188,7 +188,9 @@ public final class AegisTree {
         // It also moves focus: to the focusable node pressed on, or away from everything.
         if (justPressed) {
             pressed = target;
-            if (target == AegisLayout.NONE || !keepsFocus[target]) {
+            // Outside a modal layer a press reaches nothing, and leaves focus inside it.
+            boolean blocked = topModal() != AegisLayout.NONE && nodeUnder(root, mouseX, mouseY) == AegisLayout.NONE;
+            if (!blocked && (target == AegisLayout.NONE || !keepsFocus[target])) {
                 focused = markedAt(focusable, root, mouseX, mouseY);
             }
         }

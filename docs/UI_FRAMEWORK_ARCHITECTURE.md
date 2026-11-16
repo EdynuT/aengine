@@ -61,6 +61,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-8 | Tooltips: `ae.setTooltip` on any node; after the pointer rests, at once moving on from one, Ctrl+F1 from the keyboard |
 | Step 3g-9 | Combo box: `ae.comboBox`, its list dropped down on the overlay layer; chosen by pointer, press-and-release, the arrows, letters |
 | Step 3g-10 | Menu bar and menus: `ae.menuBar`, `menu`, `menuItem`, `menuCheckItem`, `subMenu`; by pointer, press-and-release, and F10 with the arrows |
+| Step 3g-11 | Dialog: `ae.dialog`, `openDialog`; modal over a dimmed window, Tab kept inside, dragged by its title, Esc or × to cancel, a default button for Enter |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -293,8 +294,7 @@ unless `-PthemeWatch` turns it on, until the settings page carries the option; o
 one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
-against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-10.**
+against Swing's list; each keyboard-operable like the rest. **Done: 3g-1 to 3g-11.**
 
 | Group | Widgets |
 |---|---|
@@ -309,7 +309,7 @@ separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by whe
 **3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** ✅ split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** ✅ tree; **3g-7** ✅ the overlay layer; **3g-8** ✅
-tooltip; **3g-9** ✅ combo box; **3g-10** ✅ menu bar and menus; **3g-11** dialog. The third group
+tooltip; **3g-9** ✅ combo box; **3g-10** ✅ menu bar and menus; **3g-11** ✅ dialog. The third group
 waits for the panels that ask for it, in Phase 4.
 
 **The format stays 1 until release.** Theme and layout files keep `"format": 1` while the
@@ -473,6 +473,20 @@ text only — binding it is the caller's, as with Swing's accelerator text. `was
 by the title's name — `fileMenu.saveItem`. Mnemonics (Alt+F) wait for localisation, since the
 underlined letter depends on the language. The factory layout gains a `menu` panel above the
 toolbar, holding the scaffolding's bar.
+
+**3g-11, dialog.** `ae.dialog(name, title)` makes a modal `JDialog`, closed and hanging
+nowhere: a column with a title bar, to which its contents are added, stretched across — buttons
+go in a row of their own. `openDialog` shows it centred, a little above the middle, over a
+scrim; nothing outside it can be pointed at — a press there reaches nothing and leaves focus
+inside — Tab goes around its widgets only, and F10 does not reach the menus behind it. Focus
+goes to its first widget and back to where it was when it closes. Its title bar drags it, kept
+in the window; the × at the bar's right and Esc close it as cancelled (`wasCancelled`, for one
+frame); `closeDialog` is code's, for OK and Cancel, and is not a cancel.
+`setDefaultButton(dialog, button)` is `JRootPane`'s: Enter from a text field, a spinner or a
+slider in the dialog activates it, and it is drawn with an outline of its own. A theme now
+dresses everything that hangs nowhere — dialogs and popups not open, panels not shown — so
+what opens later is already dressed. Theme entries: `dialog.title`, `.line`, `.close.hover`,
+`.default`, `.title.padding.y`. Help > About in the scaffolding opens one.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

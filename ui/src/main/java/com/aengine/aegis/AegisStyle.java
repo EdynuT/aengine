@@ -287,6 +287,19 @@ public final class AegisStyle {
     /** The room at an item's left where a tick shows. */
     public float         menuCheckWidth    = 18.0f;
 
+    // ── Dialog: its title bar; it stands on the overlay's background ───────────
+
+    /** The title. */
+    public final float[] dialogTitle       = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The line under the title bar. */
+    public final float[] dialogLine        = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** Behind the close mark under the pointer. */
+    public final float[] dialogCloseHover  = { 0.75f, 0.25f, 0.25f, 1.0f };
+    /** Space above and below the title. */
+    public float         dialogTitlePaddingY = 6.0f;
+    /** The default button's outline, which Enter activates from anywhere in the dialog. */
+    public final float[] dialogDefault     = { 0.36f, 0.62f, 0.94f, 1.0f };
+
     // ── Tooltip ─────────────────────────────────────────────────────────────
 
     /** Its background. */

@@ -86,6 +86,9 @@ public final class AegisWidgets {
     private static final byte MENU         = 18;  //             a menu: a column shown as a popup
     private static final byte MENU_ITEM    = 19;  //             an item in a menu
 
+    private static final byte DIALOG       = 20;  // step 3g-11: a modal column on the overlay layer
+    private static final byte DIALOG_TITLE = 21;  //             its title bar, dragged to move it
+
     /** "No item" — the parent of a tree's top level, and what is selected in a tree with none. */
     public static final int NO_ITEM = -1;
 
@@ -219,6 +222,13 @@ public final class AegisWidgets {
     private int     menuSteps;      // Left, Right
     private boolean menuEnter;      // Enter, Space
     private boolean pendingF10;
+
+    /** Each dialog's default button — what Enter activates from a field in it — or NONE. */
+    private final int[] defaultButton;
+    /** The dialog the user cancelled this frame — Esc, or its close mark — or NONE. */
+    private int cancelled = AegisLayout.NONE;
+    /** Where on a title bar the pointer took hold of it, from the dialog's corner. */
+    private float dialogGrabX, dialogGrabY;
 
     /** Alt+Down or F4 this frame: open the focused combo box's list. */
     private boolean pendingOpenList;
@@ -421,6 +431,7 @@ public final class AegisWidgets {
         this.itemsOf         = new TreeItems[capacity];
         this.tooltip         = new String[capacity];
         this.comboItems      = new String[capacity][];
+        this.defaultButton   = new int[capacity];
         this.titleMenu       = new int[capacity];
         this.menuOwner       = new int[capacity];
         this.itemSubMenu     = new int[capacity];
@@ -492,6 +503,11 @@ public final class AegisWidgets {
         Arrays.fill(styleOf, null);
 
         dressSubtree(theme, root);
+        // What hangs nowhere is dressed too: dialogs and popups not open, panels a layout does
+        // not show, tabs not shown — so whatever is shown later is already in the theme.
+        for (int node = 0; node < layout.nodeCount(); node++) {
+            if (node != root && layout.parent(node) == AegisLayout.NONE) dressSubtree(theme, node);
+        }
         theme.report();
     }
 
@@ -533,6 +549,7 @@ public final class AegisWidgets {
             case TREE_VIEW            -> "tree";
             case COMBO_BOX            -> "combo";
             case MENU_TITLE, MENU_ITEM -> "menu";
+            case DIALOG_TITLE         -> "dialog";
             default                   -> "";
         };
     }
@@ -561,6 +578,8 @@ public final class AegisWidgets {
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
             case TREE_VIEW -> fitTree(node, style);
+            case DIALOG_TITLE -> fit(node, (float) Math.ceil(aegis.measure(label[node])) + line * 3.0f,
+                line + style.dialogTitlePaddingY * 2.0f);
             case MENU_TITLE -> fit(node, (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f,
                 line + style.menuPaddingY * 2.0f);
             case MENU_ITEM -> {
@@ -1749,7 +1768,7 @@ public final class AegisWidgets {
             int i = --overlayCount;
             int node = overlayNode[i];
             tree.removeLayer(node);
-            if (isUnder(tree.focused(), node)) tree.focus(overlayFocus[i]);
+            if (overlayModal[i] || isUnder(tree.focused(), node)) tree.focus(overlayFocus[i]);
             overlayClosed(node, overlayOwner[i]);
         }
     }
@@ -2356,6 +2375,142 @@ public final class AegisWidgets {
     }
 
     // -----------------------------------------------------------------------------------
+    // Dialog — step 3g-11
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A dialog: a window inside the window, with a title, that keeps everything else from the
+     * user while it is open — a modal {@code JDialog}. Made closed; add what it holds to the
+     * handle, then {@link #openDialog} it as often as needed.
+     *
+     * <p>Open, it is drawn centred above everything, over a dimmed window, and nothing outside
+     * it can be pointed at; Tab and Shift+Tab go around the widgets inside it only. Focus goes
+     * to its first widget, and back to where it was when it closes. Its title bar is dragged
+     * to move it; the × at its right, or Esc, closes it as cancelled
+     * ({@link #wasCancelled}). With a {@linkplain #setDefaultButton default button}, Enter from
+     * a field, a spinner or a slider in it activates that button.</p>
+     *
+     * <p>The handle is a column — the title bar first, then whatever is added — with its
+     * widgets stretched across, so put buttons side by side in a row of their own.</p>
+     *
+     * @param name  its name, which a theme writes — {@code "aboutDialog"}, dressed by
+     *              {@code aboutDialog.dialog.title} and {@code aboutDialog.button.fill}
+     * @param title what its title bar says; kept
+     * @return its handle, a column hanging nowhere
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int dialog(String name, String title) {
+        AegisLayout.checkNodeName(name);
+        int dialog = layout.column(AegisLayout.NONE);
+        layout.setNodeName(dialog, name);
+        layout.setPadding(dialog, 12.0f);
+        layout.setGap(dialog, 10.0f);
+        layout.setAlignX(dialog, AegisLayout.Align.STRETCH);
+        kind[dialog] = DIALOG;
+        defaultButton[dialog] = AegisLayout.NONE;
+
+        int bar = layout.box(dialog);
+        tree.setInteractive(bar, true);
+        tree.setKeepsFocus(bar, true);
+        kind[bar]       = DIALOG_TITLE;
+        label[bar]      = title;
+        themePath[bar]  = List.of(name);
+        themeNamed[bar] = false;
+        styleOf[bar]    = null;
+        fitToContent(bar);
+        return dialog;
+    }
+
+    /**
+     * Opens a dialog, centred in the window, and gives focus to the first widget in it. One
+     * already open is left where it is.
+     *
+     * @param dialog the dialog
+     */
+    public void openDialog(int dialog) {
+        if (isOverlayOpen(dialog)) return;
+        float w = layout.naturalWidth(dialog), h = layout.naturalHeight(dialog);
+        float x = Math.max(0.0f, (boundsW() - w) * 0.5f);
+        float y = Math.max(0.0f, (boundsH() - h) / 3.0f);   // a little above the middle, as windows sit
+        openOverlay(dialog, Math.round(x), Math.round(y), true, AegisLayout.NONE);
+        tree.focus(AegisLayout.NONE);
+        tree.focusNext(dialog);
+    }
+
+    /**
+     * Closes a dialog from code — its OK and Cancel buttons do this — giving focus back to
+     * where it was before it opened. Not reported by {@link #wasCancelled}.
+     *
+     * @param dialog the dialog
+     */
+    public void closeDialog(int dialog) { closeOverlay(dialog); }
+
+    /**
+     * Whether a dialog is open.
+     *
+     * @param dialog the dialog
+     * @return {@code true} while it is shown
+     */
+    public boolean isDialogOpen(int dialog) { return isOverlayOpen(dialog); }
+
+    /**
+     * Whether the user closed a dialog this frame without choosing — by Esc or the × of its
+     * title bar.
+     *
+     * @param dialog the dialog
+     * @return {@code true} in the frame it was cancelled
+     */
+    public boolean wasCancelled(int dialog) { return cancelled == dialog; }
+
+    /**
+     * The button Enter activates from a text field, a spinner or a slider in a dialog — its
+     * OK, as Swing's {@code JRootPane.setDefaultButton}. Drawn with an outline of its own.
+     *
+     * @param dialog the dialog
+     * @param button a button in it, or {@link AegisLayout#NONE} for none
+     */
+    public void setDefaultButton(int dialog, int button) { defaultButton[dialog] = button; }
+
+    /** The dialog a node is in, or NONE. */
+    private int dialogOf(int node) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (kind[up] == DIALOG) return up;
+        return AegisLayout.NONE;
+    }
+
+    /** Whether a button is the default button of the dialog it is in. */
+    private boolean isDefaultButton(int node) {
+        int dialog = dialogOf(node);
+        return dialog != AegisLayout.NONE && defaultButton[dialog] == node;
+    }
+
+    /** Where the close mark of a title bar starts: a square at its right end. */
+    private float closeMarkX(int bar) { return layout.x(bar) + layout.width(bar) - layout.height(bar); }
+
+    /** A dialog's title bar pressed: on its close mark it cancels; elsewhere it is taken hold of, and dragged. */
+    private void updateDialog(int pressed) {
+        cancelled = AegisLayout.NONE;
+        if (pressed == AegisLayout.NONE || kind[pressed] != DIALOG_TITLE) return;
+        int dialog = layout.parent(pressed);
+        int at = overlayIndex(dialog);
+        if (at < 0) return;
+        if (pressed != lastPressed) {
+            if (tree.pointerX() >= closeMarkX(pressed)) {
+                closeOverlay(dialog);
+                cancelled = dialog;
+                return;
+            }
+            dialogGrabX = tree.pointerX() - layout.x(dialog);
+            dialogGrabY = tree.pointerY() - layout.y(dialog);
+        } else {
+            overlayX[at] = Math.round(tree.pointerX() - dialogGrabX);
+            overlayY[at] = Math.round(tree.pointerY() - dialogGrabY);
+            solveOverlay(at);
+            overlayX[at] = layout.x(dialog);   // kept where the window let it go
+            overlayY[at] = layout.y(dialog);
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
     // Tooltips — step 3g-8
     // -----------------------------------------------------------------------------------
 
@@ -2538,7 +2693,8 @@ public final class AegisWidgets {
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
      * box, a label, a separator, a spinner, a tabbed pane or its bar, a split pane or its
-     * divider, a tree, a combo box or its list, or a menu bar, title, menu or item.
+     * divider, a tree, a combo box or its list, a menu bar, title, menu or item, or a dialog or
+     * its title bar.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -2614,7 +2770,7 @@ public final class AegisWidgets {
             else if (!repeat && key == Keys.F10)                 pendingF10 = true;
             return;
         }
-        if (!repeat && key == Keys.F10 && mods == 0) {
+        if (!repeat && key == Keys.F10 && mods == 0 && tree.topModal() == AegisLayout.NONE) {
             pendingF10 = true;
             return;
         }
@@ -3195,6 +3351,17 @@ public final class AegisWidgets {
         if (focused != AegisLayout.NONE && (pendingEnter || pendingSpace)) {
             act(focused, true);
         }
+        // Enter from a field, a spinner or a slider in a dialog activates its default button.
+        if (pendingEnter) {
+            int dialog = tree.topModal() != AegisLayout.NONE && kind[tree.topModal()] == DIALOG ? tree.topModal() : AegisLayout.NONE;
+            boolean passesEnter = focused == AegisLayout.NONE
+                || kind[focused] == TEXT_FIELD || kind[focused] == SPINNER || kind[focused] == SLIDER;
+            if (dialog != AegisLayout.NONE && defaultButton[dialog] != AegisLayout.NONE && passesEnter
+                    && (focused == AegisLayout.NONE || dialogOf(focused) == dialog)) {
+                activated = defaultButton[dialog];
+                activatedByKeyboard = true;
+            }
+        }
 
         // A slider being dragged follows the pointer every frame the press lasts, even once
         // the pointer has left it — the tree's capture keeps it pressed. The first frame of the
@@ -3211,6 +3378,7 @@ public final class AegisWidgets {
         // picks the line under the pointer first, and dragging selects across lines.
         updateCombo(pressed, focused);
         updateMenus(pressed);
+        updateDialog(pressed);
 
         // A tree pressed selects, opens and closes, on the press.
         if (pressed != AegisLayout.NONE && kind[pressed] == TREE_VIEW && pressed != lastPressed) {
@@ -3350,8 +3518,12 @@ public final class AegisWidgets {
         pendingTabSwitch = 0;
         stepped          = AegisLayout.NONE;
 
-        // Esc, outside a text field, closes the topmost overlay.
-        if (pendingEscape && overlayCount > 0) closeOverlaysFrom(overlayCount - 1);
+        // Esc, outside a text field, closes the topmost overlay — a dialog as cancelled.
+        if (pendingEscape && overlayCount > 0) {
+            int top = overlayNode[overlayCount - 1];
+            closeOverlaysFrom(overlayCount - 1);
+            if (kind[top] == DIALOG) cancelled = top;
+        }
         pendingEscape = false;
 
         updateTooltip(root);
@@ -3860,6 +4032,7 @@ public final class AegisWidgets {
         if (kind[root] == COMBO_LIST) drawComboList(root);
         if (kind[root] == MENU_TITLE) drawMenuTitle(root);
         if (kind[root] == MENU_ITEM)  drawMenuItem(root);
+        if (kind[root] == DIALOG_TITLE) drawDialogTitle(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -3945,6 +4118,10 @@ public final class AegisWidgets {
         aegis.addTextTop(textX, textY, text, ink[0], ink[1], ink[2], ink[3]);
         aegis.popClipRect();
 
+        if (isDefaultButton(node)) {
+            float[] d = style.dialogDefault;
+            aegis.addRoundedRect(x, y, w, h, style.buttonRadius, 0.0f, 0.0f, 0.0f, 0.0f, d[0], d[1], d[2], d[3], 2.0f);
+        }
         if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.buttonRadius);
     }
 
@@ -4184,6 +4361,25 @@ public final class AegisWidgets {
             textY, arrowText, a[0], a[1], a[2], a[3]);
 
         if (tree.isFocused(node)) drawFocusRing(style, x, y, w, h, style.comboRadius);
+    }
+
+    /** A dialog's title bar: the title, a line under it, and the × that cancels, red under the pointer. */
+    private void drawDialogTitle(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        float[] ink = style.dialogTitle, line = style.dialogLine;
+        aegis.addTextTop(x, y + (h - aegis.lineHeight()) * 0.5f, label[node], ink[0], ink[1], ink[2], ink[3]);
+        aegis.addRoundedRect(x, y + h + 4.0f, w, 1.0f, 0.0f, line[0], line[1], line[2], line[3]);
+
+        float markX = closeMarkX(node);
+        if (tree.isHovered(node) && tree.pointerX() >= markX) {
+            float[] hot = style.dialogCloseHover;
+            aegis.addRoundedRect(markX, y, h, h, 4.0f, hot[0], hot[1], hot[2], hot[3]);
+        }
+        arrowText.setLength(0);
+        arrowText.append('\u00D7');   // ×, in Latin-1
+        aegis.addTextTop(Math.round(markX + (h - aegis.measure(arrowText)) * 0.5f), y + (h - aegis.lineHeight()) * 0.5f,
+            arrowText, ink[0], ink[1], ink[2], ink[3]);
     }
 
     /** A title on a menu bar: highlighted while its menu is open, lighter under the pointer. */

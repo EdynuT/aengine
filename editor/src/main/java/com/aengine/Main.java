@@ -136,6 +136,9 @@ public class Main extends Engine {
     private int aboutItem;
     private int gridMenuItem;
     private String lastMenuChoice = "-";
+    private int aboutDialog;        // step 3g-11: a dialog, from ae.dialog(), opened by Help > About
+    private int aboutOkButton;
+    private int aboutCancelButton;
     private int shadingCombo;       // step 3g-9: a combo box, from ae.comboBox()
     private int showPopupButton;    // step 3g-7: a popup on the overlay layer, from ae.showPopup()
     private int examplePopup;
@@ -833,7 +836,14 @@ public class Main extends Engine {
         // place to close the editor.
         if (ae.wasActivated(saveItem))     lastMenuChoice = "Save";
         if (ae.wasActivated(quitItem))     lastMenuChoice = "Quit";
-        if (ae.wasActivated(aboutItem))    lastMenuChoice = "About";
+        if (ae.wasActivated(aboutItem)) {
+            lastMenuChoice = "About";
+            ae.openDialog(aboutDialog);
+        }
+        // Step 3g-11: the dialog's buttons close it; Esc and its × close it by themselves.
+        if (ae.wasActivated(aboutOkButton))     { ae.closeDialog(aboutDialog); lastMenuChoice = "About: OK"; }
+        if (ae.wasActivated(aboutCancelButton)) { ae.closeDialog(aboutDialog); lastMenuChoice = "About: Cancel"; }
+        if (ae.wasCancelled(aboutDialog))       lastMenuChoice = "About: cancelled";
         if (ae.wasActivated(gridMenuItem)) lastMenuChoice = ae.isChecked(gridMenuItem) ? "Show grid on" : "Show grid off";
 
         // Step 3g-7: the popup opens just below the button that asks for it.
@@ -1153,6 +1163,23 @@ public class Main extends Engine {
         ae.menuCheckItem(viewMenu, "showStatsItem", "Show stats");
         int helpMenu = ae.menu(mainMenu, "helpMenu", "Help");
         aboutItem = ae.menuItem(helpMenu, "aboutItem", "About Aegis...");
+
+        // Step 3g-11: a dialog. ae.dialog() makes it closed, hanging nowhere: what it holds is
+        // added to it like to any column, its widgets stretched across, so the buttons go in a
+        // row of their own. ae.openDialog() shows it centred over a dimmed window; nothing
+        // outside it can be pointed at, Tab stays inside, its title bar drags it, and Esc or
+        // its × cancel it — ae.wasCancelled(). OK is the default button: Enter in the field
+        // activates it. Help > About opens it, from the frame loop.
+        aboutDialog = ae.dialog("aboutDialog", "About Aegis");
+        ae.label(aboutDialog, "aboutLine1", "Aegis, the AEngine interface.");
+        ae.label(aboutDialog, "aboutLine2", "Every widget of step 3g, from the keyboard too.");
+        int aboutNote = ae.textField(aboutDialog, "aboutNoteField", 40);
+        ae.setPlaceholder(aboutNote, "Leave a note, then Enter");
+        int aboutButtons = layout.row(aboutDialog);
+        layout.setGap(aboutButtons, 8.0f);
+        aboutOkButton     = ae.button(aboutButtons, "aboutOkButton", "OK");
+        aboutCancelButton = ae.button(aboutButtons, "aboutCancelButton", "Cancel");
+        ae.setDefaultButton(aboutDialog, aboutOkButton);
 
         layoutRow = screens.rowPanel("toolbar");
         layout.setPadding(layoutRow, 12.0f);   // clear space inside the row's edges
