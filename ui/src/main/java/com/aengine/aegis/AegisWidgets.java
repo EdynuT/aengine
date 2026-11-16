@@ -219,6 +219,7 @@ public final class AegisWidgets {
     private boolean pendingSpace;       // Space went down
     private int     pendingSteps;       // slider steps asked for this frame, + or -
     private int     pendingJump;        // -1 Home, +1 End, 0 none
+    private float   pendingWheel;       // the wheel's turn this frame, as scroll() was handed it
 
     // This frame's outcome.
     private int     activated = AegisLayout.NONE;   // a button, activated
@@ -1366,11 +1367,18 @@ public final class AegisWidgets {
         }
         lastPressed = pressed;
 
-        // A field that has just gained focus shows its caret at once rather than mid-blink.
+        // A field that has just gained focus shows its caret at once rather than mid-blink —
+        // and whatever gained focus is scrolled into view, so Tab never lands somewhere the
+        // user cannot see.
         if (focused != lastFocused) {
             caretShownAt = System.nanoTime();
             lastFocused  = focused;
+            if (focused != AegisLayout.NONE) scrollIntoView(focused);
         }
+
+        // The wheel: a text box under the pointer scrolls its lines; otherwise the nearest
+        // scrolling row or column under it that has somewhere to go.
+        if (pendingWheel != 0.0f) wheel(root, pendingWheel);
 
         // The undo history belongs to the field with focus: once focus is elsewhere it is gone.
         // A second without an edit ends the block being typed, so the next word is its own undo.
@@ -1395,6 +1403,7 @@ public final class AegisWidgets {
         pendingSpace     = false;
         pendingSteps     = 0;
         pendingJump      = 0;
+        pendingWheel     = 0.0f;
     }
 
     /** Moves a slider to the value under the pointer's x, and reports a change if there was one. */
@@ -1597,16 +1606,54 @@ public final class AegisWidgets {
     }
 
     /**
-     * Scrolls the text box under the pointer by the mouse wheel — {@code dy} as the wheel
-     * reports it, positive away from the user, which scrolls up. Three lines a notch. Handed in
-     * by whoever owns input, like {@link #key}; a wheel over anything else does nothing here.
+     * The mouse wheel — {@code dy} as the wheel reports it, positive away from the user, which
+     * scrolls up. Three lines a notch. Handed in by whoever owns input, like {@link #key}, and
+     * applied by {@link #update}: a text box under the pointer scrolls its lines; otherwise the
+     * nearest scrolling row or column under the pointer that can move scrolls
+     * ({@link AegisLayout#setScrollable}).
      *
      * @param dy the wheel's vertical offset, as from {@link com.aengine.core.Input#eventScrollY}
      */
     public void scroll(float dy) {
-        int node = tree.hovered();
-        if (node == AegisLayout.NONE || kind[node] != TEXT_BOX) return;
-        fieldScroll[node] -= dy * aegis.lineHeight() * 3.0f;   // kept in range when drawn
+        pendingWheel += dy;
+    }
+
+    /** What the wheel scrolls; see {@link #scroll}. */
+    private void wheel(int root, float dy) {
+        float by = dy * aegis.lineHeight() * 3.0f;
+        int hovered = tree.hovered();
+        if (hovered != AegisLayout.NONE && kind[hovered] == TEXT_BOX) {
+            fieldScroll[hovered] -= by;   // kept in range when drawn
+            return;
+        }
+        for (int up = layout.nodeAt(root, tree.pointerX(), tree.pointerY()); up != AegisLayout.NONE;
+             up = layout.parent(up)) {
+            if (layout.isScrollable(up) && layout.scrollRange(up) > 0.0f) {
+                layout.setScrollOffset(up, layout.scrollOffset(up) - by);   // kept in range by the solve
+                return;
+            }
+        }
+    }
+
+    /**
+     * Scrolls every scrolling row or column around a node just far enough to show it whole —
+     * or, if it is longer than the room, its start. Read from this frame's rectangles; the
+     * next solve moves it.
+     */
+    private void scrollIntoView(int node) {
+        for (int up = layout.parent(node); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (!layout.isScrollable(up)) continue;
+            boolean across = layout.isRow(up);
+            float pad       = layout.padding(up);
+            float viewStart = (across ? layout.x(up) : layout.y(up)) + pad;
+            float viewEnd   = (across ? layout.x(up) + layout.width(up) : layout.y(up) + layout.height(up)) - pad;
+            float start     = across ? layout.x(node) : layout.y(node);
+            float end       = start + (across ? layout.width(node) : layout.height(node));
+            float offset    = layout.scrollOffset(up);
+            if (start < viewStart)  offset -= viewStart - start;
+            else if (end > viewEnd) offset += Math.min(end - viewEnd, start - viewStart);
+            layout.setScrollOffset(up, offset);
+        }
     }
 
     private static float clamp(float value, float min, float max) {
@@ -1682,9 +1729,51 @@ public final class AegisWidgets {
         if (kind[root] == TEXT_BOX)   drawTextBox(root);
         if (kind[root] == LABEL)      drawLabel(root);
         if (kind[root] == SEPARATOR)  drawSeparator(root);
+
+        // A scrolling row or column shows its children only inside its padding, and where it
+        // is scrolled to (step 3g-2).
+        boolean scrolls = layout.isScrollable(root);
+        if (scrolls) {
+            float pad = layout.padding(root);
+            aegis.pushClipRect(layout.x(root) + pad, layout.y(root) + pad,
+                layout.width(root) - pad * 2.0f, layout.height(root) - pad * 2.0f);
+        }
         for (int child = layout.firstChild(root); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
             draw(child);
+        }
+        if (scrolls) {
+            aegis.popClipRect();
+            drawScrollIndicator(root);
+        }
+    }
+
+    /**
+     * Where a scrolling row or column is: a thin bar along its far edge — the right of a
+     * column, the bottom of a row — as long as the share of the content in view, at the place
+     * the view is. Drawn only when there is something to scroll to; centred in the padding
+     * when the padding has room for it.
+     */
+    private void drawScrollIndicator(int node) {
+        float range = layout.scrollRange(node);
+        if (range <= 0.0f) return;
+        AegisStyle style = globalStyle;   // containers are not dressed: global values only, for now
+        boolean across = layout.isRow(node);
+        float pad   = layout.padding(node);
+        float t     = style.scrollbarWidth;
+        float view  = (across ? layout.width(node) : layout.height(node)) - pad * 2.0f;
+        float total = layout.scrollContent(node);
+        float len   = Math.max(t * 4.0f, view * view / total);
+        float at    = (across ? layout.x(node) : layout.y(node)) + pad
+                    + (view - len) * (layout.scrollOffset(node) / range);
+        float edge  = (Math.max(pad, t) + t) * 0.5f;   // from the far edge to the bar's far side
+        float[] ink = style.scrollbarThumb;
+        if (across) {
+            aegis.addRoundedRect(at, layout.y(node) + layout.height(node) - edge, len, t, t * 0.5f,
+                ink[0], ink[1], ink[2], ink[3]);
+        } else {
+            aegis.addRoundedRect(layout.x(node) + layout.width(node) - edge, at, t, len, t * 0.5f,
+                ink[0], ink[1], ink[2], ink[3]);
         }
     }
 

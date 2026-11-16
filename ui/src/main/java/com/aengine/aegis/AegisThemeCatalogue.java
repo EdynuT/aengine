@@ -196,6 +196,11 @@ public final class AegisThemeCatalogue {
         colour("separator.line",      "@global.border", s -> s.separatorLine);
         size  ("separator.thickness", "1", (s, v) -> s.separatorThickness = v);
         size  ("separator.margin",    "4", (s, v) -> s.separatorMargin = v);   // clear space on each side of the line
+
+        // ── Scroll indicator, on any scrolling panel. Global values only for now: panels are
+        //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
+        colour("scrollbar.thumb", "@global.border", s -> s.scrollbarThumb);
+        size  ("scrollbar.width", "4", (s, v) -> s.scrollbarWidth = v);
     }
 
     private AegisThemeCatalogue() { }

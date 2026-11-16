@@ -145,4 +145,11 @@ public final class AegisStyle {
     public float         separatorThickness = 1.0f;
     /** Clear space on each side of the line, along the direction its parent stacks in. */
     public float         separatorMargin    = 4.0f;
+
+    // ── Scroll indicator ────────────────────────────────────────────────────
+
+    /** The bar showing where a scrolling panel is. */
+    public final float[] scrollbarThumb     = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** How thick it is. */
+    public float         scrollbarWidth     = 4.0f;
 }

@@ -122,6 +122,13 @@ public final class AegisLayout {
     private final float[] contentWidth;
     private final float[] contentHeight;
 
+    // Step 3g-2: a row or column that scrolls along the way it stacks, how far it is scrolled,
+    // and — written by the solve — how long its content is and how far it can scroll.
+    private final boolean[] scrollable;
+    private final float[]   scrollOffset;
+    private final float[]   scrollContent;
+    private final float[]   scrollRange;
+
     // What the solve gave it.
     private final float[] solvedX;
     private final float[] solvedY;
@@ -168,6 +175,10 @@ public final class AegisLayout {
 
         contentWidth  = new float[capacity];
         contentHeight = new float[capacity];
+        scrollable    = new boolean[capacity];
+        scrollOffset  = new float[capacity];
+        scrollContent = new float[capacity];
+        scrollRange   = new float[capacity];
         solvedX      = new float[capacity];
         solvedY      = new float[capacity];
         solvedWidth  = new float[capacity];
@@ -332,6 +343,78 @@ public final class AegisLayout {
      * @return the padding in pixels; 0 for a box
      */
     public float padding(int node) { return padding[node]; }
+
+    // -----------------------------------------------------------------------------------
+    // Scrolling — step 3g-2
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * Makes a row or column scroll along the way it stacks — a column up and down, a row left
+     * and right — when its children take more room than it has.
+     *
+     * <p>Its children are then shown only inside its padding, and moved back by
+     * {@link #scrollOffset}. It no longer asks for its content's length along that axis: it
+     * takes the room its parent gives it, and what does not fit is scrolled to. Drawing the
+     * cut-off and turning the wheel or the keyboard into an offset are the widgets' part
+     * ({@link AegisWidgets}); the layout only places.</p>
+     *
+     * @param node a row or a column
+     * @param on   {@code true} to scroll
+     * @throws IllegalArgumentException for a box, which holds nothing to scroll
+     */
+    public void setScrollable(int node, boolean on) {
+        if (kind[node] == BOX) throw new IllegalArgumentException("A box holds nothing to scroll.");
+        if (scrollable[node] == on) return;
+        scrollable[node] = on;
+        version++;
+    }
+
+    /**
+     * Whether a row or column scrolls; see {@link #setScrollable}.
+     *
+     * @param node the handle
+     * @return {@code true} if it scrolls
+     */
+    public boolean isScrollable(int node) { return scrollable[node]; }
+
+    /**
+     * How far a scrolling row or column is scrolled, in pixels from its start.
+     *
+     * @param node the handle
+     * @return the offset; 0 when not scrolled
+     */
+    public float scrollOffset(int node) { return scrollOffset[node]; }
+
+    /**
+     * Scrolls a row or column to {@code offset} pixels from its start. Kept within
+     * {@link #scrollRange} by the next solve.
+     *
+     * @param node   a scrolling row or column
+     * @param offset the offset in pixels
+     */
+    public void setScrollOffset(int node, float offset) {
+        if (scrollOffset[node] == offset) return;
+        scrollOffset[node] = offset;
+        version++;
+    }
+
+    /**
+     * How far a scrolling row or column can scroll, as of the last solve: how much its content
+     * is longer than the room inside its padding. 0 when everything fits.
+     *
+     * @param node the handle
+     * @return the largest offset, in pixels
+     */
+    public float scrollRange(int node) { return scrollRange[node]; }
+
+    /**
+     * How long a scrolling row or column's content is along the way it scrolls, as of the last
+     * solve: its children and the gaps between them.
+     *
+     * @param node the handle
+     * @return the length in pixels
+     */
+    public float scrollContent(int node) { return scrollContent[node]; }
 
     /**
      * Space kept clear inside a row or column's edges, on all four sides, in pixels.
@@ -599,14 +682,20 @@ public final class AegisLayout {
         contentHeight[node] = (horizontal ? across : along) + pad;
     }
 
-    /** The width a node asks for: what it was given, or, for a row or column given none, its content's. */
+    /**
+     * The width a node asks for: what it was given, or, for a row or column given none, its
+     * content's — except along the way a scrolling row scrolls, where content longer than the
+     * room it gets is what scrolling is for, so it asks only for what it was given.
+     */
     private float askedWidth(int node) {
-        return requestedWidth[node] > 0.0f || kind[node] == BOX ? requestedWidth[node] : contentWidth[node];
+        if (requestedWidth[node] > 0.0f || kind[node] == BOX) return requestedWidth[node];
+        return scrollable[node] && kind[node] == ROW ? 0.0f : contentWidth[node];
     }
 
-    /** The height a node asks for; see {@link #askedWidth}. */
+    /** The height a node asks for; see {@link #askedWidth}. A scrolling column asks only for what it was given. */
     private float askedHeight(int node) {
-        return requestedHeight[node] > 0.0f || kind[node] == BOX ? requestedHeight[node] : contentHeight[node];
+        if (requestedHeight[node] > 0.0f || kind[node] == BOX) return requestedHeight[node];
+        return scrollable[node] && kind[node] == COLUMN ? 0.0f : contentHeight[node];
     }
 
     /**
@@ -687,6 +776,10 @@ public final class AegisLayout {
     public int nodeAt(int root, float px, float py) {
         if (!contains(root, px, py)) return NONE;
 
+        // A scrolling row or column shows its children only inside its padding; a point in the
+        // padding, where scrolled content is cut off, is the container's own.
+        if (scrollable[root] && !insidePadding(root, px, py)) return root;
+
         // Walk every child rather than stopping at the first hit, so that of two overlapping
         // siblings the later — the one drawn on top — is the one that answers.
         int deepest = root;
@@ -695,6 +788,13 @@ public final class AegisLayout {
             if (hit != NONE) deepest = hit;
         }
         return deepest;
+    }
+
+    /** Whether a point lies inside a node's padding, where its children are shown. */
+    private boolean insidePadding(int node, float px, float py) {
+        float pad = padding[node];
+        return px >= solvedX[node] + pad && px < solvedX[node] + solvedWidth[node] - pad
+            && py >= solvedY[node] + pad && py < solvedY[node] + solvedHeight[node] - pad;
     }
 
     /** Whether a point lies in a node's solved rectangle: left and top edges in, right and bottom out. */
@@ -732,6 +832,10 @@ public final class AegisLayout {
         alignX[node]          = Align.START;
         alignY[node]          = Align.START;
         name[node]            = null;
+        scrollable[node]      = false;
+        scrollOffset[node]    = 0.0f;
+        scrollContent[node]   = 0.0f;
+        scrollRange[node]     = 0.0f;
 
         // Never solved. A handle reused after clear() must not inherit the version its
         // previous owner was solved at, or its first solve could be skipped.
@@ -804,6 +908,16 @@ public final class AegisLayout {
         if (totalGrow == 0.0f) {
             if (mainAlign == Align.CENTER) shift = spare * 0.5f;
             else if (mainAlign == Align.END) shift = spare;
+        }
+
+        // A scrolling row or column: content longer than the room moves back by the offset,
+        // kept between 0 and as far as the content reaches — a window that grew, or content
+        // that shrank, never leaves it scrolled past the end.
+        if (scrollable[node]) {
+            scrollContent[node] = asked;
+            scrollRange[node]   = Math.max(0.0f, asked - innerMain);
+            scrollOffset[node]  = Math.max(0.0f, Math.min(scrollOffset[node], scrollRange[node]));
+            shift -= scrollOffset[node];
         }
 
         // Second walk: place them. The cursor stays exact and only the edges drawn from it are

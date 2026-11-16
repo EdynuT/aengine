@@ -51,6 +51,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-5b | The theme author's development option, `-PthemeWatch` for now: saving the theme file applies it, through a small watcher of the editor's own |
 | Step 3g-1 | Label and separator; the format stays 1 until release |
 | Step 3f-4e | `"hidden": true` on any layout node: checked, but kept out of the tree — not drawn, no room, no focus |
+| Step 3g-2a | Scrolling rows and columns: content cut off at the padding, the wheel, focus scrolled into view, a thin position bar |
 
 ### The plan ahead
 
@@ -283,7 +284,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-1.**
+3g-2a.**
 
 | Group | Widgets |
 |---|---|
@@ -294,7 +295,8 @@ against Swing's list; each keyboard-operable like the rest. **Started — we sto
 | Not planned | Applet, root pane (Swing internals or obsolete), password field (the editor asks for none), rich-text panes (only if a script editor is ever built in) |
 
 The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅ label and
-separator; **3g-2** scroll pane; **3g-3** spinner; **3g-4** tabbed pane, which the layout's
+separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
+**3g-2b** a draggable bar and PageUp/PageDown; **3g-3** spinner; **3g-4** tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
@@ -315,6 +317,19 @@ upright in a row — drawn across the whole parent from one inner edge to the ot
 the panel whether or not the panel stretches its children; moved by a layout into a row, it
 turns upright. Theme entries: `label.text`, `label.padding.y`, `separator.line`,
 `separator.thickness`, `separator.margin`.
+
+**3g-2a, scrolling.** Scrolling is the layout's, not a widget wrapped around content:
+`layout.setScrollable(node, true)` makes a row or column scroll along the way it stacks — a
+column up and down. Its children are then placed back by its offset and shown only inside its
+padding, and it no longer asks for its content's length along that axis: it takes the room it
+is given. The solve keeps the offset between 0 and how far the content reaches, so a larger
+window never leaves it scrolled past the end; a click in the padding, where content is cut
+off, is the container's own. The widgets turn input into an offset: the wheel scrolls a text
+box under the pointer, or else the nearest scrolling row or column under it; **whatever gains
+focus is scrolled into view**, so Tab never lands out of sight; a thin bar on the far edge
+shows where the view is. Theme entries `scrollbar.thumb` and `scrollbar.width` — global only for
+now, since panels are not dressed by rules. Anything drawn by hand rather than by
+`ae.draw()` cuts itself off, as the scaffolding's plain box in the inspector does.
 
 **Step 3h — localisation.** Editor text comes from locale files instead of code (§8).
 *Visible:* switching the language changes every label.

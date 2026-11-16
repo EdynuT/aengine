@@ -896,11 +896,19 @@ public class Main extends Engine {
         aegis.addTextTop(layout.x(layoutTreeItemB) + 8.0f, layout.y(layoutTreeItemB) + 4.0f,
             "START 110", LAYOUT_BOX_TEXT[0], LAYOUT_BOX_TEXT[1], LAYOUT_BOX_TEXT[2], LAYOUT_BOX_TEXT[3]);
 
-        // Inspector fields: STRETCH, so each is as wide as the pane minus its padding.
+        // Inspector fields: STRETCH, so each is as wide as the pane minus its padding. The
+        // inspector scrolls (3g-2), and the widgets cut themselves off at its padding when
+        // ae.draw() draws them; a plain box drawn here by hand is cut off by hand, to the inside
+        // of whatever pane it hangs in — the inspector, unless a layout file moved it.
+        int fieldPane = layout.parent(layoutFieldA);
+        float panePad = layout.padding(fieldPane);
+        aegis.pushClipRect(layout.x(fieldPane) + panePad, layout.y(fieldPane) + panePad,
+            layout.width(fieldPane) - panePad * 2.0f, layout.height(fieldPane) - panePad * 2.0f);
         aegis.addRoundedRect(layout.x(layoutFieldA), layout.y(layoutFieldA),
             layout.width(layoutFieldA), layout.height(layoutFieldA), 4.0f,
             LAYOUT_BOX[0], LAYOUT_BOX[1], LAYOUT_BOX[2], LAYOUT_BOX[3]);
         drawWidthLabel(layout, layoutFieldA, "STRETCH");
+        aegis.popClipRect();
 
         // Step 3e-3: every widget under the frame, drawn by the widgets themselves — fill for
         // their state, border, label and, when focused, their own focus ring. One call for all
@@ -1165,6 +1173,13 @@ public class Main extends Engine {
         layout.setPadding(layoutInspector, 8.0f);
         layout.setGap(layoutInspector, 6.0f);
         layout.setAlignX(layoutInspector, com.aengine.aegis.AegisLayout.Align.STRETCH);
+
+        // Step 3g-2: the inspector scrolls. It holds more than its height once a label and a
+        // separator join the fields, and an inspector only grows as entities get components.
+        // A column scrolls up and down: the wheel over it moves its content, Tab into a field
+        // out of sight brings it into view, and a thin bar on its right shows where it is. It
+        // takes the height the layout gives it rather than asking for its content's.
+        layout.setScrollable(layoutInspector, true);
 
         layoutFieldA = layout.box(layoutInspector);
         layout.setSize(layoutFieldA, 0.0f, 28.0f);
