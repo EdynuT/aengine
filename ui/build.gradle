@@ -36,6 +36,21 @@ dependencies {
     // Reading theme.json and layout.json (§7). The same version the rest of the project uses;
     // :core has it too, but as its own implementation detail, not on this module's classpath.
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Tests only: none of this reaches the published jar. They run without a window — see
+    // Aegis.headless() — so `./gradlew test` works on a machine with no display.
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    jvmArgs '--enable-native-access=ALL-UNNAMED'   // LWJGL loads stb_truetype, which measures text
+    testLogging {
+        events 'failed', 'skipped'
+        exceptionFormat = 'full'
+    }
 }
 
 // ---------------------------------------------------------------------------------------

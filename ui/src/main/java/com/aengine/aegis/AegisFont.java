@@ -190,6 +190,14 @@ public final class AegisFont {
      *                               read, or its glyphs do not fit the atlas
      */
     public AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight) {
+        this(resourcePath, pixelHeight, atlasWidth, atlasHeight, true);
+    }
+
+    /**
+     * As the public constructor, and with {@code upload} false the atlas is baked and measured
+     * but never sent to the GPU — a font that measures and wraps, for {@link Aegis#headless}.
+     */
+    AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight, boolean upload) {
         this.pixelHeight = pixelHeight;
         this.atlasWidth  = atlasWidth;
         this.atlasHeight = atlasHeight;
@@ -280,7 +288,9 @@ public final class AegisFont {
                 }
             }
 
-            this.atlas = RenderContext.createTexture(atlasWidth, atlasHeight, TextureFormat.R8, bitmap);
+            this.atlas = upload
+                ? RenderContext.createTexture(atlasWidth, atlasHeight, TextureFormat.R8, bitmap)
+                : null;
 
             Logger.info(Logger.System.RENDERER,
                 "Font baked: %s at %.0fpx, %d glyphs (Latin-1 + %d punctuation), atlas %dx%d; "
@@ -706,7 +716,7 @@ public final class AegisFont {
      *
      * @return the handle, for {@link AegisDrawList#addTexturedQuad} or a renderer
      */
-    public int   atlasHandle() { return atlas.getID(); }
+    public int   atlasHandle() { return atlas != null ? atlas.getID() : 0; }
 
     /**
      * Width of the glyph atlas.
@@ -732,6 +742,6 @@ public final class AegisFont {
 
     /** Deletes the atlas texture. The font must not be drawn with afterwards. */
     public void cleanup() {
-        atlas.cleanup();
+        if (atlas != null) atlas.cleanup();
     }
 }

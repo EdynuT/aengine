@@ -69,7 +69,23 @@ public final class Aegis {
      *                 a screen of text counts for more than it looks
      */
     public Aegis(int maxQuads) {
-        this.renderer = new AegisRenderer(maxQuads);
+        this(maxQuads, true);
+    }
+
+    /**
+     * An Aegis with no renderer and no GPU, for tests: everything works but {@link #end()}
+     * presents nothing, and its font keeps its metrics without uploading an atlas. Building,
+     * solving, input and recording a frame into the draw list are all the real code.
+     *
+     * @param maxQuads shapes per frame, as in {@link #Aegis(int)}
+     * @return an Aegis that never touches the graphics backend
+     */
+    static Aegis headless(int maxQuads) {
+        return new Aegis(maxQuads, false);
+    }
+
+    private Aegis(int maxQuads, boolean withRenderer) {
+        this.renderer = withRenderer ? new AegisRenderer(maxQuads) : null;
         this.drawList = new AegisDrawList(maxQuads);
         this.layout   = new AegisLayout(LAYOUT_NODES);
         this.tree     = new AegisTree(layout, LAYOUT_NODES);
@@ -92,7 +108,7 @@ public final class Aegis {
      */
     public AegisFont loadFont(String resourcePath, float pixelHeight,
                               int atlasWidth, int atlasHeight) {
-        AegisFont loaded = new AegisFont(resourcePath, pixelHeight, atlasWidth, atlasHeight);
+        AegisFont loaded = new AegisFont(resourcePath, pixelHeight, atlasWidth, atlasHeight, renderer != null);
         if (font != null) font.cleanup();
         font = loaded;
         return loaded;
@@ -123,7 +139,7 @@ public final class Aegis {
      */
     public void end() {
         drawList.end();
-        renderer.render(drawList, viewportWidth, viewportHeight);
+        if (renderer != null) renderer.render(drawList, viewportWidth, viewportHeight);
     }
 
     // -----------------------------------------------------------------------------------
@@ -404,7 +420,7 @@ public final class Aegis {
     /** Releases the font and the renderer. Must run on the GL thread, before the context goes. */
     public void cleanup() {
         if (font != null) font.cleanup();
-        renderer.cleanup();
+        if (renderer != null) renderer.cleanup();
     }
 
     /**
