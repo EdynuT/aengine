@@ -70,6 +70,9 @@ public final class AegisWidgets {
     private static final byte SEPARATOR    = 7;   // step 3g-1: a line across its parent
     private static final byte SPINNER      = 8;   // step 3g-3: a number, typed or stepped; edits as a text field does
 
+    private static final byte TABBED_PANE  = 9;   // step 3g-4: the column holding a tab bar and the shown panel
+    private static final byte TAB_BAR      = 10;  //            its bar, the part that is drawn and takes input
+
     /** A held spinner arrow steps again after this long, then every {@link #SPIN_REPEAT_NANOS}. */
     private static final long SPIN_DELAY_NANOS  = 400_000_000L;
     private static final long SPIN_REPEAT_NANOS =  60_000_000L;
@@ -125,6 +128,26 @@ public final class AegisWidgets {
     private final float[] sliderMin;
     private final float[] sliderMax;
     private final float[] sliderStep;
+
+    /**
+     * A tabbed pane's tabs: their titles, the panel each shows, and which one is shown. Held by
+     * both of the pane's nodes — the column and its bar — so either finds it. Made when the
+     * pane is, grown when a tab is added; nothing here is made in the frame loop.
+     */
+    private static final class TabSet {
+        String[] titles   = new String[4];
+        int[]    contents = new int[4];
+        int      count;
+        int      selected;
+    }
+
+    private final TabSet[] tabsOf;
+
+    /** Whether the last name of a widget's {@link #themePath} is its own, or its nearest named container's. */
+    private final boolean[] themeNamed;
+
+    /** Ctrl+Tab and Ctrl+PageDown this frame, or their opposites: + or -. */
+    private int pendingTabSwitch;
 
     /** Spinners: how many digits after the decimal point the number is shown and kept with. */
     private final int[] spinnerDecimals;
@@ -263,6 +286,8 @@ public final class AegisWidgets {
         this.sliderMax   = new float[capacity];
         this.sliderStep  = new float[capacity];
         this.spinnerDecimals = new int[capacity];
+        this.tabsOf          = new TabSet[capacity];
+        this.themeNamed      = new boolean[capacity];
 
         this.fieldText      = new StringBuilder[capacity];
         this.fieldMaxLength = new int[capacity];
@@ -329,8 +354,16 @@ public final class AegisWidgets {
     /** Walks a subtree, giving each widget the style its path calls for, and sizing it again. */
     private void dressSubtree(AegisTheme theme, int node) {
         if (kind[node] != NOT_A_WIDGET) {
-            styleOf[node] = theme.styleFor(themePath[node], true, themeKind(node));
+            styleOf[node] = theme.styleFor(themePath[node], themeNamed[node], themeKind(node));
             fitToContent(node);
+        }
+        // A tabbed pane's panels that are not shown hang nowhere; they are dressed all the same,
+        // so switching to one shows it in the theme.
+        if (kind[node] == TABBED_PANE) {
+            TabSet tabs = tabsOf[node];
+            for (int i = 0; i < tabs.count; i++) {
+                if (i != tabs.selected) dressSubtree(theme, tabs.contents[i]);
+            }
         }
         for (int child = layout.firstChild(node); child != AegisLayout.NONE;
              child = layout.nextSibling(child)) {
@@ -348,6 +381,7 @@ public final class AegisWidgets {
             case LABEL                -> "label";
             case SEPARATOR            -> "separator";
             case SPINNER              -> "spinner";
+            case TAB_BAR              -> "tabs";
             default                   -> "";
         };
     }
@@ -374,6 +408,7 @@ public final class AegisWidgets {
             case LABEL -> fit(node,
                 (float) Math.ceil(aegis.measure(label[node])), line + style.labelPaddingY * 2.0f);
             case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
+            case TAB_BAR -> fit(node, 0.0f, line + style.tabsPaddingY * 2.0f + style.tabsAccentHeight);
             case SEPARATOR -> {
                 // Room for the line and its margins along the way its parent stacks; nothing
                 // across, since the line is drawn across the whole parent (drawSeparator).
@@ -861,8 +896,185 @@ public final class AegisWidgets {
             String above = layout.nodeName(up);
             if (above != null) path.add(0, above);
         }
-        themePath[node] = List.copyOf(path);
+        themePath[node]  = List.copyOf(path);
+        themeNamed[node] = true;
         return node;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Tabbed pane — step 3g-4
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A tabbed pane: several panels sharing one place, one shown at a time, picked from a bar
+     * of tabs above them — added to {@code parent}. Starts with no tabs; see {@link #addTab}.
+     *
+     * <p>It works as Swing's {@code JTabbedPane} does. Pressing a tab shows its panel. The bar
+     * takes focus as one stop of Tab, and while it has it Left and Right show the tab before
+     * and after, going around at the ends, and Home and End the first and last. From anywhere
+     * inside the pane, Ctrl+Tab and Ctrl+PageDown show the next tab, Ctrl+Shift+Tab and
+     * Ctrl+PageUp the one before.</p>
+     *
+     * <p>The handle is a column: the bar, then the shown panel, which takes all the room the
+     * bar leaves. Size it, or make it grow, as any node. The panels not shown hang nowhere —
+     * not drawn, not solved, reached by neither the pointer nor Tab — exactly as a node a
+     * layout hides.</p>
+     *
+     * @param parent the row or column to add it to, or {@link AegisLayout#NONE}
+     * @param name   its name, which a theme writes — {@code "sceneTabs"}, dressed by
+     *               {@code hierarchy.sceneTabs.fill.selected} and the other {@code tabs}
+     *               entries; see {@link AegisLayout#setNodeName}
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int tabbedPane(int parent, String name) {
+        AegisLayout.checkNodeName(name);
+        int pane = tabbedPane(parent);
+        layout.setNodeName(pane, name);
+        int bar = layout.firstChild(pane);
+        ArrayList<String> path = new ArrayList<>(themePath[bar]);
+        path.add(name);
+        themePath[bar]  = List.copyOf(path);
+        themeNamed[bar] = true;
+        return pane;
+    }
+
+    /**
+     * A tabbed pane with no name, as a layout file's {@code "tabs"} makes: a theme dresses it
+     * by the panel it is in and its kind — {@code inspector.tabs.fill} — or by the global
+     * {@code tabs} values.
+     */
+    int tabbedPane(int parent) {
+        int pane = layout.column(parent);
+        layout.setAlignX(pane, AegisLayout.Align.STRETCH);
+        int bar = layout.box(pane);
+        tree.setInteractive(bar, true);
+        tree.setFocusable(bar, true);
+
+        ArrayList<String> path = new ArrayList<>();
+        for (int up = parent; up != AegisLayout.NONE; up = layout.parent(up)) {
+            String above = layout.nodeName(up);
+            if (above != null) path.add(0, above);
+        }
+        TabSet tabs = new TabSet();
+        kind[pane]   = TABBED_PANE;
+        kind[bar]    = TAB_BAR;
+        tabsOf[pane] = tabs;
+        tabsOf[bar]  = tabs;
+        themePath[bar]  = List.copyOf(path);
+        themeNamed[bar] = false;
+        styleOf[bar]    = null;
+        fitToContent(bar);
+        return pane;
+    }
+
+    /**
+     * Adds a tab to a tabbed pane, after the ones it has. The first tab added is the one shown.
+     *
+     * <p>{@code content} is taken from wherever it hangs and belongs to the pane from now on:
+     * shown, it is the pane's second child, growing to fill it; not shown, it hangs nowhere.
+     * Build what goes in it before or after — it is an ordinary row or column either way.</p>
+     *
+     * @param pane    the tabbed pane
+     * @param title   what the tab says; kept, so pass a string that does not change
+     * @param content the row or column the tab shows
+     * @return the tab's index, counting from 0
+     */
+    public int addTab(int pane, String title, int content) {
+        TabSet tabs = tabsOf[pane];
+        if (tabs.count == tabs.titles.length) {
+            tabs.titles   = Arrays.copyOf(tabs.titles, tabs.count * 2);
+            tabs.contents = Arrays.copyOf(tabs.contents, tabs.count * 2);
+        }
+        int index = tabs.count++;
+        tabs.titles[index]   = title;
+        tabs.contents[index] = content;
+        layout.setGrow(content, 1.0f);
+        if (index == 0) {
+            tabs.selected = 0;
+            layout.attach(content, pane);
+        } else {
+            layout.detach(content);
+        }
+        return index;
+    }
+
+    /**
+     * How many tabs a tabbed pane has.
+     *
+     * @param pane the tabbed pane
+     * @return the count
+     */
+    public int tabCount(int pane) { return tabsOf[pane].count; }
+
+    /**
+     * Which tab a tabbed pane shows.
+     *
+     * @param pane the tabbed pane
+     * @return the tab's index, counting from 0
+     */
+    public int selectedTab(int pane) { return tabsOf[pane].selected; }
+
+    /**
+     * Shows another tab from code. Not reported by {@link #wasChanged}. If focus was inside
+     * the panel that is put away, it goes to the bar.
+     *
+     * @param pane  the tabbed pane
+     * @param index the tab to show, counting from 0
+     * @throws IndexOutOfBoundsException for an index the pane has no tab at
+     */
+    public void selectTab(int pane, int index) {
+        TabSet tabs = tabsOf[pane];
+        if (index < 0 || index >= tabs.count) {
+            throw new IndexOutOfBoundsException("Tab " + index + " of a pane with " + tabs.count + " tabs.");
+        }
+        if (index == tabs.selected) return;
+
+        int column = kind[pane] == TAB_BAR ? layout.parent(pane) : pane;
+        int old = tabs.contents[tabs.selected];
+        for (int up = tree.focused(); up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (up == old) {
+                tree.focus(layout.firstChild(column));
+                break;
+            }
+        }
+        layout.detach(old);
+        layout.attach(tabs.contents[index], column);
+        tabs.selected = index;
+    }
+
+    /** Shows another tab because the user asked, and reports it. */
+    private void userSelectsTab(int bar, int index) {
+        TabSet tabs = tabsOf[bar];
+        if (index < 0 || index >= tabs.count || index == tabs.selected) return;
+        selectTab(bar, index);
+        changed = layout.parent(bar);
+    }
+
+    /** The tab under an x in a tab bar, or -1: tabs follow each other from the bar's left edge. */
+    private int tabAt(int bar, float px) {
+        AegisStyle style = styleOf(bar);
+        TabSet tabs = tabsOf[bar];
+        float x = layout.x(bar);
+        for (int i = 0; i < tabs.count; i++) {
+            float w = tabWidth(style, tabs.titles[i]);
+            if (px >= x && px < x + w) return i;
+            x += w + style.tabsGap;
+        }
+        return -1;
+    }
+
+    private float tabWidth(AegisStyle style, String title) {
+        return (float) Math.ceil(aegis.measure(title)) + style.tabsPaddingX * 2.0f;
+    }
+
+    /** The bar of the nearest tabbed pane around a node — the node itself, if it is a bar — or NONE. */
+    private int tabBarAround(int node) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (kind[up] == TAB_BAR)     return up;
+            if (kind[up] == TABBED_PANE) return layout.firstChild(up);
+        }
+        return AegisLayout.NONE;
     }
 
     /**
@@ -927,7 +1139,7 @@ public final class AegisWidgets {
 
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
-     * box, a label, a separator or a spinner.
+     * box, a label, a separator, a spinner, or a tabbed pane or its bar.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -944,6 +1156,7 @@ public final class AegisWidgets {
         Arrays.fill(checked, false);
         Arrays.fill(fieldText, null);
         Arrays.fill(themePath, null);
+        Arrays.fill(tabsOf, null);
         Arrays.fill(fittedWidth, 0.0f);
         Arrays.fill(fittedHeight, 0.0f);
         activated = AegisLayout.NONE;
@@ -963,6 +1176,8 @@ public final class AegisWidgets {
      *
      * <ul>
      *   <li>Tab and Shift+Tab move focus, and repeat when held.</li>
+     *   <li>Ctrl+Tab and Ctrl+PageDown show the next tab of the tabbed pane the focused widget
+     *       is in, Ctrl+Shift+Tab and Ctrl+PageUp the one before; see {@link #tabbedPane}.</li>
      *   <li>Enter and Space act on the focused widget: a button fires, a checkbox flips. On the
      *       press only, so holding them does not fire again and again.</li>
      *   <li>PageUp and PageDown scroll the scrolling row or column the focused widget is in, a
@@ -984,8 +1199,13 @@ public final class AegisWidgets {
         }
 
         boolean shift = (mods & Keys.MOD_SHIFT) != 0;
+        boolean ctrl  = (mods & Keys.MOD_CONTROL) != 0;
 
-        if (key == Keys.TAB) {
+        if (ctrl && key == Keys.TAB) {
+            pendingTabSwitch += shift ? -1 : +1;
+        } else if (ctrl && (key == Keys.PAGE_DOWN || key == Keys.PAGE_UP)) {
+            pendingTabSwitch += key == Keys.PAGE_DOWN ? +1 : -1;
+        } else if (key == Keys.TAB) {
             pendingFocusMove = shift ? -1 : +1;
         } else if (!repeat && key == Keys.ENTER) {
             pendingEnter = true;
@@ -1548,6 +1768,26 @@ public final class AegisWidgets {
         // moves only the caret, so dragging selects from where the press began. Dragging past
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
+        // A tab pressed is shown at once, on the press rather than the release, as in Swing.
+        if (pressed != AegisLayout.NONE && kind[pressed] == TAB_BAR && pressed != lastPressed) {
+            userSelectsTab(pressed, tabAt(pressed, tree.pointerX()));
+        }
+
+        // Ctrl+Tab from anywhere inside a tabbed pane; the arrows, Home and End on its bar.
+        int bar = tabBarAround(focused);
+        if (bar != AegisLayout.NONE) {
+            TabSet tabs = tabsOf[bar];
+            int to = tabs.selected;
+            if (tabs.count > 0) to = Math.floorMod(to + pendingTabSwitch, tabs.count);
+            if (focused == bar && tabs.count > 0) {
+                to = Math.floorMod(to + pendingSteps, tabs.count);
+                if (pendingJump < 0) to = 0;
+                if (pendingJump > 0) to = tabs.count - 1;
+            }
+            userSelectsTab(bar, to);
+            focused = tree.focused();   // it went to the bar, if it was in the panel put away
+        }
+
         // A spinner pressed on its arrows steps instead: once at the press, and again and
         // again while held.
         boolean onArrows = false;
@@ -1626,6 +1866,7 @@ public final class AegisWidgets {
         pendingWheel     = 0.0f;
         pendingPages     = 0;
         pendingLines     = 0;
+        pendingTabSwitch = 0;
         stepped          = AegisLayout.NONE;
     }
 
@@ -2087,6 +2328,7 @@ public final class AegisWidgets {
         if (kind[root] == LABEL)      drawLabel(root);
         if (kind[root] == SEPARATOR)  drawSeparator(root);
         if (kind[root] == SPINNER)    drawSpinner(root);
+        if (kind[root] == TAB_BAR)    drawTabBar(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -2331,6 +2573,59 @@ public final class AegisWidgets {
                 c[0], c[1], c[2], c[3]);
         }
         aegis.popClipRect();
+    }
+
+    /**
+     * A tabbed pane's bar: a line under it from edge to edge; each tab a shape with rounded
+     * top corners, its title centred — the shown one raised and marked with the accent line,
+     * the others dim, lighter under the pointer; and, while the bar has focus, the focus ring
+     * around the shown tab, since that is the one the arrows move from. Tabs the bar has no
+     * room for are cut off at its end.
+     */
+    private void drawTabBar(int bar) {
+        AegisStyle style = styleOf(bar);
+        TabSet tabs = tabsOf[bar];
+        float x = layout.x(bar), y = layout.y(bar);
+        float w = layout.width(bar), h = layout.height(bar);
+        float accent = style.tabsAccentHeight;
+
+        int over = tree.isHovered(bar) && !tree.isPressed(bar) ? tabAt(bar, tree.pointerX()) : -1;
+        float textY = y + style.tabsPaddingY;
+        float tabX = x;
+        float ringX = 0.0f, ringW = 0.0f;
+
+        aegis.pushClipRect(x, y, w, h);
+        for (int i = 0; i < tabs.count; i++) {
+            float tabW = tabWidth(style, tabs.titles[i]);
+            boolean shown = i == tabs.selected;
+            float[] fill = shown ? style.tabsSelected : i == over ? style.tabsHover : style.tabsFill;
+            float[] ink  = shown ? style.tabsTextSelected : style.tabsText;
+
+            // Round at the top only: the shape runs a radius past the bar's bottom, where the
+            // clip cuts its lower corners off.
+            aegis.addRoundedRect(tabX, y, tabW, h + style.tabsRadius, style.tabsRadius,
+                fill[0], fill[1], fill[2], fill[3]);
+            aegis.addTextTop(tabX + style.tabsPaddingX, textY, tabs.titles[i], ink[0], ink[1], ink[2], ink[3]);
+            if (shown) {
+                ringX = tabX;
+                ringW = tabW;
+            }
+            tabX += tabW + style.tabsGap;
+        }
+        // Over the tabs' lower edges: the line under the whole bar, then the shown tab's mark.
+        float[] line = style.tabsBorder;
+        aegis.addRoundedRect(x, y + h - 1.0f, w, 1.0f, 0.0f, line[0], line[1], line[2], line[3]);
+        if (ringW > 0.0f) {
+            float[] mark = style.tabsAccent;
+            aegis.addRoundedRect(ringX, y + h - accent, ringW, accent, 0.0f, mark[0], mark[1], mark[2], mark[3]);
+        }
+        aegis.popClipRect();
+
+        if (tree.isFocused(bar) && ringW > 0.0f) {
+            float inset = style.focusRingGap + style.focusRingWidth;   // inside the tab: the bar's neighbours are close
+            drawFocusRing(style, ringX + inset, y + inset, ringW - inset * 2.0f, h - inset * 2.0f,
+                Math.max(0.0f, style.tabsRadius - inset));
+        }
     }
 
     /**

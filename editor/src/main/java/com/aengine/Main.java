@@ -129,6 +129,7 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int sceneTabs;          // step 3g-4: a tabbed pane, from ae.tabbedPane() and ae.addTab()
     private int gridSizeLabel;      // step 3g-3: a spinner, from ae.spinner(), with its label
     private int gridSizeSpinner;
 
@@ -1138,6 +1139,28 @@ public class Main extends Engine {
         // here — and Shift makes it ten.
         opacitySlider = ae.slider(layoutHierarchy, "opacitySlider", 0.0f, 100.0f, 50.0f);
 
+        // Step 3g-4: a tabbed pane — several panels in one place, one shown at a time. The pane
+        // is made first, then each tab is a title and an ordinary row or column, built with
+        // NONE as its parent since addTab() takes it over; the first tab added is the one
+        // shown. A press on a tab shows it; with the bar focused, Left and Right move between
+        // tabs; from inside the pane, Ctrl+Tab and Ctrl+PageDown go to the next. Which is shown
+        // is read with ae.selectedTab(sceneTabs), and ae.wasChanged(sceneTabs) is true on the
+        // frame the user switched.
+        sceneTabs = ae.tabbedPane(layoutHierarchy, "sceneTabs");
+        layout.setSize(sceneTabs, 220.0f, 96.0f);
+
+        int entitiesTab = layout.column(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(entitiesTab, 6.0f);
+        ae.label(entitiesTab, "entitiesHint", "Entities go here");
+        ae.button(entitiesTab, "addEntityButton", "Add entity");
+        ae.addTab(sceneTabs, "Entities", entitiesTab);
+
+        int layersTab = layout.column(com.aengine.aegis.AegisLayout.NONE);
+        layout.setPadding(layersTab, 6.0f);
+        ae.label(layersTab, "layersHint", "Layers go here");
+        ae.checkbox(layersTab, "lockLayersCheckbox", "Lock layers");
+        ae.addTab(sceneTabs, "Layers", layersTab);
+
         // Viewport: centres what it holds on both axes — one call per axis. A row panel, so its
         // buttons sit side by side: CENTER on X moves the three of them together into the
         // middle, CENTER on Y centres each one vertically. The layout makes it take the width
@@ -1183,6 +1206,12 @@ public class Main extends Engine {
         // and can be dragged. PageUp and PageDown scroll it while one of its fields has focus.
         // It takes the height the layout gives it rather than asking for its content's.
         layout.setScrollable(layoutInspector, true);
+
+        // A layout file can also put whole panels in tabs — { "type": "tabs", "panels": [...] },
+        // as test-shell/layouts/tabbed.json does. Each tab then says its panel's title, given
+        // here, once both panels are registered; without one it says the panel's name.
+        screens.setPanelTitle("hierarchy", "Hierarchy");
+        screens.setPanelTitle("inspector", "Inspector");
 
         layoutFieldA = layout.box(layoutInspector);
         layout.setSize(layoutFieldA, 0.0f, 28.0f);

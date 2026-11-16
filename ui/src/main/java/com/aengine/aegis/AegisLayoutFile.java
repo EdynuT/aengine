@@ -457,10 +457,6 @@ public final class AegisLayoutFile {
         if (type == Type.TABS && object.get("panels") == null) {
             error(at, "tabs needs \"panels\": a list of panel names");
         }
-        if (type == Type.TABS && !node.tabs.isEmpty()) {
-            findings.note(at, "tabs shows only its first panel, \"" + node.tabs.get(0)
-                + "\", until the tabbed pane exists (step 3g)");
-        }
         return node;
     }
 

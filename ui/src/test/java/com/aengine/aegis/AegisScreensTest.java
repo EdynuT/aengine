@@ -85,6 +85,43 @@ class AegisScreensTest {
     }
 
     @Test
+    void tabsInAFileBecomeATabbedPaneWithATabPerPanel() throws Exception {
+        screens.setPanelTitle("viewport", "Scene view");
+        int root = screens.build("editor", file("""
+            { "name": "Tabbed", "format": 1,
+              "screens": { "editor": { "root": { "type": "row", "alignY": "stretch", "children": [
+                { "type": "tabs", "width": 420, "panels": ["toolbar", "viewport"] }
+              ]}}}
+            }
+            """));
+
+        int pane = layout.firstChild(root);
+        assertEquals(2, ae.tabCount(pane));
+        assertEquals(420.0f, layout.requestedWidth(pane));
+        assertEquals(toolbar, layout.lastChild(pane), "the first panel listed is the one shown");
+        assertEquals(AegisLayout.NONE, layout.parent(viewport));
+
+        ae.selectTab(pane, 1);
+        assertEquals(viewport, layout.lastChild(pane));
+        assertEquals(play, layout.firstChild(viewport), "with its widgets as code made them");
+    }
+
+    @Test
+    void aPanelInTabsCannotBeShownAgain() throws Exception {
+        AegisLayoutFile twice = file("""
+            { "name": "Twice", "format": 1,
+              "screens": {
+                "editor": { "root": { "type": "tabs", "panels": ["toolbar", "viewport"] } },
+                "other":  { "root": { "type": "panel", "panel": "viewport" } }
+              }
+            }
+            """);
+        screens.build("editor", twice);
+        assertThrows(IllegalStateException.class, () -> screens.build("other", twice),
+            "viewport is in the editor's tabs, though not the one shown");
+    }
+
+    @Test
     void aScreenWithAnErrorIsSetAsideForTheNextFileInLine() throws Exception {
         AegisLayoutFile broken = file("""
             { "name": "Broken", "format": 1,

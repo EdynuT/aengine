@@ -355,7 +355,121 @@ class AegisWidgetsTest {
     }
 
     @Test
+    void aPressedTabShowsItsPanelAndPutsTheOtherAway() {
+        int pane = tabbedPane();
+        int scene = layout.nextSibling(layout.firstChild(pane));
+        assertEquals(0, ae.selectedTab(pane));
+        assertEquals(3, ae.tabCount(pane));
+        shell.frame();
+        assertEquals(layout.height(pane) - layout.height(layout.firstChild(pane)), layout.height(scene),
+            "the shown panel takes the room the bar leaves");
+
+        // The second tab starts where the first ends: press a little into it.
+        int bar = layout.firstChild(pane);
+        AegisStyle style = ae.style();
+        float second = layout.x(bar) + (float) Math.ceil(shell.aegis.measure("Scene"))
+                     + style.tabsPaddingX * 2.0f + style.tabsGap + 5.0f;
+        shell.pointerAt(second, layout.y(bar) + 5.0f);
+        shell.frame();
+        shell.press();
+        shell.frame();
+
+        assertEquals(1, ae.selectedTab(pane), "on the press, not the release");
+        assertTrue(ae.wasChanged(pane));
+        assertEquals(AegisLayout.NONE, layout.parent(scene), "the panel put away hangs nowhere");
+        assertEquals(pane, layout.parent(layout.lastChild(pane)));
+        assertEquals(2, countChildren(pane));
+        shell.release();
+        shell.frame();
+        assertFalse(ae.wasChanged(pane));
+    }
+
+    @Test
+    void theTabBarIsOneStopOfTabAndTheArrowsGoAround() {
+        int pane = tabbedPane();
+        int bar = layout.firstChild(pane);
+        shell.tab();
+        assertEquals(bar, shell.tree.focused());
+
+        shell.key(Keys.RIGHT);
+        assertEquals(1, ae.selectedTab(pane));
+        shell.key(Keys.END);
+        assertEquals(2, ae.selectedTab(pane));
+        shell.key(Keys.RIGHT);
+        assertEquals(0, ae.selectedTab(pane), "past the last it goes around");
+        shell.key(Keys.LEFT);
+        assertEquals(2, ae.selectedTab(pane));
+        shell.key(Keys.HOME);
+        assertEquals(0, ae.selectedTab(pane));
+
+        shell.tab();
+        assertEquals("sceneButton", layout.nodeName(shell.tree.focused()), "then into the shown panel only");
+        shell.tab();
+        assertEquals(bar, shell.tree.focused(), "the panels put away are not stops");
+    }
+
+    @Test
+    void ctrlTabSwitchesFromInsideThePaneAndFocusGoesToTheBar() {
+        int pane = tabbedPane();
+        int bar = layout.firstChild(pane);
+        shell.tab();
+        shell.tab();
+        assertEquals("sceneButton", layout.nodeName(shell.tree.focused()));
+
+        shell.key(Keys.TAB, Keys.MOD_CONTROL);
+        assertEquals(1, ae.selectedTab(pane));
+        assertTrue(ae.wasChanged(pane));
+        assertEquals(bar, shell.tree.focused(), "what had focus was put away");
+
+        shell.key(Keys.TAB, Keys.MOD_CONTROL | Keys.MOD_SHIFT);
+        assertEquals(0, ae.selectedTab(pane));
+        shell.key(Keys.PAGE_UP, Keys.MOD_CONTROL);
+        assertEquals(2, ae.selectedTab(pane));
+        shell.key(Keys.PAGE_DOWN, Keys.MOD_CONTROL);
+        assertEquals(0, ae.selectedTab(pane));
+    }
+
+    @Test
+    void aThemeDressesThePanelsOfTabsNotShown() throws Exception {
+        int pane = tabbedPane();
+        ae.selectTab(pane, 2);
+        assertFalse(ae.wasChanged(pane), "a tab shown from code is not reported");
+        int sceneButton = layout.firstChild(sceneColumn);
+        float before = layout.requestedWidth(sceneButton);
+
+        ae.applyTheme(AegisTheme.parse(new java.io.StringReader("""
+            { "name": "Test", "format": 1, "global": { "button.padding.x": 40 } }
+            """), "test"), shell.root);
+
+        assertTrue(layout.requestedWidth(sceneButton) > before);
+        assertThrows(IndexOutOfBoundsException.class, () -> ae.selectTab(pane, 3));
+    }
+
+    private int sceneColumn;
+
+    /** Three tabs — Scene, Assets, Log — each a column with one button. */
+    private int tabbedPane() {
+        int pane = ae.tabbedPane(shell.root, "sideTabs");
+        layout.setSize(pane, 400.0f, 300.0f);
+        String[] titles = { "Scene", "Assets", "Log" };
+        for (String title : titles) {
+            int column = layout.column(AegisLayout.NONE);
+            ae.button(column, title.toLowerCase() + "Button", title + " button");
+            ae.addTab(pane, title, column);
+            if (title.equals("Scene")) sceneColumn = column;
+        }
+        return pane;
+    }
+
+    private int countChildren(int node) {
+        int count = 0;
+        for (int c = layout.firstChild(node); c != AegisLayout.NONE; c = layout.nextSibling(c)) count++;
+        return count;
+    }
+
+    @Test
     void everyKindDrawsWithoutAWindow() {
+        tabbedPane();
         ae.spinner(shell.root, "aSpinner", 0.0f, 10.0f, 5.0f, 0.5f);
         ae.button(shell.root, "aButton", "Button");
         ae.checkbox(shell.root, "aCheckbox", "Checkbox");

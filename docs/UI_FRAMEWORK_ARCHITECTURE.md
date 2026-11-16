@@ -54,6 +54,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3g-2a | Scrolling rows and columns: content cut off at the padding, the wheel, focus scrolled into view, a thin position bar |
 | Tests | JUnit in `ui/src/test`, run by `./gradlew test` with no window (`Aegis.headless`); every step from here adds its own |
 | Step 3g-3 | Spinner: a number typed or stepped, by its arrows or Up and Down; the marks widgets draw (▴ ▾ ▸ ◂ ✓) join the font atlas |
+| Step 3g-4 | Tabbed pane: `ae.tabbedPane` and `addTab`; a layout's `tabs` builds one, a tab per panel, titled by `screens.setPanelTitle` |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -209,8 +210,8 @@ widgets and how they are grouped into rows and columns. A panel the file gives n
 — one an update added after the user wrote theirs — goes to the end of its panel, so an
 update never hides a control. Writing the user's copy waits for Phase 4: nothing changes the
 layout in memory until dividers can be dragged, and code with no caller would go untested.
-`tabs` is part of the format now and validated, but until the tabbed pane exists (3g) it is
-built showing its first panel, with a note in the log.
+`tabs` builds a tabbed pane (3g-4): a tab per panel listed, in that order, the first shown,
+each titled by `screens.setPanelTitle(panel, title)` or, without one, by the panel's name.
 
 Before 4c, what was called a node's *id* became its **name** — `setNodeName`,
 `nodeName(node)` — since "id" suggested a number the engine generates, when it is a word
@@ -287,7 +288,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-3.**
+3g-4.**
 
 | Group | Widgets |
 |---|---|
@@ -299,7 +300,7 @@ against Swing's list; each keyboard-operable like the rest. **Started — we sto
 
 The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅ label and
 separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
-**3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** tabbed pane, which the layout's
+**3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** ✅ tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
@@ -360,6 +361,22 @@ caret, selection, radius and padding, so the two line up; its own theme entries 
 `.arrow.hover`, `.width` and `.button.width`. The arrows are glyphs: the draw list has
 rectangles and text only, so the font atlas now carries the few marks widgets draw —
 ▴ ▾ ▸ ◂ ✓ (`AegisFont.ARROW_UP` and the rest).
+
+**3g-4, tabbed pane.** `ae.tabbedPane(parent, name)` then `ae.addTab(pane, title, content)`,
+working as `JTabbedPane` does: a press on a tab shows its panel — on the press, not the
+release; the bar is one stop of Tab, and with focus Left and Right show the tab before and
+after, going around at the ends, Home and End the first and last; from anywhere inside,
+Ctrl+Tab and Ctrl+PageDown show the next, Ctrl+Shift+Tab and Ctrl+PageUp the one before.
+The pane is a column — the bar, then the shown panel growing to fill it — and **the panels
+not shown hang nowhere**, exactly as a node a layout hides: not drawn, not solved, no stop for
+Tab. Focus inside a panel being put away goes to the bar. A theme applied dresses the panels
+not shown too. `selectedTab`, `selectTab`, `tabCount`; `wasChanged(pane)` on the frame the
+user switched. A layout file's `tabs` now builds one, with no name of its own: a theme
+reaches it by panel and kind, or globally. A panel in tabs counts as on a screen even while
+not shown, so naming it twice is still an error. Theme entries: `tabs.fill`, `.fill.hover`,
+`.fill.selected`, `.text`, `.text.selected`, `.accent`, `.border`, `.padding.x`, `.padding.y`,
+`.gap`, `.radius`, `.accent.height`. Tabs the bar has no room for are cut off; scrolling the
+bar waits for a panel that needs it.
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

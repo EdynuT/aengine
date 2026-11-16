@@ -1,0 +1,17 @@
+{
+  "name":        "Test - tabbed",
+  "description": "Test layout, does not ship: the hierarchy and the inspector share one slot on the right as tabs, the hierarchy shown first; the viewport takes the rest.",
+  "format":      1,
+
+  "screens": {
+    "editor": {
+      "root": { "type": "column", "padding": 8, "gap": 8, "alignX": "stretch", "children": [
+        { "type": "panel", "panel": "toolbar", "height": 84 },
+        { "type": "row", "grow": 1, "gap": 8, "alignY": "stretch", "children": [
+          { "type": "panel", "panel": "viewport", "grow": 1 },
+          { "type": "tabs", "width": 320, "panels": ["hierarchy", "inspector"] }
+        ]}
+      ]}
+    }
+  }
+}

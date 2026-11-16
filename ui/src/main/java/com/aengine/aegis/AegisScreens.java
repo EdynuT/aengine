@@ -60,8 +60,17 @@ public final class AegisScreens {
     /** Every registered panel, by name. */
     private final Map<String, Integer> panels = new HashMap<>();
 
-    AegisScreens(AegisLayout layout) {
-        this.layout = layout;
+    /** What each panel's tab says, when a layout puts it in tabs; its name, until code gives it one. */
+    private final Map<String, String> titles = new HashMap<>();
+
+    /** Panels a layout put in tabs. The ones not shown hang nowhere, yet are on a screen all the same. */
+    private final Set<Integer> inTabs = new HashSet<>();
+
+    private final AegisWidgets widgets;
+
+    AegisScreens(AegisLayout layout, AegisWidgets widgets) {
+        this.layout  = layout;
+        this.widgets = widgets;
     }
 
     // -----------------------------------------------------------------------------------
@@ -104,6 +113,21 @@ public final class AegisScreens {
         layout.setNodeName(panel, name);
         panels.put(name, panel);
         return panel;
+    }
+
+    /**
+     * What a panel's tab says when a layout file puts the panel in {@code "tabs"} — "Inspector"
+     * for the panel {@code inspector}. Until it is given one, the tab shows the panel's name.
+     *
+     * @param name  a registered panel's name
+     * @param title the text of its tab; kept
+     * @throws IllegalArgumentException if no panel of that name is registered
+     */
+    public void setPanelTitle(String name, String title) {
+        if (!panels.containsKey(name)) {
+            throw new IllegalArgumentException("No panel called \"" + name + "\" is registered.");
+        }
+        titles.put(name, title);
     }
 
     /**
@@ -240,7 +264,7 @@ public final class AegisScreens {
             file.error(node, "panel \"" + name + "\" is not one the code registers");
             return false;
         }
-        if (layout.parent(panel) != AegisLayout.NONE) {
+        if (layout.parent(panel) != AegisLayout.NONE || inTabs.contains(panel)) {
             file.error(node, "panel \"" + name + "\" is already shown on another screen");
             return false;
         }
@@ -283,14 +307,24 @@ public final class AegisScreens {
                     for (AegisLayoutFile.Node child : node.children()) place(child, made);
                     yield made;
                 }
-                // Until the tabbed pane exists (3g), a tabs node shows its first panel; the
-                // reader has already noted it.
-                case PANEL, TABS -> {
-                    int panel = panels.get(node.type() == AegisLayoutFile.Type.PANEL ? node.name() : node.tabs().get(0));
+                case PANEL -> {
+                    int panel = panels.get(node.name());
                     layout.attach(panel, parent);
                     applyProperties(node, panel);
-                    if (node.type() == AegisLayoutFile.Type.PANEL && node.hasChildren()) arrange(node, panel);
+                    if (node.hasChildren()) arrange(node, panel);
                     yield panel;
+                }
+                // A tabbed pane with a tab per panel, in the order listed, the first one shown.
+                // The sizes the file writes are the pane's; each panel fills it in its turn.
+                case TABS -> {
+                    int pane = AegisScreens.this.widgets.tabbedPane(parent);
+                    for (String name : node.tabs()) {
+                        int panel = panels.get(name);
+                        AegisScreens.this.widgets.addTab(pane, titles.getOrDefault(name, name), panel);
+                        inTabs.add(panel);
+                    }
+                    applySizes(node, pane);
+                    yield pane;
                 }
                 case WIDGET -> {
                     Integer widget = widgets.get(node.name());

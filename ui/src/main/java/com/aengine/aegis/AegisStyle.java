@@ -169,6 +169,33 @@ public final class AegisStyle {
     /** How wide the part holding the arrows is. */
     public float         spinnerButtonWidth   = 20.0f;
 
+    // ── Tabs ────────────────────────────────────────────────────────────────
+
+    /** A tab that is not the one shown. */
+    public final float[] tabsFill         = { 0.14f, 0.16f, 0.21f, 1.0f };
+    /** Such a tab under the pointer. */
+    public final float[] tabsHover        = { 0.27f, 0.31f, 0.39f, 1.0f };
+    /** The tab whose panel is shown. */
+    public final float[] tabsSelected     = { 0.20f, 0.23f, 0.29f, 1.0f };
+    /** A tab's title. */
+    public final float[] tabsText         = { 0.50f, 0.54f, 0.62f, 1.0f };
+    /** The shown tab's title. */
+    public final float[] tabsTextSelected = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The line marking the shown tab. */
+    public final float[] tabsAccent       = { 0.36f, 0.62f, 0.94f, 1.0f };
+    /** The line under the whole bar. */
+    public final float[] tabsBorder       = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** Space left and right of a title. */
+    public float         tabsPaddingX     = 14.0f;
+    /** Space above and below a title. */
+    public float         tabsPaddingY     = 6.0f;
+    /** Space between one tab and the next. */
+    public float         tabsGap          = 2.0f;
+    /** How round a tab's top corners are. */
+    public float         tabsRadius       = 4.0f;
+    /** How thick the line marking the shown tab is. */
+    public float         tabsAccentHeight = 2.0f;
+
     // ── Scroll bar ──────────────────────────────────────────────────────────
 
     /** The bar showing where a scrolling panel is, which is dragged to scroll it. */

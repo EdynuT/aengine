@@ -90,7 +90,7 @@ public final class Aegis {
         this.layout   = new AegisLayout(LAYOUT_NODES);
         this.tree     = new AegisTree(layout, LAYOUT_NODES);
         this.widgets  = new AegisWidgets(this, layout, tree, LAYOUT_NODES);
-        this.screens  = new AegisScreens(layout);
+        this.screens  = new AegisScreens(layout, widgets);
     }
 
     /**

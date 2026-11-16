@@ -209,6 +209,20 @@ public final class AegisThemeCatalogue {
         size  ("spinner.width",          "120", (s, v) -> s.spinnerWidth = v);
         size  ("spinner.button.width",   "20",  (s, v) -> s.spinnerButtonWidth = v);
 
+        // ── Tabs: the bar of a tabbed pane ─────────────────────────────────────────────
+        colour("tabs.fill",          "@global.surface",        s -> s.tabsFill);
+        colour("tabs.fill.hover",    "@global.surface.hover",  s -> s.tabsHover);
+        colour("tabs.fill.selected", "@global.surface.raised", s -> s.tabsSelected);
+        colour("tabs.text",          "@global.text.dim",       s -> s.tabsText);
+        colour("tabs.text.selected", "@global.text",           s -> s.tabsTextSelected);
+        colour("tabs.accent",        "@global.accent",         s -> s.tabsAccent);   // the line marking the shown tab
+        colour("tabs.border",        "@global.border",         s -> s.tabsBorder);   // the line under the bar
+        size  ("tabs.padding.x",     "14", (s, v) -> s.tabsPaddingX = v);
+        size  ("tabs.padding.y",     "6",  (s, v) -> s.tabsPaddingY = v);
+        size  ("tabs.gap",           "2",  (s, v) -> s.tabsGap = v);
+        size  ("tabs.radius",        "4",  (s, v) -> s.tabsRadius = v);
+        size  ("tabs.accent.height", "2",  (s, v) -> s.tabsAccentHeight = v);
+
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);
