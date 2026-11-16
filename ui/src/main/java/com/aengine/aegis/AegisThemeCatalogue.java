@@ -197,6 +197,18 @@ public final class AegisThemeCatalogue {
         size  ("separator.thickness", "1", (s, v) -> s.separatorThickness = v);
         size  ("separator.margin",    "4", (s, v) -> s.separatorMargin = v);   // clear space on each side of the line
 
+        // ── Spinner. Its caret, selection, radius, border width and padding are the text
+        //    field's, so a spinner and a field line up in a panel.
+        colour("spinner.fill",           "@global.surface",  s -> s.spinnerFill);
+        colour("spinner.fill.hover",     "#2B3040",          s -> s.spinnerHover);
+        colour("spinner.border",         "@global.border",   s -> s.spinnerBorder);
+        colour("spinner.border.focused", "@global.accent",   s -> s.spinnerBorderFocused);
+        colour("spinner.text",           "@global.text",     s -> s.spinnerText);
+        colour("spinner.arrow",          "@global.text.dim", s -> s.spinnerArrow);
+        colour("spinner.arrow.hover",    "@global.text",     s -> s.spinnerArrowHover);
+        size  ("spinner.width",          "120", (s, v) -> s.spinnerWidth = v);
+        size  ("spinner.button.width",   "20",  (s, v) -> s.spinnerButtonWidth = v);
+
         // ── Scroll bar, on any scrolling panel. Global values only for now: panels are
         //    not dressed by rules, so inspector.scrollbar.thumb reaches nothing yet.
         colour("scrollbar.thumb",       "@global.border",   s -> s.scrollbarThumb);

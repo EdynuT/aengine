@@ -146,6 +146,29 @@ public final class AegisStyle {
     /** Clear space on each side of the line, along the direction its parent stacks in. */
     public float         separatorMargin    = 4.0f;
 
+    // ── Spinner ─────────────────────────────────────────────────────────────
+    // Its caret, selection, radius, border width and padding are the text field's, so the two
+    // line up in a panel.
+
+    /** The field, resting. */
+    public final float[] spinnerFill          = { 0.14f, 0.16f, 0.21f, 1.0f };
+    /** The field under the pointer. */
+    public final float[] spinnerHover         = { 0.17f, 0.19f, 0.25f, 1.0f };
+    /** Its outline. */
+    public final float[] spinnerBorder        = { 0.38f, 0.42f, 0.52f, 1.0f };
+    /** Its outline while it has focus. */
+    public final float[] spinnerBorderFocused = { 0.36f, 0.62f, 0.94f, 1.0f };
+    /** The number. */
+    public final float[] spinnerText          = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The two arrows. */
+    public final float[] spinnerArrow         = { 0.50f, 0.54f, 0.62f, 1.0f };
+    /** The arrow under the pointer. */
+    public final float[] spinnerArrowHover    = { 0.90f, 0.92f, 0.95f, 1.0f };
+    /** The width it asks for. */
+    public float         spinnerWidth         = 120.0f;
+    /** How wide the part holding the arrows is. */
+    public float         spinnerButtonWidth   = 20.0f;
+
     // ── Scroll bar ──────────────────────────────────────────────────────────
 
     /** The bar showing where a scrolling panel is, which is dragged to scroll it. */

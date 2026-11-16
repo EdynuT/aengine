@@ -20,6 +20,10 @@
               { "type": "widget", "widget": "snapCheckbox" },
               { "type": "widget", "widget": "showGridCheckbox" }
             ]},
+            { "type": "row", "gap": 8, "children": [
+              { "type": "widget", "widget": "gridSizeLabel" },
+              { "type": "widget", "widget": "gridSizeSpinner", "width": 90 }
+            ]},
             { "type": "widget", "widget": "inspectorSeparator" },
             { "type": "widget", "widget": "nameLabel" },
             { "type": "widget", "widget": "nameField" }

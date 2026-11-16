@@ -53,6 +53,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 3f-4e | `"hidden": true` on any layout node: checked, but kept out of the tree — not drawn, no room, no focus |
 | Step 3g-2a | Scrolling rows and columns: content cut off at the padding, the wheel, focus scrolled into view, a thin position bar |
 | Tests | JUnit in `ui/src/test`, run by `./gradlew test` with no window (`Aegis.headless`); every step from here adds its own |
+| Step 3g-3 | Spinner: a number typed or stepped, by its arrows or Up and Down; the marks widgets draw (▴ ▾ ▸ ◂ ✓) join the font atlas |
 | Step 3g-2b | The scroll bar dragged, a press beside it scrolling a view; PageUp/PageDown around the focused widget; a focusable pane scrolled by arrows, Home and End |
 
 ### The plan ahead
@@ -286,7 +287,7 @@ one reload, and a save of another theme none.
 
 **Step 3g — the widget set.** The widgets an editor needs that 3e did not make, measured
 against Swing's list; each keyboard-operable like the rest. **Started — we stopped after
-3g-2b.**
+3g-3.**
 
 | Group | Widgets |
 |---|---|
@@ -298,7 +299,7 @@ against Swing's list; each keyboard-operable like the rest. **Started — we sto
 
 The first two groups are step 3g, one widget a step, each reviewed: **3g-1** ✅ label and
 separator; **3g-2** scroll pane, in two parts — **3g-2a** ✅ scrolling by wheel and focus,
-**3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** spinner; **3g-4** tabbed pane, which the layout's
+**3g-2b** ✅ a draggable bar and PageUp/PageDown; **3g-3** ✅ spinner; **3g-4** tabbed pane, which the layout's
 `tabs` then uses instead of showing its first panel; **3g-5** split pane, its dividers dragged
 in memory only until Phase 4 writes them; **3g-6** tree; **3g-7** the overlay layer; **3g-8**
 tooltip; **3g-9** combo box; **3g-10** menu bar and menus; **3g-11** dialog. The third group
@@ -343,6 +344,22 @@ stays where it was** — a scroll bar is not something focus goes to. From the k
 less one line. A pane with nothing focusable inside — a log of labels — is made focusable
 itself (`tree.setFocusable(pane, true)`), and then also takes the arrows, a line at a time,
 and Home and End, with a focus ring around it. New theme entry: `scrollbar.thumb.hover`.
+
+**3g-3, spinner.** `ae.spinner(parent, name, min, max, value, step)` is a number in a field
+with two arrows, working as `JSpinner` does: the arrows — clicked, or held to repeat — and Up
+and Down step it, Shift making it ten steps; a number can be typed, and only what a number can
+hold gets in (digits, a minus, a point or a comma). What is typed becomes the value on Enter,
+on a step or when focus leaves; text that is not a number puts the last value back, a number
+out of range goes to the nearest end, and Esc gives the typing up. Arriving by Tab selects the
+number, so typing replaces it — the one departure from Swing, and what editors do. It is
+shown and kept with the decimals its step has (`setSpinnerDecimals` to say otherwise), so ten
+steps of 0.1 are exactly 1. `wasChanged` reports a new value, not each key typed. It edits
+through the text field's code — caret, selection, clipboard, undo — and shares the field's
+caret, selection, radius and padding, so the two line up; its own theme entries are
+`spinner.fill`, `.fill.hover`, `.border`, `.border.focused`, `.text`, `.arrow`,
+`.arrow.hover`, `.width` and `.button.width`. The arrows are glyphs: the draw list has
+rectangles and text only, so the font atlas now carries the few marks widgets draw —
+▴ ▾ ▸ ◂ ✓ (`AegisFont.ARROW_UP` and the rest).
 
 **Tests.** `./gradlew test` runs JUnit tests in `ui/src/test` without a window:
 `Aegis.headless()` makes an Aegis with no renderer whose font measures without uploading its

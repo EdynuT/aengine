@@ -129,6 +129,8 @@ public class Main extends Engine {
     private int toolbarSeparator;   //            upright in a row
     private int showGridCheckbox;   // step 3e-4: two checkboxes from the one ae.checkbox() method
     private int snapCheckbox;
+    private int gridSizeLabel;      // step 3g-3: a spinner, from ae.spinner(), with its label
+    private int gridSizeSpinner;
 
     // SCAFFOLDING — step 3d-2: clicks each interactive box has received, drawn inside it.
     private int clicksA;
@@ -1219,6 +1221,15 @@ public class Main extends Engine {
         showGridCheckbox = ae.checkbox(layoutInspector, "showGridCheckbox", "Show grid");
         snapCheckbox     = ae.checkbox(layoutInspector, "snapCheckbox",     "Snap to grid");
         ae.setChecked(snapCheckbox, true);
+
+        // Step 3g-3: a spinner — a number that is typed or stepped, the inspector's widget for
+        // a size, a count, a position. From 0.25 to 16, starting at 1, in steps of 0.25; the
+        // step having two decimals, so does what it shows: 1.00. Up and Down or the arrows step
+        // it (Shift: ten steps); a typed number becomes the value on Enter or when focus
+        // leaves, and gridSizeSpinner reports it then through ae.wasChanged(), read with
+        // ae.spinnerValue(). A label says what it is, as for the name field.
+        gridSizeLabel   = ae.label(layoutInspector, "gridSizeLabel", "Grid size");
+        gridSizeSpinner = ae.spinner(layoutInspector, "gridSizeSpinner", 0.25f, 16.0f, 1.0f, 0.25f);
 
         // Step 3f-4c: the scaffolding's plain boxes are not widgets, so nothing names them as
         // they are made. Named here with setNodeName, so a layout file can move them like the

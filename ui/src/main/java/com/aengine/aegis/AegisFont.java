@@ -56,13 +56,24 @@ public final class AegisFont {
 
     /**
      * Punctuation outside Latin-1 that pasted text brings with it — dashes, curly quotes, the
-     * ellipsis, the bullet, the euro and the trade mark. Without these, text copied from a
+     * ellipsis, the bullet, the euro and the trade mark — and the few marks widgets draw. Without these, text copied from a
      * browser or a document shows {@code ?} where a word processor put a nicer character.
      * Packed as a second range after Latin-1; their glyph rows follow its rows, in this order.
      *
      * <p>Not kerned: the kerning table covers Latin-1 pairs only, and a missing correction
      * beside a dash or a quote is far less visible than a missing glyph.</p>
      */
+    /** ▴ — a spinner's step up. One of the marks widgets draw as text; see {@link #EXTRA_CODEPOINTS}. */
+    public static final char ARROW_UP    = '\u25B4';
+    /** ▾ — a spinner's step down, an open tree node, a combo box. */
+    public static final char ARROW_DOWN  = '\u25BE';
+    /** ▸ — a closed tree node, a submenu. */
+    public static final char ARROW_RIGHT = '\u25B8';
+    /** ◂ */
+    public static final char ARROW_LEFT  = '\u25C2';
+    /** ✓ — a ticked menu item. */
+    public static final char CHECK_MARK  = '\u2713';
+
     private static final int[] EXTRA_CODEPOINTS = {
         0x2013,   // – en dash
         0x2014,   // — em dash
@@ -74,6 +85,8 @@ public final class AegisFont {
         0x2026,   // … ellipsis
         0x20AC,   // € euro
         0x2122,   // ™ trade mark
+        // What widgets draw as their marks, since the draw list has rectangles and text only:
+        ARROW_UP, ARROW_DOWN, ARROW_RIGHT, ARROW_LEFT, CHECK_MARK,
     };
 
     /** Every glyph in the atlas: Latin-1, then the extra punctuation. */

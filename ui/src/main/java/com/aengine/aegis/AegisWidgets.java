@@ -68,6 +68,11 @@ public final class AegisWidgets {
     private static final byte TEXT_BOX     = 5;   // a text field of several lines: shares all of its state
     private static final byte LABEL        = 6;   // step 3g-1: text, and nothing to act on
     private static final byte SEPARATOR    = 7;   // step 3g-1: a line across its parent
+    private static final byte SPINNER      = 8;   // step 3g-3: a number, typed or stepped; edits as a text field does
+
+    /** A held spinner arrow steps again after this long, then every {@link #SPIN_REPEAT_NANOS}. */
+    private static final long SPIN_DELAY_NANOS  = 400_000_000L;
+    private static final long SPIN_REPEAT_NANOS =  60_000_000L;
 
     /** Shift + arrow moves a slider this many steps at once. */
     private static final int LARGE_STEP = 10;
@@ -115,11 +120,21 @@ public final class AegisWidgets {
     private final String[] label;   // set once at build time; never built per frame. A text field's placeholder.
     private final boolean[] checked; // checkboxes: ticked or not
 
-    // Sliders: the value, its range, and how far one small step moves it.
+    // Sliders and spinners: the value, its range, and how far one small step moves it.
     private final float[] sliderValue;
     private final float[] sliderMin;
     private final float[] sliderMax;
     private final float[] sliderStep;
+
+    /** Spinners: how many digits after the decimal point the number is shown and kept with. */
+    private final int[] spinnerDecimals;
+
+    // The spinner arrow being held: which way it steps, +1 or -1, and when it steps next.
+    private int  spinHeld;
+    private long spinNextAt;
+
+    /** One arrow or mark, written here to be measured and drawn without making a String. */
+    private final StringBuilder arrowText = new StringBuilder(2);
 
     /** Where a slider's value is written as text each frame, reused rather than rebuilt. */
     private final StringBuilder valueText = new StringBuilder(16);
@@ -206,6 +221,8 @@ public final class AegisWidgets {
     private boolean hOpen;                         // whether the last block may still grow
     private long    hLastEdit;                     // when it last grew, for the pause
 
+    /** The spinner stepped by this frame's key() calls, reported by update(). */
+    private int  stepped = AegisLayout.NONE;
     /** The text field edited by this frame's key() and character() calls, reported by update(). */
     private int  edited = AegisLayout.NONE;
     /** When the caret was last shown afresh: it blinks from here, so it is visible while typing. */
@@ -245,6 +262,7 @@ public final class AegisWidgets {
         this.sliderMin   = new float[capacity];
         this.sliderMax   = new float[capacity];
         this.sliderStep  = new float[capacity];
+        this.spinnerDecimals = new int[capacity];
 
         this.fieldText      = new StringBuilder[capacity];
         this.fieldMaxLength = new int[capacity];
@@ -329,6 +347,7 @@ public final class AegisWidgets {
             case TEXT_FIELD, TEXT_BOX -> "textfield";
             case LABEL                -> "label";
             case SEPARATOR            -> "separator";
+            case SPINNER              -> "spinner";
             default                   -> "";
         };
     }
@@ -354,6 +373,7 @@ public final class AegisWidgets {
                 line * Math.max(1, visibleLines[node]) + style.textFieldPaddingY * 2.0f);
             case LABEL -> fit(node,
                 (float) Math.ceil(aegis.measure(label[node])), line + style.labelPaddingY * 2.0f);
+            case SPINNER -> fit(node, style.spinnerWidth, line + style.textFieldPaddingY * 2.0f);
             case SEPARATOR -> {
                 // Room for the line and its margins along the way its parent stacks; nothing
                 // across, since the line is drawn across the whole parent (drawSeparator).
@@ -585,6 +605,147 @@ public final class AegisWidgets {
     public void setSliderStep(int node, float step) { sliderStep[node] = step; }
 
     /**
+     * A spinner: a number in a field, with two small arrows that step it, added to
+     * {@code parent} — step 3g-3. What an inspector uses for a position, a count, a size.
+     *
+     * <p>It works as Swing's {@code JSpinner} does. The arrows, clicked or held, and the Up and
+     * Down keys step the value; Shift with a key steps ten at once. The number can also be
+     * typed: only what can be in a number is accepted — digits, a minus sign, and a point or
+     * a comma for the decimals — and what was typed becomes the value on Enter, on a step, or
+     * when focus leaves. Text that is not a number puts the last value back; a number outside
+     * the range is brought to its nearest end. Esc puts the last value back and gives up
+     * focus. Arriving by Tab selects the number, so typing replaces it.</p>
+     *
+     * <p>The value is shown and kept with as many decimals as {@code step} has, up to three —
+     * a step of 1 shows 12, a step of 0.25 shows 12.25 — or as {@link #setSpinnerDecimals}
+     * says. Asks for {@code spinner.width} and a text field's height.</p>
+     *
+     * @param parent the row or column to add it to
+     * @param name   its name, which a theme or a layout file writes — {@code "countSpinner"};
+     *               see {@link AegisLayout#setNodeName}
+     * @param min    the least it can be
+     * @param max    the most it can be
+     * @param value  the starting value, clamped to the range
+     * @param step   how far an arrow or an arrow key moves it
+     * @return its handle
+     * @throws IllegalArgumentException for a name {@link AegisLayout#isValidNodeName} refuses
+     */
+    public int spinner(int parent, String name, float min, float max, float value, float step) {
+        int node = textWidget(parent, name, SPINNER, 1, 24, 24);
+        sliderMin[node]  = min;
+        sliderMax[node]  = max;
+        sliderStep[node] = step;
+
+        int decimals = 0;
+        for (float scaled = Math.abs(step); decimals < 3 && Math.abs(scaled - Math.round(scaled)) > 1e-4f; scaled *= 10.0f) {
+            decimals++;
+        }
+        spinnerDecimals[node] = decimals;
+        sliderValue[node] = rounded(node, clamp(value, min, max));
+        writeSpinnerText(node);
+        return node;
+    }
+
+    /**
+     * A spinner's value: the last one stepped to or confirmed. A number still being typed is
+     * not it yet.
+     *
+     * @param node the spinner
+     * @return the value, within its range
+     */
+    public float spinnerValue(int node) { return sliderValue[node]; }
+
+    /**
+     * Sets a spinner's value from code, clamped to its range, and shows it. Not reported by
+     * {@link #wasChanged}.
+     *
+     * @param node  the spinner
+     * @param value the new value
+     */
+    public void setSpinnerValue(int node, float value) {
+        sliderValue[node] = rounded(node, clamp(value, sliderMin[node], sliderMax[node]));
+        writeSpinnerText(node);
+    }
+
+    /**
+     * How many digits a spinner shows and keeps after the decimal point, from 0 to 6.
+     *
+     * @param node     the spinner
+     * @param decimals the digits; 0 for whole numbers
+     */
+    public void setSpinnerDecimals(int node, int decimals) {
+        spinnerDecimals[node] = Math.max(0, Math.min(6, decimals));
+        sliderValue[node] = rounded(node, sliderValue[node]);
+        writeSpinnerText(node);
+    }
+
+    /** A value brought to the decimals a spinner keeps, so stepping by 0.1 ten times is exactly 1. */
+    private float rounded(int node, float value) {
+        double scale = Math.pow(10.0, spinnerDecimals[node]);
+        return (float) (Math.round(value * scale) / scale);
+    }
+
+    /** Shows a spinner's value in its field, replacing whatever was being typed. */
+    private void writeSpinnerText(int node) {
+        StringBuilder text = fieldText[node];
+        text.setLength(0);
+        int decimals = spinnerDecimals[node];
+        long scale = 1;
+        for (int i = 0; i < decimals; i++) scale *= 10;
+        long scaled = Math.round((double) sliderValue[node] * scale);
+        if (scaled < 0) text.append('-');
+        scaled = Math.abs(scaled);
+        text.append(scaled / scale);
+        if (decimals > 0) {
+            text.append('.');
+            long fraction = scaled % scale;
+            for (long digit = scale / 10; digit > 0; digit /= 10) text.append((char) ('0' + (fraction / digit) % 10));
+        }
+        caret[node]       = text.length();
+        anchor[node]      = caret[node];
+        fieldScroll[node] = 0.0f;
+        if (hField == node) resetHistory();
+    }
+
+    /**
+     * Makes what is typed in a spinner its value: a number is clamped to the range and brought
+     * to the spinner's decimals; anything else is dropped. Either way the field then shows the
+     * value. Returns whether the value changed.
+     */
+    private boolean commitSpinner(int node) {
+        float before = sliderValue[node];
+        try {
+            float typed = Float.parseFloat(fieldText[node].toString().replace(',', '.'));
+            if (!Float.isNaN(typed)) {
+                sliderValue[node] = rounded(node, clamp(typed, sliderMin[node], sliderMax[node]));
+            }
+        } catch (NumberFormatException notANumber) {
+            // The last value stays.
+        }
+        writeSpinnerText(node);
+        if (sliderValue[node] == before) return false;
+        changed = node;   // for a commit made inside update()
+        stepped = node;   // for one made by a key, before it: update() reports it
+        return true;
+    }
+
+    /** Steps a spinner, after taking what was typed: by the arrows, or by Up and Down. */
+    private void stepSpinner(int node, int steps) {
+        commitSpinner(node);
+        float before = sliderValue[node];
+        sliderValue[node] = rounded(node,
+            clamp(before + steps * sliderStep[node], sliderMin[node], sliderMax[node]));
+        writeSpinnerText(node);
+        anchor[node] = 0;                   // the number selected, so typing replaces it
+        if (sliderValue[node] != before) stepped = node;
+    }
+
+    /** Whether a character can be part of a number: what a spinner lets in. */
+    private static boolean isNumberChar(int c) {
+        return (c >= '0' && c <= '9') || c == '-' || c == '.' || c == ',';
+    }
+
+    /**
      * A single-line text field with no limit on its length, added to {@code parent}. Starts
      * empty.
      *
@@ -766,7 +927,7 @@ public final class AegisWidgets {
 
     /**
      * Whether a node was made by this class — a button, a checkbox, a slider, a text field or
-     * box, a label or a separator.
+     * box, a label, a separator or a spinner.
      *
      * @param node any layout handle
      * @return {@code true} for a widget, {@code false} for a plain layout node
@@ -908,7 +1069,9 @@ public final class AegisWidgets {
         boolean selection = anchor[node] != at;
         boolean box       = kind[node] == TEXT_BOX;
 
-        if (box && key == Keys.ENTER && !ctrl) {
+        if (kind[node] == SPINNER && (key == Keys.UP || key == Keys.DOWN)) {
+            stepSpinner(node, (key == Keys.UP ? 1 : -1) * (shift ? LARGE_STEP : 1));
+        } else if (box && key == Keys.ENTER && !ctrl) {
             insertChar(node, '\n');
         } else if (box && (key == Keys.UP || key == Keys.DOWN)) {
             hOpen = false;
@@ -974,6 +1137,7 @@ public final class AegisWidgets {
         } else if (key == Keys.SPACE) {
             return true;
         } else if (key == Keys.ESCAPE) {
+            if (kind[node] == SPINNER) writeSpinnerText(node);   // what was typed is given up
             if (!repeat) tree.focus(AegisLayout.NONE);
             return true;
         } else {
@@ -990,6 +1154,7 @@ public final class AegisWidgets {
      */
     private void insert(int node, int codepoint) {
         if (!isAllowed(codepoint)) return;
+        if (kind[node] == SPINNER && !isNumberChar(codepoint)) return;
         insertChar(node, (char) codepoint);
     }
 
@@ -1017,9 +1182,10 @@ public final class AegisWidgets {
         finishEdit(node);
     }
 
-    /** Whether a node is a text field or a text box — whether it takes typing. */
+    /** Whether a node is a text field, a text box or a spinner — whether it takes typing. */
     private boolean isText(int node) {
-        return node != AegisLayout.NONE && (kind[node] == TEXT_FIELD || kind[node] == TEXT_BOX);
+        return node != AegisLayout.NONE
+            && (kind[node] == TEXT_FIELD || kind[node] == TEXT_BOX || kind[node] == SPINNER);
     }
 
     /**
@@ -1113,7 +1279,7 @@ public final class AegisWidgets {
                 continue;
             }
             if (c == '\n' || c == '\t') c = ' ';
-            if (isAllowed(c)) clipboardScratch.append(c);
+            if (isAllowed(c) && (kind[node] != SPINNER || isNumberChar(c))) clipboardScratch.append(c);
         }
         if (clipboardScratch.length() == 0) return;
 
@@ -1343,9 +1509,12 @@ public final class AegisWidgets {
         changed   = AegisLayout.NONE;
         activatedByKeyboard = false;
 
-        // Text was edited as the keys arrived; this frame reports it.
-        changed = edited;
+        // Text was edited as the keys arrived; this frame reports it. Typing in a spinner is
+        // not a change yet — its value is, once confirmed — but a step by a key is.
+        changed = edited != AegisLayout.NONE && kind[edited] == SPINNER ? AegisLayout.NONE : edited;
         edited  = AegisLayout.NONE;
+        if (stepped != AegisLayout.NONE) changed = stepped;
+        stepped = AegisLayout.NONE;
 
         // A press on a scroll bar is the bar's, not a click on what lies under it, and it
         // does not take focus away from where it was.
@@ -1379,7 +1548,28 @@ public final class AegisWidgets {
         // moves only the caret, so dragging selects from where the press began. Dragging past
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
-        if (isText(pressed)) {
+        // A spinner pressed on its arrows steps instead: once at the press, and again and
+        // again while held.
+        boolean onArrows = false;
+        if (pressed != AegisLayout.NONE && kind[pressed] == SPINNER) {
+            if (pressed != lastPressed) {
+                spinHeld = spinnerArrowAt(pressed, tree.pointerX(), tree.pointerY());
+                if (spinHeld != 0) {
+                    stepSpinner(pressed, spinHeld);
+                    spinNextAt = System.nanoTime() + SPIN_DELAY_NANOS;
+                }
+            } else if (spinHeld != 0 && System.nanoTime() >= spinNextAt) {
+                stepSpinner(pressed, spinHeld);
+                spinNextAt = System.nanoTime() + SPIN_REPEAT_NANOS;
+            }
+            onArrows = spinHeld != 0;
+            if (stepped != AegisLayout.NONE) changed = stepped;
+            stepped = AegisLayout.NONE;
+        } else {
+            spinHeld = 0;
+        }
+
+        if (isText(pressed) && !onArrows) {
             boolean freshPress = pressed != lastPressed;
             int at = caretAt(pressed, tree.pointerX(), tree.pointerY());
             if (freshPress || at != caret[pressed]) {
@@ -1393,6 +1583,13 @@ public final class AegisWidgets {
         // and whatever gained focus is scrolled into view, so Tab never lands somewhere the
         // user cannot see.
         if (focused != lastFocused) {
+            // A spinner that loses focus takes what was typed in it; one reached by Tab has its
+            // number selected, so typing replaces it.
+            if (lastFocused != AegisLayout.NONE && kind[lastFocused] == SPINNER) commitSpinner(lastFocused);
+            if (focused != AegisLayout.NONE && kind[focused] == SPINNER && pendingFocusMove != 0) {
+                anchor[focused] = 0;
+                caret[focused]  = fieldText[focused].length();
+            }
             caretShownAt = System.nanoTime();
             lastFocused  = focused;
             if (focused != AegisLayout.NONE) scrollIntoView(focused);
@@ -1429,6 +1626,7 @@ public final class AegisWidgets {
         pendingWheel     = 0.0f;
         pendingPages     = 0;
         pendingLines     = 0;
+        stepped          = AegisLayout.NONE;
     }
 
     /** Moves a slider to the value under the pointer's x, and reports a change if there was one. */
@@ -1463,9 +1661,17 @@ public final class AegisWidgets {
         return layout.x(node) + styleOf(node).textFieldPaddingX;
     }
 
-    /** How wide the part of a text field that shows text is. */
+    /** How wide the part of a text field that shows text is. A spinner's arrows take their part of it. */
     private float fieldTextWidth(int node) {
-        return Math.max(0.0f, layout.width(node) - styleOf(node).textFieldPaddingX * 2.0f);
+        float arrows = kind[node] == SPINNER ? styleOf(node).spinnerButtonWidth : 0.0f;
+        return Math.max(0.0f, layout.width(node) - styleOf(node).textFieldPaddingX * 2.0f - arrows);
+    }
+
+    /** Which of a spinner's arrows a point is on: +1 the upper, -1 the lower, 0 neither. */
+    private int spinnerArrowAt(int node, float px, float py) {
+        float x = layout.x(node), y = layout.y(node), w = layout.width(node), h = layout.height(node);
+        if (px < x + w - styleOf(node).spinnerButtonWidth || px >= x + w || py < y || py >= y + h) return 0;
+        return py < y + h * 0.5f ? +1 : -1;
     }
 
     /** How tall the part of a text box that shows text is. */
@@ -1824,6 +2030,14 @@ public final class AegisWidgets {
                     activatedByKeyboard = true;
                 }
             }
+            case SPINNER -> {
+                if (byKeyboard) {
+                    commitSpinner(node);
+                    anchor[node] = 0;   // confirmed, and selected for the next number
+                    activated = node;
+                    activatedByKeyboard = true;
+                }
+            }
             default -> { }   // not a widget: a click on a plain node does nothing here
         }
     }
@@ -1872,6 +2086,7 @@ public final class AegisWidgets {
         if (kind[root] == TEXT_BOX)   drawTextBox(root);
         if (kind[root] == LABEL)      drawLabel(root);
         if (kind[root] == SEPARATOR)  drawSeparator(root);
+        if (kind[root] == SPINNER)    drawSpinner(root);
 
         // A scrolling row or column shows its children only inside its padding, and where it
         // is scrolled to (step 3g-2).
@@ -2066,6 +2281,18 @@ public final class AegisWidgets {
             fill[0], fill[1], fill[2], fill[3],
             border[0], border[1], border[2], border[3], style.textFieldBorderWidth);
 
+        drawFieldLine(node, style, style.textFieldText);
+    }
+
+    /**
+     * The one line of a text field or a spinner, inside its frame: the selection, the text or
+     * the placeholder, and the caret, scrolled so the caret is in view and clipped to the part
+     * that shows text.
+     */
+    private void drawFieldLine(int node, AegisStyle style, float[] ink) {
+        float y = layout.y(node), h = layout.height(node);
+        boolean focused = tree.isFocused(node);
+
         scrollField(node, focused && revealCaret);
         if (focused) revealCaret = false;
 
@@ -2091,7 +2318,6 @@ public final class AegisWidgets {
             float[] hint = style.textFieldPlaceholder;
             aegis.addTextTop(left, textY, label[node], hint[0], hint[1], hint[2], hint[3]);
         } else {
-            float[] ink = style.textFieldText;
             aegis.addTextTop(textX, textY, text, ink[0], ink[1], ink[2], ink[3]);
         }
 
@@ -2105,6 +2331,44 @@ public final class AegisWidgets {
                 c[0], c[1], c[2], c[3]);
         }
         aegis.popClipRect();
+    }
+
+    /**
+     * A spinner: a text field's frame and line, and at the right its two arrows, one above the
+     * other, each lighter under the pointer.
+     */
+    private void drawSpinner(int node) {
+        AegisStyle style = styleOf(node);
+        float x = layout.x(node), y = layout.y(node);
+        float w = layout.width(node), h = layout.height(node);
+        boolean focused = tree.isFocused(node);
+
+        float[] fill   = tree.isHovered(node) ? style.spinnerHover : style.spinnerFill;
+        float[] border = focused ? style.spinnerBorderFocused : style.spinnerBorder;
+        aegis.addRoundedRect(x, y, w, h, style.textFieldRadius,
+            fill[0], fill[1], fill[2], fill[3],
+            border[0], border[1], border[2], border[3], style.textFieldBorderWidth);
+
+        drawFieldLine(node, style, style.spinnerText);
+
+        // The arrows: each centred in its half of the part kept for them. Lit when the pointer
+        // is on it and nothing else holds the pointer, or while it is the one held.
+        float buttonW = style.spinnerButtonWidth;
+        float buttonX = x + w - buttonW;
+        int over = tree.isHovered(node) ? spinnerArrowAt(node, tree.pointerX(), tree.pointerY()) : 0;
+        if (tree.isPressed(node)) over = spinHeld;
+        AegisFont font = aegis.font();
+        float lh = aegis.lineHeight();
+        for (int way = +1; way >= -1; way -= 2) {
+            arrowText.setLength(0);
+            arrowText.append(way > 0 ? AegisFont.ARROW_UP : AegisFont.ARROW_DOWN);
+            float[] ink = over == way ? style.spinnerArrowHover : style.spinnerArrow;
+            float halfTop = way > 0 ? y : y + h * 0.5f;
+            aegis.pushClipRect(buttonX, halfTop, buttonW, h * 0.5f);
+            aegis.addTextTop(Math.round(buttonX + (buttonW - font.measure(arrowText)) * 0.5f),
+                Math.round(halfTop + (h * 0.5f - lh) * 0.5f), arrowText, ink[0], ink[1], ink[2], ink[3]);
+            aegis.popClipRect();
+        }
     }
 
     /**

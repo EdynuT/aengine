@@ -264,7 +264,99 @@ class AegisWidgetsTest {
     }
 
     @Test
+    void aSpinnerStepsByKeysWithinItsRange() {
+        int count = ae.spinner(shell.root, "countSpinner", 0.0f, 10.0f, 5.0f, 1.0f);
+        assertEquals("5", ae.text(count).toString());
+        shell.tab();
+
+        shell.key(Keys.UP);
+        assertEquals(6.0f, ae.spinnerValue(count));
+        assertTrue(ae.wasChanged(count));
+        assertEquals("6", ae.text(count).toString());
+
+        shell.key(Keys.UP, Keys.MOD_SHIFT);
+        assertEquals(10.0f, ae.spinnerValue(count), "ten steps, stopped at the most it can be");
+        shell.key(Keys.UP);
+        assertFalse(ae.wasChanged(count));
+        shell.key(Keys.DOWN);
+        assertEquals(9.0f, ae.spinnerValue(count));
+    }
+
+    @Test
+    void aSpinnerTakesATypedNumberOnEnterAndDropsWhatIsNotOne() {
+        int size = ae.spinner(shell.root, "sizeSpinner", -100.0f, 100.0f, 1.0f, 0.25f);
+        assertEquals("1.00", ae.text(size).toString(), "as many decimals as the step has");
+        shell.tab();                       // arriving by Tab selects the number
+
+        shell.type("12,5x");               // the comma is a decimal point; the x never gets in
+        assertEquals("12,5", ae.text(size).toString());
+        assertEquals(1.0f, ae.spinnerValue(size), "typing is not the value yet");
+        assertFalse(ae.wasChanged(size));
+
+        shell.key(Keys.ENTER);
+        assertEquals(12.5f, ae.spinnerValue(size));
+        assertEquals("12.50", ae.text(size).toString());
+        assertTrue(ae.wasChanged(size));
+        assertTrue(ae.wasActivated(size));
+
+        shell.type("--");
+        shell.key(Keys.ENTER);
+        assertEquals(12.5f, ae.spinnerValue(size), "not a number: the last value is put back");
+        assertEquals("12.50", ae.text(size).toString());
+
+        shell.type("5000");
+        shell.key(Keys.ENTER);
+        assertEquals(100.0f, ae.spinnerValue(size), "out of range: brought to the nearest end");
+    }
+
+    @Test
+    void aSpinnerTakesWhatWasTypedWhenFocusLeavesAndGivesItUpOnEsc() {
+        int first  = ae.spinner(shell.root, "firstSpinner", 0.0f, 100.0f, 1.0f, 1.0f);
+        int second = ae.spinner(shell.root, "secondSpinner", 0.0f, 100.0f, 2.0f, 1.0f);
+        shell.tab();
+        shell.type("42");
+        shell.tab();
+        assertEquals(42.0f, ae.spinnerValue(first));
+        assertTrue(ae.wasChanged(first));
+
+        shell.type("77");
+        shell.key(Keys.ESCAPE);
+        assertEquals(2.0f, ae.spinnerValue(second));
+        assertEquals("2", ae.text(second).toString());
+        assertEquals(AegisLayout.NONE, shell.tree.focused());
+    }
+
+    @Test
+    void aSpinnersArrowsStepItAndSteppingByTenthsStaysExact() {
+        int opacity = ae.spinner(shell.root, "opacitySpinner", 0.0f, 1.0f, 0.0f, 0.1f);
+        shell.frame();
+        float x = layout.x(opacity) + layout.width(opacity) - 5.0f;
+
+        for (int i = 0; i < 10; i++) {
+            shell.pointerAt(x, layout.y(opacity) + 3.0f);          // the upper arrow
+            shell.frame();
+            shell.press();
+            shell.frame();
+            assertTrue(ae.wasChanged(opacity));
+            shell.release();
+            shell.frame();
+        }
+        assertEquals(1.0f, ae.spinnerValue(opacity), "ten tenths are one, not 1.0000001");
+        assertEquals("1.0", ae.text(opacity).toString());
+
+        shell.pointerAt(x, layout.y(opacity) + layout.height(opacity) - 3.0f);   // the lower arrow
+        shell.frame();
+        shell.press();
+        shell.frame();
+        shell.release();
+        shell.frame();
+        assertEquals(0.9f, ae.spinnerValue(opacity));
+        assertEquals(opacity, shell.tree.focused());
+    }
+
+    @Test
     void everyKindDrawsWithoutAWindow() {
+        ae.spinner(shell.root, "aSpinner", 0.0f, 10.0f, 5.0f, 0.5f);
         ae.button(shell.root, "aButton", "Button");
         ae.checkbox(shell.root, "aCheckbox", "Checkbox");
         ae.slider(shell.root, "aSlider", 0.0f, 10.0f, 5.0f);
