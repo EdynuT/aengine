@@ -25,7 +25,7 @@ import java.util.Map;
  * Where the shell's files live, and which of them the editor uses — the one place that knows
  * (§7, <em>Where the files live</em>).
  *
- * <p>Two directories. The <b>installation's</b>, {@code <install>/ui/}, holds the defaults the
+ * <p>Two directories. The <b>installation's</b>, {@code <install>/gui/}, holds the defaults the
  * engine ships — made by the shell's designer, read and never written. The <b>user's</b>, in
  * the system's per-user data directory, holds what the user made or changed. A file is looked
  * for in the user's first, then the installation's, and when neither has a usable one the
@@ -70,13 +70,13 @@ public final class ShellFiles {
     }
 
     /**
-     * {@code <install>/ui/}: the shipped defaults. {@code aengine.home} if set, else the working directory.
+     * {@code <install>/gui/}: the shipped defaults. {@code aengine.home} if set, else the working directory.
      *
      * @return the absolute path; it may not exist
      */
     public static Path installDir() {
         String home = System.getProperty("aengine.home");
-        return (home != null ? Path.of(home) : Path.of("")).toAbsolutePath().resolve("ui");
+        return (home != null ? Path.of(home) : Path.of("")).toAbsolutePath().resolve("gui");
     }
 
     /**
@@ -91,9 +91,9 @@ public final class ShellFiles {
     }
 
     /**
-     * The user's {@code AEngine/ui/}: {@code aengine.userdata} if set; on Windows
-     * {@code AEngine/ui} under {@code %LOCALAPPDATA%}; elsewhere {@code $XDG_DATA_HOME/AEngine/ui}, which
-     * defaults to {@code ~/.local/share/AEngine/ui}.
+     * The user's {@code AEngine/gui/}: {@code aengine.userdata} if set; on Windows
+     * {@code AEngine/gui} under {@code %LOCALAPPDATA%}; elsewhere {@code $XDG_DATA_HOME/AEngine/gui}, which
+     * defaults to {@code ~/.local/share/AEngine/gui}.
      *
      * @return the absolute path; it may not exist
      */
@@ -103,13 +103,13 @@ public final class ShellFiles {
 
         String localAppData = System.getenv("LOCALAPPDATA");
         if (localAppData != null && System.getProperty("os.name", "").startsWith("Windows")) {
-            return Path.of(localAppData, "AEngine", "ui");
+            return Path.of(localAppData, "AEngine", "gui");
         }
         String xdg = System.getenv("XDG_DATA_HOME");
         Path data = xdg != null && !xdg.isBlank()
             ? Path.of(xdg)
             : Path.of(System.getProperty("user.home"), ".local", "share");
-        return data.resolve("AEngine").resolve("ui");
+        return data.resolve("AEngine").resolve("gui");
     }
 
     /**

@@ -52,8 +52,8 @@ order, and takes the first file that exists and can be read:
 
 | Order | Place | Who writes it |
 |---|---|---|
-| 1 | The user's directory: `~/.local/share/AEngine/ui/themes/` on Linux, `%LOCALAPPDATA%\AEngine\ui\themes\` on Windows | The user: their own themes |
-| 2 | The installation: `<install>/ui/themes/`. In the repository, `editor/src/dist/ui/themes/` | The designer: the themes that ship |
+| 1 | The user's directory: `~/.local/share/AEngine/gui/themes/` on Linux, `%LOCALAPPDATA%\AEngine\gui\themes\` on Windows | The user: their own themes |
+| 2 | The installation: `<install>/gui/themes/`. In the repository, `editor/src/dist/gui/themes/` | The designer: the themes that ship |
 | 3 | The factory theme, compiled into the engine | Nobody. Used when no file is found or none can be read |
 
 A user's theme with the same name as a shipped one hides the shipped one.

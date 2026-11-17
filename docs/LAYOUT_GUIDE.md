@@ -61,8 +61,8 @@ The editor reads `layouts/<name>.json`, where the name is `default` unless
 
 | Order | Place | Who writes it |
 |---|---|---|
-| 1 | The user's directory: `~/.local/share/AEngine/ui/layouts/` on Linux, `%LOCALAPPDATA%\AEngine\ui\layouts\` on Windows | **The editor**, when the user resizes or closes a dock |
-| 2 | The installation: `<install>/ui/layouts/`. In the repository, `editor/src/dist/ui/layouts/` | The designer: the layout that ships |
+| 1 | The user's directory: `~/.local/share/AEngine/gui/layouts/` on Linux, `%LOCALAPPDATA%\AEngine\gui\layouts\` on Windows | **The editor**, when the user resizes or closes a dock |
+| 2 | The installation: `<install>/gui/layouts/`. In the repository, `editor/src/dist/gui/layouts/` | The designer: the layout that ships |
 | 3 | The factory layout, compiled into the engine | Nobody. Used when no file describes the screen usably |
 
 For each screen (today only `editor`), the first file that describes it **without errors**

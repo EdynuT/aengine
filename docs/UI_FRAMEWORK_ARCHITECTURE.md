@@ -524,8 +524,8 @@ Step 3d is closed; none of these blocks step 3e, which follows it.
 - **Default font** — the friend designing the shell chooses; DejaVu Sans holds the place.
 - ~~**Where the shell, font and locale files live**~~ — **decided:** built-in dark and light
   themes, the default font and the locale files in the installation (locales in
-  `<install>/lang/`); user themes, user fonts and layouts under `AEngine/ui/` in the
-  user's data directory (`~/.local/share/AEngine/ui/`, `%LOCALAPPDATA%\AEngine\ui\`). Not per
+  `<install>/lang/`); user themes, user fonts and layouts under `AEngine/gui/` in the
+  user's data directory (`~/.local/share/AEngine/gui/`, `%LOCALAPPDATA%\AEngine\gui\`). Not per
   project. See §7 and §8.
 - **Instancing** — 3b-4 has put real paragraphs on screen, so the size of the question is now
   known even though it has not been profiled. The scaffolding draws roughly 700 quads, of
@@ -1585,20 +1585,20 @@ live-reloaded, which keeps the watcher from ever reacting to the editor's own wr
 Two places, for two kinds of theme. "`theme.json`" elsewhere in this document stands for
 any theme file.
 
-**Built-in themes ship with the installation**, in `<install>/ui/themes/`, made by the
+**Built-in themes ship with the installation**, in `<install>/gui/themes/`, made by the
 shell's designer — a dark one and a light one are planned. They are not meant to be edited — nothing stops a curious user
 from opening them, but an update to the engine may replace them. Because they always come
 with the engine, a fresh machine starts with a working theme and nothing has to be copied
 anywhere on first start.
 
 **Themes the user makes go in the user's data directory**, the place each operating system
-reserves for an application's per-user files, under `AEngine/ui/`:
+reserves for an application's per-user files, under `AEngine/gui/`:
 
 | System | Directory |
 |---|---|
-| Linux | `$XDG_DATA_HOME/AEngine/ui/`, which defaults to `~/.local/share/AEngine/ui/` |
-| Windows | `%LOCALAPPDATA%\AEngine\ui\`, i.e. `C:\Users\<name>\AppData\Local\AEngine\ui\` |
-| macOS | `~/Library/Application Support/AEngine/ui/` |
+| Linux | `$XDG_DATA_HOME/AEngine/gui/`, which defaults to `~/.local/share/AEngine/gui/` |
+| Windows | `%LOCALAPPDATA%\AEngine\gui\`, i.e. `C:\Users\<name>\AppData\Local\AEngine\gui\` |
+| macOS | `~/Library/Application Support/AEngine/gui/` |
 
 A new theme is a file placed in `themes/` inside that directory. The procedure — how to
 start from a built-in theme and where to put the result — is for user documentation, not
@@ -1609,7 +1609,7 @@ for the editor to guide.
 Keeping them in a folder of their own leaves room for several layouts to choose from, the
 way themes are chosen. The installation carries a default layout in its `layouts/`, made by
 the shell's designer and never written. **The user's layout**, which the program writes,
-lives under `AEngine/ui/layouts/` and **never in the installation**, so an engine update cannot reset a
+lives under `AEngine/gui/layouts/` and **never in the installation**, so an engine update cannot reset a
 user's arrangement. Not in a cache directory either (`~/.cache`): the system and cleaning tools treat a cache as
 disposable and empty it, which would reset the arrangement just the same.
 
