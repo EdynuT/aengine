@@ -48,7 +48,8 @@ tasks.named('run') {
     // into the installation, so running from here sees what an installed engine would.
     systemProperty 'aengine.home', file('src/dist').absolutePath
 
-    // ./gradlew :editor:run -PtestShell stands the test themes and layouts in test-shell/ in
+    // ./gradlew :editor:run -PtestShell stands the test themes and layouts in test-shell/ — a
+    // local sandbox, not in the repository (.gitignore) — in
     // for the user's own, so trying one never touches ~/.local/share/AEngine. They do not ship.
     if (project.hasProperty('testShell')) {
         systemProperty 'aengine.userdata', file('test-shell').absolutePath

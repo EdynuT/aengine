@@ -50,7 +50,9 @@ Save it as `minimal.json` in a `layouts/` directory (see §3) and start the edit
 ./gradlew :editor:run -PtestShell -PlayoutFile=minimal
 ```
 
-`-PtestShell` reads `editor/test-shell/layouts/minimal.json` and never writes over it.
+`-PtestShell` reads `editor/test-shell/layouts/minimal.json` and never writes over it. The
+`test-shell` folder is your own sandbox: it is not in the repository, so create it, with
+`layouts/` and `themes/` inside, the first time.
 
 ---
 
@@ -77,7 +79,7 @@ is used. A screen with an error in the user's file comes from the installation's
 |---|---|
 | `./gradlew :editor:run` | `layouts/default.json`, looked for as above |
 | `... -PlayoutFile=moved` | `layouts/moved.json` instead |
-| `... -PtestShell` | The user's directory becomes `editor/test-shell/`, and nothing is written there |
+| `... -PtestShell` | The user's directory becomes `editor/test-shell/` (a local folder, not in the repository), and nothing is written there |
 
 The layout is read once, when the editor starts: restart it to see a change. **File names**
 are lower case, with hyphens between words.
@@ -274,8 +276,8 @@ file arranges them:
 - **Order and groups.** Widgets stand in the order written, grouped in any rows and columns
   you like. These rows and columns have no name, so regrouping a panel never breaks a theme.
 - **Moving a widget to another panel.** Name it in the other panel's `children`. A widget
-  keeps the theme of the panel code made it in, wherever it is moved. For example, `moved.json`
-  in `editor/test-shell/layouts` moves the menu bar into the toolbar.
+  keeps the theme of the panel code made it in, wherever it is moved. For example, the recipe
+  in §12 moves the menu bar into the toolbar.
 - **A widget left out goes to the end** of the panel code made it in, with a warning. A
   control an engine update adds is never lost because an older layout did not know it. To
   leave a widget out on purpose, place it with `"hidden": true`.

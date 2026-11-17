@@ -66,7 +66,7 @@ started:
 | `./gradlew :editor:run` | The factory theme |
 | `./gradlew :editor:run -PthemeFile=dark` | `themes/dark.json`, looked for as above |
 | `... -PthemeWatch` | Saving the theme file applies it to the running editor |
-| `... -PtestShell` | The user's directory becomes `editor/test-shell/`, so test themes never touch your real one |
+| `... -PtestShell` | The user's directory becomes `editor/test-shell/`, a local folder not in the repository, so test themes never touch your real one |
 
 **File names** are lower case, with hyphens between words: `dark.json`,
 `high-contrast.json`.

@@ -1630,7 +1630,8 @@ real `~/.local/share/AEngine`. `-PthemeFile=<name>` picks a theme by name, and
 `-PlayoutFile=<name>` a layout — not `-Playout`, since every Gradle project already has a
 `layout` property of its own, which would be read instead; the theme's option is named the
 same way for uniformity. Nothing in
-`test-shell` ships.
+`test-shell` ships, and since 0.17 it is not in the repository either: each developer keeps
+their own sandbox there, ignored by git.
 
 The per-project option — each game project carrying its own editor appearance — is
 **rejected**, and the test that rejects it is worth keeping: *is the file needed for the game
