@@ -270,7 +270,18 @@ public final class AegisScreens {
     private boolean check(AegisLayoutFile file, AegisLayoutFile.Node node, Map<String, Integer> widgets) {
         boolean usable = true;
         switch (node.type()) {
-            case PANEL -> usable = checkPanel(file, node, node.name());
+            case PANEL -> {
+                usable = checkPanel(file, node, node.name());
+                // Whether a panel is a row or a column is code's, known only now.
+                Integer panel = panels.get(node.name());
+                if (panel != null) {
+                    boolean row = layout.isRow(panel);
+                    if (row ? node.alignX() == AegisLayout.Align.STRETCH : node.alignY() == AegisLayout.Align.STRETCH) {
+                        file.error(node, AegisLayoutFile.stretchAlongFlow(node.label(), row));
+                        usable = false;
+                    }
+                }
+            }
             case TABS  -> {
                 if (node.tabs().isEmpty()) {
                     file.error(node, "tabs lists no panel; it needs at least one to show");

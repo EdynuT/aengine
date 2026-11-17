@@ -149,6 +149,31 @@ class AegisScreensTest {
     }
 
     @Test
+    void stretchAlongTheWayARowOrColumnStacksIsAnErrorNotACrash() throws Exception {
+        AegisLayoutFile row = file("""
+            { "format": 1, "screens": { "editor": { "root": { "type": "row", "alignX": "stretch", "children": [
+              { "type": "panel", "panel": "viewport" } ] } } } }
+            """);
+        assertNull(row.screen("editor"), "a row stretched along X is set aside as it is read");
+
+        AegisLayoutFile column = file("""
+            { "format": 1, "screens": { "editor": { "root": { "type": "column", "alignY": "stretch", "children": [
+              { "type": "panel", "panel": "viewport" } ] } } } }
+            """);
+        assertNull(column.screen("editor"));
+
+        // A panel is a row or a column by its code: told only when the screen is built.
+        AegisLayoutFile rowPanel = file("""
+            { "format": 1, "screens": { "editor": { "root": { "type": "column", "children": [
+              { "type": "panel", "panel": "toolbar", "alignX": "stretch" },
+              { "type": "panel", "panel": "viewport", "alignX": "stretch" } ] } } } }
+            """);
+        int root = screens.build("editor", row, column, rowPanel, file(FACTORY));
+        assertEquals(80.0f, layout.requestedHeight(toolbar), "the factory layout, after all three");
+        assertEquals(toolbar, layout.firstChild(root));
+    }
+
+    @Test
     void withNoUsableFileInLineBuildingFails() throws Exception {
         AegisLayoutFile unknownPanel = file("""
             { "name": "Outdated", "format": 1,

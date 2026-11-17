@@ -569,6 +569,9 @@ public final class AegisLayoutFile {
             if (align == null) {
                 error(at, node.label() + ": " + key + " is one of \"start\", \"center\", \"end\""
                     + " or \"stretch\", in quotes; got " + value);
+            } else if (align == AegisLayout.Align.STRETCH
+                    && ((node.type == Type.ROW && key.equals("alignX")) || (node.type == Type.COLUMN && key.equals("alignY")))) {
+                error(at, stretchAlongFlow(node.label(), node.type == Type.ROW));
             } else if (key.equals("alignX")) {
                 node.alignX = align;
             } else {
@@ -659,6 +662,18 @@ public final class AegisLayoutFile {
     // -----------------------------------------------------------------------------------
 
     private int line(List<String> path) { return lines.line(path.toArray(new String[0])); }
+
+    /**
+     * Why {@code "stretch"} cannot be the alignment along the way a row or column stacks its
+     * children: they follow each other that way, and {@code grow} is what lengthens them.
+     */
+    static String stretchAlongFlow(String label, boolean row) {
+        return row
+            ? label + ": alignX cannot be \"stretch\" on a row — its children follow each other along X;"
+                + " give a child \"grow\" to widen it"
+            : label + ": alignY cannot be \"stretch\" on a column — its children follow each other along Y;"
+                + " give a child \"grow\" to heighten it";
+    }
 
     private static boolean isString(JsonElement e) {
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString();
