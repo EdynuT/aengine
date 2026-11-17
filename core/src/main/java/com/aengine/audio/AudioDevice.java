@@ -35,13 +35,15 @@ public final class AudioDevice {
      * Opens the operating system's default audio output, creates the OpenAL context and
      * makes it current on the calling thread.
      *
-     * <p>If the device reports no OpenAL 1.0 support, the problem is logged and
-     * initialisation carries on. Calling this twice opens a second device without closing
-     * the first.</p>
+     * <p>A call while the device is already open does nothing, and a call after
+     * {@link #cleanup()} opens it again. If the device reports no OpenAL 1.0 support, the
+     * problem is logged and initialisation carries on.</p>
      *
-     * @throws IllegalStateException if there is no audio device or the context cannot be created
+     * @throws IllegalStateException if there is no audio device or the context cannot be
+     *         created; nothing stays open in that case
      */
     public static void init() {
+        if (device != NULL) return;
         Logger.info(Logger.System.CORE, "Initializing OpenAL Hardware Context...");
 
         // Solicita o dispositivo de áudio padrão do Sistema Operativo
@@ -57,6 +59,8 @@ public final class AudioDevice {
         // Cria e ativa o contexto de áudio
         context = alcCreateContext(device, (IntBuffer) null);
         if (context == NULL) {
+            alcCloseDevice(device);
+            device = NULL;
             Logger.error(Logger.System.CORE, "Failed to create OpenAL context.");
             throw new IllegalStateException("OpenAL Context Failure");
         }
@@ -78,16 +82,17 @@ public final class AudioDevice {
      * Releases the OpenAL context and closes the audio device. Sources and buffers created
      * by the audio system are not deleted one by one; they go with the context.
      *
-     * <p>Call it once. The handles are not reset afterwards, so a second call would try to
-     * destroy the same context and device again.</p>
+     * <p>The handles are reset, so a second call does nothing.</p>
      */
     public static void cleanup() {
         if (context != NULL) {
             alcMakeContextCurrent(NULL);
             alcDestroyContext(context);
+            context = NULL;
         }
         if (device != NULL) {
             alcCloseDevice(device);
+            device = NULL;
         }
     }
 }

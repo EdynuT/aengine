@@ -9,9 +9,8 @@ package com.aengine.ecs.components;
  * moves the emitter to the transform's position every frame.</p>
  *
  * <p>The acoustic properties ({@link #gain}, {@link #pitch}, {@link #loop},
- * {@link #referenceDistance}, {@link #maxDistance}) are sent to OpenAL once, when the
- * source is created on the first frame. Changing them afterwards has no effect on the
- * sound that is already set up.</p>
+ * {@link #referenceDistance}, {@link #maxDistance}) are sent to OpenAL every frame, so a
+ * change from the inspector or a script is heard on the next frame.</p>
  */
 public class AudioSourceComponent {
     /**
@@ -48,8 +47,8 @@ public class AudioSourceComponent {
     // Internal State
 
     /**
-     * Set to {@code true} by the audio system when {@link #playOnAwake} starts the sound.
-     * It is not cleared when a non-looping sound ends.
+     * Whether the source is playing, read back from OpenAL by the audio system every frame:
+     * it turns {@code false} when a non-looping sound ends. Writing it has no effect.
      */
     public boolean isPlaying = false;
     /**

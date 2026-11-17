@@ -30,6 +30,9 @@ public class Renderer3D {
 
     private static Camera activeCameraContext;
 
+    /** Scratch model matrix for {@link #drawPlane} and {@link #drawCube}; GL thread only. */
+    private static final Matrix4f TRANSFORM = new Matrix4f();
+
     // Direct hardware pointers for isolated static geometry
     private static int gridVAO, gridVBO, gridEBO;
     private static int cubeVAO, cubeVBO, cubeEBO;
@@ -158,7 +161,7 @@ public class Renderer3D {
         gridShader.setVec4("u_GridColor", color);
 
         // Hardware-side spatial transformation
-        Matrix4f transform = new Matrix4f()
+        Matrix4f transform = TRANSFORM.identity()
             .translate(position)
             .rotateX((float) Math.toRadians(rotation.x))
             .rotateY((float) Math.toRadians(rotation.y))
@@ -195,7 +198,7 @@ public class Renderer3D {
         basicShader.setMat4("u_ViewProjection", activeCameraContext.getViewProjection());
         basicShader.setVec4("u_Color", color);
 
-        Matrix4f transform = new Matrix4f()
+        Matrix4f transform = TRANSFORM.identity()
             .translate(position)
             .rotateX((float) Math.toRadians(rotation.x))
             .rotateY((float) Math.toRadians(rotation.y))

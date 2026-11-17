@@ -50,10 +50,11 @@ public class AssetWatcher {
                         if (event.kind() == OVERFLOW) continue;
 
                         Path modifiedFile = (Path) event.context();
-                        String fileName = modifiedFile.toString().toLowerCase();
+                        String fileName = modifiedFile.toString();
+                        String lowerName = fileName.toLowerCase();
 
-                        // Intercept only modifications in PNG or JPG
-                        if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+                        // Intercept only modifications in PNG or JPG (any case of extension)
+                        if (lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
                             File srcFile = texturesSrcDir.resolve(modifiedFile).toFile();
                             
                             if (srcFile.exists()) {
@@ -61,10 +62,7 @@ public class AssetWatcher {
                                 AssetBaker.compileTexture(srcFile, rootSource, rootTarget);
                                 
                                 // 2. Translate the name to the virtual path (.atex) and notify the ECS
-                                String bakedName = fileName.substring(0, fileName.lastIndexOf('.')) + ".atex";
-                                String virtualPath = "assets://baked/textures/" + bakedName;
-                                
-                                AssetManager.hotReloadTexture(virtualPath);
+                                AssetManager.hotReloadTexture(bakedTexturePath(fileName));
                             }
                         }
                     }
@@ -79,5 +77,17 @@ public class AssetWatcher {
         watcherThread.setDaemon(true);
         watcherThread.setName("AEngine-AssetWatcher");
         watcherThread.start();
+    }
+
+    /**
+     * The virtual path the baker writes a source image to: its name as it is, with the
+     * extension replaced by {@code .atex}. The case is kept, as {@link AssetBaker} keeps it
+     * and the texture cache compares paths exactly.
+     *
+     * @param sourceFileName the image's file name, e.g. {@code "Box.png"}
+     * @return e.g. {@code "assets://baked/textures/Box.atex"}
+     */
+    static String bakedTexturePath(String sourceFileName) {
+        return "assets://baked/textures/" + sourceFileName.substring(0, sourceFileName.lastIndexOf('.')) + ".atex";
     }
 }

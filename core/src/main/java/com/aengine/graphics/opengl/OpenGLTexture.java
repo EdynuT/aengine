@@ -30,9 +30,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       frees the native memory.</li>
  * </ol>
  *
- * <p>Until the upload, {@code bind} does nothing and the size reads as 1x1. A file that is
- * missing or cannot be decoded is logged and the texture stays in that state. Sampling is
+ * <p>Until the first upload, {@code bind} binds a shared 1x1 white placeholder, so a sprite
+ * shows its own colour rather than whatever texture was last on the slot, and the size reads
+ * as 1x1. A file that is missing or cannot be decoded is logged and the texture stays in that
+ * state. While a hot reload is decoding, the previous image stays bound. Sampling is
  * nearest-neighbour (crisp pixels) and the texture repeats outside 0..1.</p>
+ *
+ * <p>Pending pixels are handed between the decode worker, the GL thread and the asset
+ * watcher's thread under the texture's own lock, so a decode that finishes after
+ * {@link #cleanup()}, or a reload over pixels not yet uploaded, frees them instead of
+ * leaking them.</p>
  */
 public class OpenGLTexture implements TextureAPI {
 
@@ -61,11 +68,21 @@ public class OpenGLTexture implements TextureAPI {
     private volatile int width = 1;
     private volatile int height = 1;
     
-    private volatile ByteBuffer decodedPixels = null;
-    
+    // Pending pixels: written and freed only under "synchronized (this)".
+    private ByteBuffer decodedPixels = null;
+
     // Memory Tracking: Differentiates between MemoryUtil (ATEX) and STBImage (PNG) allocations
-    private volatile boolean isNativeAllocation = false;
-    private volatile ByteBuffer originalNativeBuffer = null;
+    private boolean isNativeAllocation = false;
+    private ByteBuffer originalNativeBuffer = null;
+
+    /** Set by {@link #cleanup()}; a decode finishing afterwards frees its pixels. Under the lock. */
+    private boolean disposed = false;
+
+    /** Whether an image has reached the GPU at least once; GL thread only. */
+    private boolean hasImage = false;
+
+    /** The shared 1x1 white texture bound while nothing has been uploaded; 0 until first needed. */
+    private static int placeholderId = 0;
 
     /**
      * Reserves the texture on the GPU and queues the file for background loading.
@@ -122,16 +139,13 @@ public class OpenGLTexture implements TextureAPI {
             }
 
             rawData.getInt(); // version (unused)
-            this.width = rawData.getInt();
-            this.height = rawData.getInt();
+            int w = rawData.getInt();
+            int h = rawData.getInt();
             rawData.getInt(); // channels (always 4, RGBA)
 
-            // Slice the buffer: creates a new ByteBuffer view starting at position 20 (payload start)
-            this.decodedPixels = rawData.slice(); 
-            this.isNativeAllocation = true;
-            this.originalNativeBuffer = rawData; // Kept to correctly free the memory base pointer later
-
-            uploadState.set(STATE_DECODED);
+            // Slice the buffer: a view starting at position 20 (payload start); the base
+            // buffer is kept to free the memory from its start later.
+            publish(rawData.slice(), rawData, w, h);
         } else {
             /*
              * HARDWARE CONTEXT: LEGACY COMPRESSED PIPELINE (.png, .jpg)
@@ -154,60 +168,90 @@ public class OpenGLTexture implements TextureAPI {
                     return;
                 }
 
-                this.width  = w.get(0);
-                this.height = h.get(0);
-                this.decodedPixels = pixels;
-                this.isNativeAllocation = false; // STB allocation flag
-
-                uploadState.set(STATE_DECODED);
+                publish(pixels, null, w.get(0), h.get(0));
             }
         }
+    }
+
+    /**
+     * Hands decoded pixels to the GL thread, or frees them if the texture was cleaned up
+     * meanwhile. Runs on the decode worker.
+     *
+     * @param pixels the RGBA payload
+     * @param base   the buffer to free for an {@code .atex} payload, or {@code null} when
+     *               {@code pixels} came from stb_image
+     */
+    private synchronized void publish(ByteBuffer pixels, ByteBuffer base, int w, int h) {
+        if (disposed) {
+            if (base != null) MemoryUtil.memFree(base.position(0));
+            else              STBImage.stbi_image_free(pixels);
+            return;
+        }
+        freeNativeMemory(); // pixels from an earlier decode that never reached the GPU
+        this.width  = w;
+        this.height = h;
+        this.decodedPixels        = pixels;
+        this.isNativeAllocation   = base != null;
+        this.originalNativeBuffer = base;
+        uploadState.set(STATE_DECODED);
     }
 
     @Override 
     public void bind(int slot) {
-        int currentState = uploadState.get();
+        if (uploadState.get() == STATE_DECODED) upload();
 
-        if (currentState == STATE_FAILED || currentState == STATE_LOADING) {
-            return; 
+        GL13.glActiveTexture(GL13.GL_TEXTURE0 + slot);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, hasImage ? id : placeholder());
+    }
+
+    /**
+     * JIT (JUST-IN-TIME) VRAM UPLOAD
+     * Executed on the GL thread the first time the renderer binds the texture after a decode.
+     */
+    private synchronized void upload() {
+        if (uploadState.get() != STATE_DECODED || decodedPixels == null) return;
+        
+        // Injection of warning outside the Hot Path (Executes only once during JIT Upload)
+        if (width > 4096 || height > 4096) {
+            Logger.warn(Logger.System.ASSET, "Performance Warning: Texture [ID: %d] payload is heavy (%dx%d px). Consider utilizing the AEngine optimization pipeline to compress this asset into a native block format.", id, width, height);
         }
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
+        
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL11.GL_REPEAT);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_REPEAT);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST_MIPMAP_NEAREST);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+        
+        // Blit raw pixels directly to VRAM
+        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, width, height, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, decodedPixels);
+        GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
 
-        /*
-         * JIT (JUST-IN-TIME) VRAM UPLOAD
-         * Executed on the Main Thread the very first time the Renderer requests this texture.
-         */
-        if (currentState == STATE_DECODED && decodedPixels != null) {
-            
-            // Injection of warning outside the Hot Path (Executes only once during JIT Upload)
-            if (width > 4096 || height > 4096) {
-                Logger.warn(Logger.System.ASSET, "Performance Warning: Texture [ID: %d] payload is heavy (%dx%d px). Consider utilizing the AEngine optimization pipeline to compress this asset into a native block format.", id, width, height);
-            }
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
-            
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL11.GL_REPEAT);
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_REPEAT);
-            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST_MIPMAP_NEAREST);
+        // Hardware handover complete. Purge system RAM safely based on allocation origin.
+        freeNativeMemory();
+        
+        uploadState.set(STATE_READY);
+        hasImage = true;
+        Logger.info(Logger.System.ASSET, "Texture JIT VRAM Upload completed. ID: %d [%dx%d]", id, width, height);
+    }
+
+    /** The shared white placeholder, created on first use. GL thread only. */
+    private static int placeholder() {
+        if (placeholderId == 0) {
+            placeholderId = GL11.glGenTextures();
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, placeholderId);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
-            
-            // Blit raw pixels directly to VRAM
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, width, height, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, decodedPixels);
-            GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
-
-            // Hardware handover complete. Purge system RAM safely based on allocation origin.
-            freeNativeMemory();
-            
-            uploadState.set(STATE_READY);
-            Logger.info(Logger.System.ASSET, "Texture JIT VRAM Upload completed. ID: %d [%dx%d]", id, width, height);
+            ByteBuffer white = MemoryUtil.memAlloc(4);
+            white.put((byte) 0xFF).put((byte) 0xFF).put((byte) 0xFF).put((byte) 0xFF).flip();
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, 1, 1, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, white);
+            MemoryUtil.memFree(white);
         }
-
-        if (uploadState.get() == STATE_READY) {
-            GL13.glActiveTexture(GL13.GL_TEXTURE0 + slot);
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
-        }
+        return placeholderId;
     }
     
     /**
      * Dynamically routes the memory deallocation to the correct C-API bridge.
+     * Called under the texture's lock.
      */
     private void freeNativeMemory() {
         if (decodedPixels != null) {
@@ -228,14 +272,16 @@ public class OpenGLTexture implements TextureAPI {
      * The Main Thread will automatically catch the STATE_DECODED flag and overwrite the VRAM block.
      *
      * <p>Ignored while a load is already running. Until the new pixels are uploaded, the
-     * texture binds nothing, so it briefly disappears rather than showing the old image.</p>
+     * previous image stays bound. Pixels decoded but not yet uploaded are freed first.</p>
      *
      * @param virtualPath virtual path to load from; normally the one the texture was created with
      */
     public void reload(String virtualPath) {
-        if (uploadState.get() == STATE_LOADING) return; // Prevent race conditions from duplicate saves in the image editor
-        
-        uploadState.set(STATE_LOADING);
+        synchronized (this) {
+            if (disposed || uploadState.get() == STATE_LOADING) return; // duplicate saves in the image editor
+            freeNativeMemory();
+            uploadState.set(STATE_LOADING);
+        }
         Logger.info(Logger.System.ASSET, "Hot-Reload Signal caught. Re-streaming asset: %s", virtualPath);
         
         // Offloads decoding to the background cores.
@@ -256,7 +302,10 @@ public class OpenGLTexture implements TextureAPI {
         Logger.info(Logger.System.ASSET, "Releasing hardware storage resource for texture ID: %d", id);
         GL11.glDeleteTextures(id); 
         
-        // Prevent memory leaks if engine destroys texture before background thread finishes
-        freeNativeMemory();
+        // A decode still running sees "disposed" when it finishes and frees its own pixels.
+        synchronized (this) {
+            disposed = true;
+            freeNativeMemory();
+        }
     }
 }

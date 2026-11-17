@@ -32,8 +32,11 @@ import java.util.concurrent.locks.LockSupport;
  *
  * <p>The thread starts <b>paused</b>, matching the editor, where the scene sits still
  * until Play. Call {@link #setPaused(boolean) setPaused(false)} to let time run.</p>
+ *
+ * <p>The object owns its Java thread rather than being one, so it can be stopped with
+ * {@link #cleanup()} and started again with {@link #init()}: each start runs a new thread.</p>
  */
-public final class PhysicsThread extends Thread {
+public final class PhysicsThread {
 
     // -------------------------------------------------------------------------
     // Configuration
@@ -57,7 +60,12 @@ public final class PhysicsThread extends Thread {
 
     private final Registry     registry;
     private final PhysicsSystem physics;
-    private volatile boolean   running = false;
+    /**
+     * The thread running the loop, or {@code null} when stopped. A loop keeps going only
+     * while it is still the current worker, so a thread that outlives a timed-out
+     * {@link #cleanup()} stops at its next check even after a new {@link #init()}.
+     */
+    private volatile Thread    worker   = null;
     private volatile boolean   isPaused = true; // Starts paused in Editor Mode
 
     /**
@@ -71,16 +79,13 @@ public final class PhysicsThread extends Thread {
     // -------------------------------------------------------------------------
 
     /**
-     * Creates the thread without starting it. It is a daemon thread, so it never keeps
-     * the JVM alive, and runs at slightly above normal priority.
+     * Creates the physics loop without starting it. Its threads are daemon threads, so they
+     * never keep the JVM alive, and run at slightly above normal priority.
      *
      * @param registry Shared ECS registry.
      * @param physics  Physics system instance to step (must NOT be run concurrently on the main thread).
      */
     public PhysicsThread(Registry registry, PhysicsSystem physics) {
-        super("AEngine-Physics");
-        setDaemon(true);                            // Die automatically when the JVM exits
-        setPriority(Thread.NORM_PRIORITY + 1);      // Slightly above render to minimise input latency
         this.registry = registry;
         this.physics  = physics;
     }
@@ -93,16 +98,16 @@ public final class PhysicsThread extends Thread {
      * Start the physics simulation loop. The simulation stays paused until
      * {@link #setPaused(boolean) setPaused(false)}.
      *
-     * <p>Further calls are ignored while the thread is running. A thread cannot be
-     * restarted: calling this again after {@link #cleanup()} throws
-     * {@link IllegalThreadStateException}, so create a new {@code PhysicsThread} instead.
-     * Use this method rather than {@link #start()}: starting the thread directly leaves the
-     * loop flag unset and the thread exits at once.</p>
+     * <p>Further calls are ignored while the loop is running. After {@link #cleanup()} it
+     * starts a new thread, with the pause state the loop had.</p>
      */
     public void init() {
-        if (running) return;
-        running = true;
-        start();
+        if (worker != null) return;
+        Thread thread = new Thread(this::run, "AEngine-Physics");
+        thread.setDaemon(true);                        // Die automatically when the JVM exits
+        thread.setPriority(Thread.NORM_PRIORITY + 1);  // Slightly above render to minimise input latency
+        worker = thread;
+        thread.start();
         Logger.info(Logger.System.CORE,
             "PhysicsThread started. Stepping at %d Hz (%.4f s/step).", PHYSICS_HZ, TIME_STEP);
     }
@@ -120,19 +125,22 @@ public final class PhysicsThread extends Thread {
 
     /**
      * Signal the physics loop to stop and block until the thread terminates.
-     * Safe to call from any thread except the physics thread itself.
+     * Safe to call from any thread except the physics thread itself, and harmless when the
+     * loop is not running.
      *
      * <p>Waits at most 2 seconds. If the thread is still alive after that, a warning is
      * logged and the method returns anyway; being a daemon, the thread will not keep
      * the process alive.</p>
      */
     public void cleanup() {
-        running = false;
-        interrupt();
+        Thread thread = worker;
+        if (thread == null) return;
+        worker = null;
+        thread.interrupt();
         boolean cleanStop = false;
         try {
-            join(2000L); // Block up to 2 s for the physics loop to notice running=false
-            cleanStop = !isAlive();
+            thread.join(2000L); // Block up to 2 s for the physics loop to notice it was stopped
+            cleanStop = !thread.isAlive();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -164,17 +172,23 @@ public final class PhysicsThread extends Thread {
     // -------------------------------------------------------------------------
 
     /**
-     * The fixed-timestep loop. Do not call directly; it runs on this thread after
-     * {@link #init()}.
+     * Whether the loop is running: true from {@link #init()} until {@link #cleanup()}.
+     *
+     * @return {@code true} while a physics thread is started and not asked to stop
      */
-    @Override
-    public void run() {
+    public boolean isRunning() {
+        return worker != null;
+    }
+
+    /** The fixed-timestep loop, run by the worker thread {@link #init()} starts. */
+    private void run() {
         Logger.info(Logger.System.CORE, "Physics thread online.");
+        Thread self = Thread.currentThread();
 
         long lastTime   = System.nanoTime();
         float accumulator = 0.0f;
 
-        while (running && !isInterrupted()) {
+        while (worker == self && !self.isInterrupted()) {
             long now = System.nanoTime();
             float dt = (now - lastTime) / 1_000_000_000.0f;
             lastTime = now;

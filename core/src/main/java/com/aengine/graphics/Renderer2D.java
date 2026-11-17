@@ -49,6 +49,12 @@ public class Renderer2D {
     private static TextureAPI[] textureSlots;
     private static int          textureSlotIndex = 0;
 
+    /** {@code "u_Textures[i]"} for every slot, built once in {@link #init()}. */
+    private static String[] textureUniforms;
+
+    /** The tint of an untinted quad. Read only. */
+    private static final Vector4f WHITE = new Vector4f(1.0f);
+
     // Allocation-free static math transformations
     private static final Matrix4f transformMatrix = new Matrix4f();
 
@@ -90,6 +96,8 @@ public class Renderer2D {
 
         vertexBuffer = new float[MAX_VERTICES * VERTEX_SIZE_FLOATS];
         textureSlots = new TextureAPI[maxTextureSlots];
+        textureUniforms = new String[maxTextureSlots];
+        for (int i = 0; i < maxTextureSlots; i++) textureUniforms[i] = "u_Textures[" + i + "]";
         
         renderer.initBatchBuffers(MAX_VERTICES, MAX_INDICES, VERTEX_SIZE_FLOATS);
 
@@ -107,7 +115,7 @@ public class Renderer2D {
         batchShader.setMat4("u_ViewProjection", camera.getViewProjection());
         
         for (int i = 0; i < maxTextureSlots; i++) {
-            batchShader.setInt("u_Textures[" + i + "]", i);
+            batchShader.setInt(textureUniforms[i], i);
         }
         batchShader.unbind();
 
@@ -126,12 +134,9 @@ public class Renderer2D {
     }
 
     /**
-     * Draws the quads collected so far without starting a new batch. Used by
-     * {@link Renderer3D} before drawing meshes, so the quads reach the depth buffer first.
-     * Does nothing when the batch is empty.
-     *
-     * <p>The quads stay in the batch, so a second flush before the next
-     * {@link #beginScene} would draw them again.</p>
+     * Draws the quads collected so far and empties the batch. Used by {@link Renderer3D}
+     * before drawing meshes, so the quads reach the depth buffer first. Does nothing when
+     * the batch is empty.
      */
     public static void flush() {
         if (indexCount == 0) return;
@@ -147,11 +152,11 @@ public class Renderer2D {
         renderer.drawBatch(vertexBuffer, vertexCount, indexCount);
 
         batchShader.unbind();
+        startBatch();
     }
 
     private static void nextBatch() {
         flush();
-        startBatch();
     }
 
     /**
@@ -173,7 +178,7 @@ public class Renderer2D {
      * @param texture  the texture to show
      */
     public static void drawQuad(Vector3f position, Vector3f size, TextureAPI texture) {
-        drawQuad(position, size, texture, new Vector4f(1.0f));
+        drawQuad(position, size, texture, WHITE);
     }
 
     /**
@@ -200,7 +205,7 @@ public class Renderer2D {
         int baseIndex = vertexCount;
 
         for (int i = 0; i < VERTICES_PER_QUAD; i++) {
-            Vector4f transformedPos = new Vector4f(LOCAL_VERTEX_POSITIONS[i]).mul(transformMatrix);
+            Vector4f transformedPos = tempVertexPos.set(LOCAL_VERTEX_POSITIONS[i]).mul(transformMatrix);
 
             vertexBuffer[baseIndex + 0] = transformedPos.x;
             vertexBuffer[baseIndex + 1] = transformedPos.y;

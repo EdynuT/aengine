@@ -172,13 +172,13 @@ public final class NarrowPhase {
         // Select the axis of minimum penetration as the contact normal
         if (penX <= penY && penX <= penZ) {
             out.depth = penX;
-            out.normal.set(Math.signum(dx), 0.0f, 0.0f);
+            out.normal.set(direction(dx), 0.0f, 0.0f);
         } else if (penY <= penX && penY <= penZ) {
             out.depth = penY;
-            out.normal.set(0.0f, Math.signum(dy), 0.0f);
+            out.normal.set(0.0f, direction(dy), 0.0f);
         } else {
             out.depth = penZ;
-            out.normal.set(0.0f, 0.0f, Math.signum(dz));
+            out.normal.set(0.0f, 0.0f, direction(dz));
         }
 
         return true;
@@ -283,13 +283,13 @@ public final class NarrowPhase {
             float dzFace = hz - Math.abs(sz - bz);
 
             if (dxFace <= dyFace && dxFace <= dzFace) {
-                out.normal.set(Math.signum(sx - bx), 0.0f, 0.0f);
+                out.normal.set(direction(sx - bx), 0.0f, 0.0f);
                 out.depth = radius + dxFace;
             } else if (dyFace <= dxFace && dyFace <= dzFace) {
-                out.normal.set(0.0f, Math.signum(sy - by), 0.0f);
+                out.normal.set(0.0f, direction(sy - by), 0.0f);
                 out.depth = radius + dyFace;
             } else {
-                out.normal.set(0.0f, 0.0f, Math.signum(sz - bz));
+                out.normal.set(0.0f, 0.0f, direction(sz - bz));
                 out.depth = radius + dzFace;
             }
         } else {
@@ -301,17 +301,67 @@ public final class NarrowPhase {
         return true;
     }
 
+    /**
+     * The sign of a centre-to-centre distance on one axis, as a normal component.
+     * Zero counts as positive: two centres at the same spot still get a normal to separate
+     * along, where {@code Math.signum} would give a zero vector.
+     */
+    private static float direction(float d) {
+        return d < 0.0f ? -1.0f : 1.0f;
+    }
+
+    // =========================================================================
+    // Broad-phase bounds
+    // =========================================================================
+
+    /**
+     * Half-extents of the world-space axis-aligned box that encloses a collider, for the
+     * broad phase. A box the grid sees smaller than the shape can miss a pair, so:
+     * <ul>
+     *   <li>AABB: {@code size}, as the narrow phase reads it.</li>
+     *   <li>SPHERE: the radius ({@code size.x}) on every axis.</li>
+     *   <li>OBB: each world axis gets {@code Σ |R[axis][k]| · size[k]}, the reach of the
+     *       rotated box along it.</li>
+     * </ul>
+     * Uses the same static scratch as the tests, so the same one-thread rule applies.
+     *
+     * @param t   the collider's transform (only an OBB reads its rotation)
+     * @param c   the collider
+     * @param out receives the half-extents; the box is {@code centre ± out}
+     */
+    public static void boundsHalfExtents(TransformComponent t, ColliderComponent c, Vector3f out) {
+        switch (c.type) {
+            case SPHERE -> {
+                float r = Math.abs(c.getRadius());
+                out.set(r, r, r);
+            }
+            case OBB -> {
+                buildOBBAxes(t, OBB_AXES_A, OBB_ROT_A);
+                float hx = Math.abs(c.size.x), hy = Math.abs(c.size.y), hz = Math.abs(c.size.z);
+                out.set(
+                    Math.abs(OBB_AXES_A[0].x) * hx + Math.abs(OBB_AXES_A[1].x) * hy + Math.abs(OBB_AXES_A[2].x) * hz,
+                    Math.abs(OBB_AXES_A[0].y) * hx + Math.abs(OBB_AXES_A[1].y) * hy + Math.abs(OBB_AXES_A[2].y) * hz,
+                    Math.abs(OBB_AXES_A[0].z) * hx + Math.abs(OBB_AXES_A[1].z) * hy + Math.abs(OBB_AXES_A[2].z) * hz);
+            }
+            default -> out.set(c.size);
+        }
+    }
+
     // =========================================================================
     // OBB helpers
     // =========================================================================
 
     /**
      * Populate {@code axes[3]} with the world-space local axes of an OBB by applying
-     * its Transform Euler rotation (XYZ order, radians) to the standard basis vectors.
+     * its Transform Euler rotation to the standard basis vectors. The rotation is in degrees,
+     * applied in XYZ order, as the renderers draw it.
      * Uses a pre-allocated {@code Matrix3f} to avoid heap allocation.
      */
     private static void buildOBBAxes(TransformComponent t, Vector3f[] axes, Matrix3f mat) {
-        mat.rotationXYZ(t.rotation.x, t.rotation.y, t.rotation.z);
+        mat.rotationXYZ(
+            (float) Math.toRadians(t.rotation.x),
+            (float) Math.toRadians(t.rotation.y),
+            (float) Math.toRadians(t.rotation.z));
         // Transform each basis vector in-place: axis[i] = mat * basisVector[i]
         axes[0].set(1, 0, 0);  mat.transform(axes[0]); // Right
         axes[1].set(0, 1, 0);  mat.transform(axes[1]); // Up

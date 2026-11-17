@@ -420,7 +420,7 @@ public final class EditorShell {
                 case CHAR -> ae.character(Input.eventCode(i));
                 case KEY_PRESS -> {
                     int key = Input.eventCode(i), mods = Input.eventMods(i);
-                    boolean ctrl = (mods & Keys.MOD_CONTROL) != 0;
+                    boolean ctrl = Keys.isCtrlShortcut(mods);   // AltGr+R types ®, and must not reload the theme
                     // Editor keys, not handed to the widgets. Ctrl+R reads the theme again:
                     // a development key, until the settings page exists.
                     if (ctrl && key == Keys.R) { themeReloadAsked = true; continue; }

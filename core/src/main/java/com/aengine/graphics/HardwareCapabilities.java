@@ -38,8 +38,11 @@ public final class HardwareCapabilities {
      * Queries the GPU through OpenGL and the CPU through the operating system, then logs a
      * summary. Runs only once; later calls return immediately.
      *
-     * <p>The CPU name comes from {@code /proc/cpuinfo} on Linux and from {@code wmic} on
-     * Windows. If that fails it stays {@code "Unknown CPU"}, with a warning in the log.</p>
+     * <p>The CPU name comes from {@code /proc/cpuinfo} on Linux and, on Windows, from the
+     * registry value {@code ProcessorNameString} read with {@code reg query} (the
+     * {@code wmic} tool is gone from recent Windows 11), falling back to the
+     * {@code PROCESSOR_IDENTIFIER} variable. If that fails it stays {@code "Unknown CPU"},
+     * with a warning in the log.</p>
      */
     public static void initialize() {
         if (initialized) return;
@@ -105,17 +108,23 @@ public final class HardwareCapabilities {
         String os = System.getProperty("os.name").toLowerCase();
         try {
             if (os.contains("win")) {
-                // Execute hardware pipeline query against Windows Management Instrumentation (WMI)
-                Process process = Runtime.getRuntime().exec(new String[]{"wmic", "cpu", "get", "name"});
+                // reg.exe ships with every Windows; the name is the one the system shows.
+                Process process = Runtime.getRuntime().exec(new String[]{
+                    "reg", "query", "HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                    "/v", "ProcessorNameString"});
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    reader.readLine(); // Skip header layout entry line
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        if (!line.trim().isEmpty()) {
-                            cpuModel = line.trim();
+                        String name = processorNameFromReg(line);
+                        if (name != null) {
+                            cpuModel = name;
                             break;
                         }
                     }
+                }
+                if ("Unknown CPU".equals(cpuModel)) {
+                    String identifier = System.getenv("PROCESSOR_IDENTIFIER");
+                    if (identifier != null && !identifier.isBlank()) cpuModel = identifier.trim();
                 }
             } else {
                 // Execute direct VFS stream interrogation against Unix hardware descriptors layout
@@ -136,6 +145,21 @@ public final class HardwareCapabilities {
         } catch (Exception e) {
             Logger.warn(Logger.System.CORE, "Failed to resolve physical CPU identifiers from host registers.");
         }
+    }
+
+    /**
+     * Reads the CPU name from one line of {@code reg query ... /v ProcessorNameString},
+     * which looks like {@code "    ProcessorNameString    REG_SZ    AMD Ryzen 7 5800X ..."}.
+     *
+     * @param line a line of the command's output
+     * @return the name, or {@code null} when the line is not the value's line
+     */
+    static String processorNameFromReg(String line) {
+        if (!line.contains("ProcessorNameString")) return null;
+        int type = line.indexOf("REG_SZ");
+        if (type < 0) return null;
+        String name = line.substring(type + "REG_SZ".length()).trim();
+        return name.isEmpty() ? null : name;
     }
 
     /**
