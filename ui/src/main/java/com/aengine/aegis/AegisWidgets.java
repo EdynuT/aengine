@@ -3593,6 +3593,15 @@ public final class AegisWidgets {
         finishEdit(node);
     }
 
+    /**
+     * Whether what has focus takes typing — a text field, a text box, a spinner — so the
+     * editing keys are its own: Ctrl+Z and Ctrl+Y undo and redo what is typed in it, and
+     * the editor must not act on them as well.
+     *
+     * @return {@code true} while one has focus
+     */
+    public boolean isTyping() { return isText(tree.focused()); }
+
     /** Whether a node is a text field, a text box or a spinner — whether it takes typing. */
     private boolean isText(int node) {
         return node != AegisLayout.NONE

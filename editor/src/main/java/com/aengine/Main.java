@@ -21,6 +21,8 @@ import com.aengine.ecs.systems.CameraSystem;
 import com.aengine.ecs.systems.PhysicsSystem;
 import com.aengine.ecs.systems.ScriptSystem;
 import com.aengine.editor.EditorState;
+import com.aengine.editor.MoveEntityEdit;
+import com.aengine.editor.UndoHistory;
 import com.aengine.editor.SceneSerializer;
 import com.aengine.graphics.Camera;
 import com.aengine.graphics.Renderer2D;
@@ -77,6 +79,9 @@ public class Main extends Engine {
 
     // --- Editor Drag & Drop State ---
     private boolean isDraggingEntity = false;
+    /** Where the entity being dragged was when the drag began, to record the move for undo. */
+    private final Vector3f dragFrom = new Vector3f();
+    private UndoHistory history;
     private float dragLastX, dragLastY;   // where the pointer was last frame, while dragging
     private int lastWindowWidth = -1;
     private int lastWindowHeight = -1;
@@ -129,11 +134,6 @@ public class Main extends Engine {
         Renderer2D.init();
         Renderer3D.init();
 
-        // The interface: panels registered, the screen built from the layouts in line, the
-        // theme and the language applied. See EditorShell.
-        shell = new com.aengine.editor.gui.EditorShell(getWindow());
-        shell.showProject(activeProjectPath);
-        
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 
         // Gray background for neutral visual (0.30f, 0.30f, 0.30f, 1.0f)
         Renderer2D.setClearColor(0.30f, 0.30f, 0.30f, 1.0f);
@@ -147,6 +147,13 @@ public class Main extends Engine {
         physicsThread = new PhysicsThread(registry, physicsSystem);
         physicsThread.init();
         physicsThread.setPaused(true); // <--- Editor starts frozen
+
+        // The scene's undo history, applied under the physics thread's lock; then the
+        // interface: panels registered, the screen built from the layouts in line, the theme
+        // and the language applied. See EditorShell.
+        history = new UndoHistory(physicsThread.getSyncLock());
+        shell = new com.aengine.editor.gui.EditorShell(getWindow(), history);
+        shell.showProject(activeProjectPath);
 
         scriptSystem = new ScriptSystem();
         
@@ -199,6 +206,9 @@ public class Main extends Engine {
             registry.clearScene();
             SceneLoader.load(registry, sceneMemoryBackup);
         }
+        // The scene was rebuilt from the snapshot, and an entity may not have the number it
+        // had: the edits recorded before name entities that may now be others.
+        history.clear();
         shell.showPlayState(false, false);
     }
 
@@ -403,6 +413,12 @@ public class Main extends Engine {
                 }
             } else {
                 isDraggingEntity = false; // Mouse released, end the drag
+                // The move, start to end, is one change to undo — if it moved at all.
+                int moved = EditorState.getSelectedEntity();
+                TransformComponent t = registry.getComponent(moved, TransformComponent.class);
+                if (t != null && !t.position.equals(dragFrom)) {
+                    history.record(new MoveEntityEdit(registry, moved, dragFrom, t.position));
+                }
             }
         }
     }
@@ -440,6 +456,7 @@ public class Main extends Engine {
 
         EditorState.select(hit); // hit == -1 deselects
         isDraggingEntity = (hit != -1); // Locks the state machine in Dragging mode if something is hit
+        if (hit != -1) dragFrom.set(registry.getComponent(hit, TransformComponent.class).position);
     }
 
     // =========================================================================

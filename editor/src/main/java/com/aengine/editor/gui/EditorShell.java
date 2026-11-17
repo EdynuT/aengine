@@ -11,6 +11,7 @@ import com.aengine.aegis.AegisWidgets;
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
 import com.aengine.core.Window;
+import com.aengine.editor.UndoHistory;
 import com.aengine.utils.Logger;
 
 import java.nio.file.Path;
@@ -51,6 +52,12 @@ public final class EditorShell {
     private static final String[] DOCKS = { "hierarchy", "assets", "inspector", "console", "output" };
     private final int[] menuItemDocks = new int[DOCKS.length];
     private final int menuItemRestoreLayout;
+
+    /** Edit (4g): the scene's history, its two items, what they were last shown for, and whether the scene plays. */
+    private final UndoHistory history;
+    private final int menuItemUndo, menuItemRedo;
+    private int historyShown = -1;
+    private boolean playing;
 
     /** The docks' tabs' context menu (4f), and the dock it was last opened for. */
     private final int menuDock, menuItemCloseDock;
@@ -93,9 +100,11 @@ public final class EditorShell {
     /**
      * Builds the interface. Call once, after the GL context exists.
      *
-     * @param window the editor's window, for the clipboard
+     * @param window  the editor's window, for the clipboard
+     * @param history the scene's undo history, which Edit &gt; Undo and Redo walk
      */
-    public EditorShell(Window window) {
+    public EditorShell(Window window, UndoHistory history) {
+        this.history = history;
         aegis = new Aegis(MAX_QUADS);
         // 18px Latin-1 is 224 glyphs: 86 rows of the atlas. 128 leaves room for a larger size.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
@@ -123,6 +132,12 @@ public final class EditorShell {
 
         // View (4c): a check item per dock, ticked while it is open — Unity's Window menu —
         // and Restore default layout, which forgets the user's arrangement.
+        // Edit (4g): Undo and Redo walk the scene's history. In a text field Ctrl+Z and Ctrl+Y
+        // are the field's own, for what is typed; the menu's items are the scene's always.
+        int menuEdit = ae.menu(menuBarMain, "menuEdit", "Edit");
+        menuItemUndo = ae.menuItem(menuEdit, "menuItemUndo", "Undo", "Ctrl+Z");
+        menuItemRedo = ae.menuItem(menuEdit, "menuItemRedo", "Redo", "Ctrl+Y");
+
         int menuView = ae.menu(menuBarMain, "menuView", "View");
         menuItemDocks[0] = ae.menuCheckItem(menuView, "menuItemHierarchy", "Hierarchy");
         menuItemDocks[1] = ae.menuCheckItem(menuView, "menuItemAssets",    "Assets");
@@ -261,6 +276,14 @@ public final class EditorShell {
         return false;
     }
 
+    /** Enables Undo and Redo while there is something to undo or redo, and the scene is not playing. */
+    private void showHistory() {
+        if (historyShown == history.changes()) return;
+        historyShown = history.changes();
+        ae.setEnabled(menuItemUndo, !playing && history.canUndo());
+        ae.setEnabled(menuItemRedo, !playing && history.canRedo());
+    }
+
     /** Ticks each dock's View item while it is open; one the layout does not put in tabs cannot be closed. */
     private void showDocksInMenu() {
         for (int i = 0; i < DOCKS.length; i++) {
@@ -362,6 +385,14 @@ public final class EditorShell {
                     // a development key, until the settings page exists.
                     if (ctrl && key == Keys.R) { themeReloadAsked = true; continue; }
                     if (ctrl && key == Keys.S) { saveAsked = true; continue; }
+                    // Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z, undo and redo in the scene — unless
+                    // something being typed into takes them for itself, or a menu is open.
+                    boolean historyKey = ctrl && (key == Keys.Z || key == Keys.Y);
+                    if (historyKey && !ae.isTyping() && !ae.isAnyOverlayOpen()) {
+                        boolean redo = key == Keys.Y || (mods & Keys.MOD_SHIFT) != 0;
+                        if (!playing) { if (redo) history.redo(); else history.undo(); }
+                        continue;
+                    }
                     if (key == Keys.ESCAPE && viewportHadFocus) escapeInViewport = true;
                     ae.key(key, mods, false);
                 }
@@ -380,6 +411,9 @@ public final class EditorShell {
             if (ae.wasActivated(menuItemDocks[i])) screens.setPanelOpen(DOCKS[i], ae.isChecked(menuItemDocks[i]));
         }
         boolean restore = ae.wasActivated(menuItemRestoreLayout);
+        if (ae.wasActivated(menuItemUndo)) history.undo();
+        if (ae.wasActivated(menuItemRedo)) history.redo();
+        showHistory();
 
         // A dock's tab: Close is offered for a dock the View menu can open again — not for the
         // viewport, which can share a pane with them.
@@ -448,6 +482,8 @@ public final class EditorShell {
      * @param paused  whether it is paused
      */
     public void showPlayState(boolean playing, boolean paused) {
+        this.playing = playing;
+        historyShown = -1;   // Undo and Redo wait while the scene plays
         layout.setHidden(labelEditing, playing);
         layout.setHidden(labelPlaying, !playing || paused);
         layout.setHidden(labelPaused,  !playing || !paused);

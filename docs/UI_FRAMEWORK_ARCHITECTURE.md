@@ -71,6 +71,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 4d | The status bar — scene state, frame rate, entities, project — and `setLabel` copying any text into the label, allocating nothing |
 | Step 4e | `remove` and `removeChildren`: a widget and all it owns taken out, focus moved on, the nodes reused by the next ones made |
 | Step 4f | Context menus: a secondary click that is not a drag, Shift+F10 or the Menu key; the docks' tabs offer Close |
+| Step 4g | Undo and redo: the editor's `UndoHistory` of `UndoableEdit`s, Edit menu and Ctrl+Z / Ctrl+Y, an entity's drag the first edit |
 
 ### The plan ahead
 
@@ -2233,9 +2234,21 @@ item. `ae.wasContextMenuOpened(menu)` is the frame to enable its items for
 and out of submenus; and a disabled item is now passed by the arrows and never chosen, in any
 menu. The editor gives the docks' tab bars one: *Close*, for a dock the View menu can open again.
 
+**4g ✅ — undo and redo.** The scene's history is the editor's, not the framework's:
+`com.aengine.editor.UndoHistory`, Swing's `UndoManager`, holding up to 200 `UndoableEdit`s. A
+panel records an edit once its change is done, holding the value before and after — set back
+to a value, never done in reverse, so nothing drifts — and an edit may `absorb` the next when
+they are one change to the user, a value dragged or stepped. Recording drops what was undone;
+undo and redo run under the physics thread's lock. *Edit > Undo* (Ctrl+Z) and *Redo* (Ctrl+Y,
+Ctrl+Shift+Z) walk it, enabled only while there is something to walk and the scene is not
+playing; while something that takes typing has focus — `ae.isTyping()` — the keys are its own,
+for what is typed in it. Dragging an entity in the viewport is the first edit: the whole drag,
+one *Move entity*. Stopping the scene clears the history, since it is rebuilt from the
+snapshot and an entity may come back under another number; once entities have ids that last,
+the history can outlive a play.
+
 **Next**, in an order to be agreed:
 
-- **What any panel will need:** undo and redo.
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.
