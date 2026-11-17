@@ -69,6 +69,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 4b | Icons by name from an icon font; toggle buttons and groups; disabled widgets; the toolbar's tools and Play, Pause, Stop |
 | Step 4c | Docks the user resizes by their edge or F8; panels closed and reopened from the View menu; the arrangement written to the user's `layout.json`; Restore default layout |
 | Step 4d | The status bar — scene state, frame rate, entities, project — and `setLabel` copying any text into the label, allocating nothing |
+| Step 4e | `remove` and `removeChildren`: a widget and all it owns taken out, focus moved on, the nodes reused by the next ones made |
 
 ### The plan ahead
 
@@ -2179,10 +2180,22 @@ Editing, Playing or Paused, three translatable labels of which one is shown — 
 rate, the entity count, and the project. The words are labels of their own, so a locale
 translates them; the numbers are code's text.
 
+**4e ✅ — widgets removed, and their nodes reused.** `ae.remove(node)` takes a widget, or a row
+or column with everything in it, out for good — Swing's `remove`, Godot's `queue_free` — and
+`ae.removeChildren(container)` empties a container, or a menu, to be filled again. What a widget
+owns goes with it: a title's menu, an item's submenu, a combo box's list, a tabbed pane's tabs
+not shown; an overlay it owns or is in is closed, and focus inside moves on to what Tab would
+reach next. Each slot is forgotten — widget, tree, layout — and the layout keeps the nodes
+given back on a free list, threaded through the sibling links, which the next node made takes
+before a new handle is handed out: a panel refilled every time its content changes stays
+within the capacity, and *Restore default layout* now gives the old arrangement back. A
+handle inside is no longer valid once removed, and may be handed out again. Parts of a
+widget — a tab bar, a divider, a combo's list, a dialog's title bar — go only with their
+widget, a tab's content with its pane, and a panel is the screens', closed and never removed.
+
 **Next**, in an order to be agreed:
 
-- **What any panel will need:** nodes removed and reused, for panels whose content changes; a
-  context menu; undo and redo.
+- **What any panel will need:** a context menu; undo and redo.
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.

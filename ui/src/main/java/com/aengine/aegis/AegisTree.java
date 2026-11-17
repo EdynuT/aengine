@@ -173,6 +173,36 @@ public final class AegisTree {
         layerCount = 0;
     }
 
+    /**
+     * Forgets one node — step 4e, as it is given back: its settings, and the pointer or the
+     * focus if it held them. Whoever moves focus elsewhere does it first.
+     */
+    void forget(int node) {
+        interactive[node] = false;
+        focusable[node]   = false;
+        disabled[node]    = false;
+        keepsFocus[node]  = false;
+        removeLayer(node);
+        if (hovered == node) hovered = AegisLayout.NONE;
+        if (pressed == node) pressed = AegisLayout.NONE;
+        if (clicked == node) clicked = AegisLayout.NONE;
+        if (focused == node) focused = AegisLayout.NONE;
+    }
+
+    /**
+     * The node Tab would move to from the end of a subtree: the next focusable one after it, in
+     * tree order under {@code root}, or {@link AegisLayout#NONE} if every one is inside it.
+     */
+    int nextFocusableAfter(int root, int subtree) {
+        int last = deepestLast(subtree);
+        int node = last;
+        do {
+            node = nextInOrder(root, node);
+            if (focusable[node] && !isOutOfReach(node) && !isUnder(subtree, node)) return node;
+        } while (node != last);
+        return AegisLayout.NONE;
+    }
+
     // -----------------------------------------------------------------------------------
     // Every frame
     // -----------------------------------------------------------------------------------

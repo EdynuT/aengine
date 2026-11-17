@@ -94,9 +94,12 @@ public final class AegisLayout {
     private static final byte ROW    = 0;
     private static final byte COLUMN = 1;
     private static final byte BOX    = 2;
+    private static final byte FREE   = 3;   // step 4e: given back, waiting on the free list
 
     private final int capacity;
     private int count;
+    private int freeHead = NONE;   // the last node given back; the rest follow by nextSibling
+    private int freeCount;
 
     // The tree.
     private final byte[] kind;
@@ -626,15 +629,55 @@ public final class AegisLayout {
      */
     public void clear() {
         count = 0;
+        freeHead = NONE;
+        freeCount = 0;
         version++;
     }
 
     /**
-     * How many nodes the tree holds.
+     * Gives a node back, for the next one made to take — step 4e. The node must be a root with
+     * no children: {@link AegisWidgets#remove} takes a subtree apart from the bottom and hands
+     * each node here, having forgotten what the widgets and the tree knew of it.
+     *
+     * <p>Its handle is no longer valid; whoever kept it must let it go, since the next node
+     * made may be given the same number.</p>
+     */
+    void release(int node) {
+        if (kind[node] == FREE) throw new IllegalStateException("Node " + node + " was given back already.");
+        if (parent[node] != NONE || firstChild[node] != NONE) {
+            throw new IllegalStateException("Only a root with no children is given back; node " + node + " is not one.");
+        }
+        kind[node] = FREE;
+        name[node] = null;
+        hidden[node] = false;
+        nextSibling[node] = freeHead;   // the free list is threaded through the sibling links
+        freeHead = node;
+        freeCount++;
+        version++;
+    }
+
+    /**
+     * Whether a handle names a node in use: made, and not given back since.
+     *
+     * @param node a handle below {@link #nodeCount()}
+     * @return {@code false} for a node given back
+     */
+    public boolean isInUse(int node) { return node >= 0 && node < count && kind[node] != FREE; }
+
+    /**
+     * How many handles have been handed out: the highest one, plus one. Some below it may have
+     * been given back — see {@link #isInUse} — and are taken again before a new one is.
      *
      * @return the count; handles run from 0 to this, exclusive
      */
     public int nodeCount() { return count; }
+
+    /**
+     * How many nodes are in use: those made, less those given back.
+     *
+     * @return the count
+     */
+    public int nodesInUse() { return count - freeCount; }
 
     /**
      * The node this one was added to, or {@link #NONE} for a root.
@@ -877,7 +920,7 @@ public final class AegisLayout {
     // -----------------------------------------------------------------------------------
 
     private int add(byte nodeKind, int parentNode) {
-        if (count == capacity) {
+        if (freeHead == NONE && count == capacity) {
             throw new IllegalStateException(
                 "Layout is full at " + capacity + " nodes. Raise the capacity it was created with.");
         }
@@ -886,7 +929,14 @@ public final class AegisLayout {
                 "A box holds nothing; add children to a row or a column instead.");
         }
 
-        int node = count++;
+        int node;
+        if (freeHead != NONE) {         // a node given back is taken first
+            node = freeHead;
+            freeHead = nextSibling[node];
+            freeCount--;
+        } else {
+            node = count++;
+        }
         kind[node]        = nodeKind;
         parent[node]      = parentNode;
         firstChild[node]  = NONE;

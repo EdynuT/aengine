@@ -573,7 +573,7 @@ public final class AegisWidgets {
         // What hangs nowhere is dressed too: dialogs and popups not open, panels a layout does
         // not show, tabs not shown — so whatever is shown later is already in the theme.
         for (int node = 0; node < layout.nodeCount(); node++) {
-            if (node != root && layout.parent(node) == AegisLayout.NONE) dressSubtree(theme, node);
+            if (node != root && layout.isInUse(node) && layout.parent(node) == AegisLayout.NONE) dressSubtree(theme, node);
         }
         theme.report();
     }
@@ -3107,30 +3107,10 @@ public final class AegisWidgets {
      */
     public void clear() {
         overlayCount = 0;
-        Arrays.fill(kind, NOT_A_WIDGET);
-        Arrays.fill(label, null);
-        Arrays.fill(labelEnglish, null);
-        Arrays.fill(liveText, null);
-        Arrays.fill(checked, false);
-        Arrays.fill(fieldText, null);
-        Arrays.fill(themePath, null);
-        Arrays.fill(tabsOf, null);
-        Arrays.fill(itemsOf, null);
-        Arrays.fill(tooltip, null);
-        Arrays.fill(tooltipEnglish, null);
-        Arrays.fill(comboItems, null);
-        Arrays.fill(comboItemNames, null);
-        Arrays.fill(comboItemEnglish, null);
-        Arrays.fill(surfaceTexture, 0);
-        Arrays.fill(surfaceUpsideDown, false);
-        Arrays.fill(icon, AegisIcons.NONE);
-        Arrays.fill(toggleGroup, 0);
-        Arrays.fill(disabled, false);
+        for (int n = 0; n < kind.length; n++) forget(n);
         lastToggleGroup = 0;
         clearDocks();
         tipShown = AegisLayout.NONE;
-        Arrays.fill(fittedWidth, 0.0f);
-        Arrays.fill(fittedHeight, 0.0f);
         activated = AegisLayout.NONE;
         changed   = AegisLayout.NONE;
         edited    = AegisLayout.NONE;
@@ -5146,33 +5126,220 @@ public final class AegisWidgets {
         dockCount++;
     }
 
+    // -----------------------------------------------------------------------------------
+    // Removing — step 4e
+    // -----------------------------------------------------------------------------------
+
     /**
-     * Drops a screen's old arrangement — its rows, columns and tabbed panes, with whatever of
-     * theirs still hangs on them — so nothing dresses, translates, draws or focuses it again.
-     * The panels must already be taken off it. The nodes stay used: the layout has no way to
-     * give one back, which a restore now and then can afford.
+     * Takes a widget, or a row or column with everything in it, out of the interface for good —
+     * Swing's {@code remove}, Godot's {@code queue_free} — and gives its nodes back for the next
+     * widgets made to take, so a panel whose content changes does not run the layout out of
+     * room. What the widget owns goes with it: a menu title's menu, an item's submenu, a combo
+     * box's list, a tabbed pane's tabs not shown. An overlay it owns or is in is closed. Focus
+     * inside it moves on to what Tab would reach next, so the keyboard is not left on nothing.
+     *
+     * <p>Every handle inside is no longer valid, and the next widget made may be given one of
+     * the same numbers: let them all go. Not for the frame loop — it walks what it takes.</p>
+     *
+     * @param node a widget, or a row or column; a menu {@link #menu} or {@link #subMenu} gave
+     *             goes with its title or its item
+     * @throws IllegalArgumentException for a part of a widget — a tab bar, a split pane's
+     *         divider, a combo box's list, a dialog's title bar — which goes with its widget;
+     *         for a tab's content, which goes with its pane; and for anything
+     *         holding a panel, which belongs to the screens and is closed instead, with
+     *         {@link AegisScreens#setPanelOpen}
      */
-    void discard(int root) {
-        for (int up = tree.focused(); up != AegisLayout.NONE; up = layout.parent(up)) {
-            if (up == root) { tree.focus(AegisLayout.NONE); break; }
+    public void remove(int node) {
+        if (!layout.isInUse(node)) throw new IllegalArgumentException("Node " + node + " is not in use.");
+        if (kind[node] == MENU) node = menuOwner[node];   // the handle menu() gave: with its title, or its item
+        switch (kind[node]) {
+            case TAB_BAR, DIVIDER, COMBO_LIST, DIALOG_TITLE -> throw new IllegalArgumentException(
+                "Node " + node + " is part of a widget, and goes with it: remove the widget.");
+            default -> { }
         }
-        discardNode(root);
+        for (int pane = 0; pane < layout.nodeCount(); pane++) {
+            if (kind[pane] != TABBED_PANE) continue;
+            TabSet tabs = tabsOf[pane];
+            for (int i = 0; i < tabs.count; i++) {
+                if (tabs.contents[i] == node) throw new IllegalArgumentException(
+                    "Node " + node + " is a tab's content, and goes with its tabbed pane.");
+            }
+        }
+        ArrayList<Integer> nodes = new ArrayList<>();
+        collect(node, nodes, false);
+        for (int n : nodes) {
+            if (kind[n] == PANEL || kind[n] == SCREEN) throw new IllegalArgumentException(
+                "Node " + node + " holds a panel, which belongs to the screens: close it with setPanelOpen instead.");
+        }
+        take(node, nodes);
     }
 
-    private void discardNode(int node) {
-        // A tabbed pane's contents are panels, already taken off: not followed.
-        ArrayList<Integer> children = new ArrayList<>();
+    /**
+     * Removes everything in a row or column, leaving it empty to be filled again — what a panel
+     * whose content changes does before showing the new one. See {@link #remove}.
+     *
+     * @param container a row or column, or a menu: its items
+     */
+    public void removeChildren(int container) {
+        for (int child = layout.firstChild(container); child != AegisLayout.NONE; child = layout.firstChild(container)) {
+            remove(child);
+        }
+    }
+
+    /**
+     * Drops a screen's old arrangement — its rows, columns and tabbed panes, with whatever of
+     * theirs still hangs on them — and gives the nodes back. The panels are left out: they
+     * belong to the screens, and go into the new arrangement.
+     */
+    void discard(int root) {
+        ArrayList<Integer> nodes = new ArrayList<>();
+        collect(root, nodes, true);
+        take(root, nodes);
+    }
+
+    /**
+     * A node and all it holds or owns, each before what is in it: its children, and what hangs
+     * nowhere but is its own — a title's menu, an item's submenu, a combo box's list, a tabbed
+     * pane's contents not shown. With {@code skipPanels}, panels are left out, with what is in
+     * them.
+     */
+    private void collect(int node, ArrayList<Integer> out, boolean skipPanels) {
+        if (skipPanels && kind[node] == PANEL) return;
+        out.add(node);
+        switch (kind[node]) {
+            case MENU_TITLE -> collect(titleMenu[node], out, skipPanels);
+            case MENU_ITEM  -> { if (itemSubMenu[node] != AegisLayout.NONE) collect(itemSubMenu[node], out, skipPanels); }
+            case COMBO_BOX  -> collect(comboList[node], out, skipPanels);
+            case TABBED_PANE -> {
+                TabSet tabs = tabsOf[node];
+                for (int i = 0; i < tabs.count; i++) {
+                    if (layout.parent(tabs.contents[i]) != node) collect(tabs.contents[i], out, skipPanels);
+                }
+            }
+            default -> { }
+        }
         for (int child = layout.firstChild(node); child != AegisLayout.NONE; child = layout.nextSibling(child)) {
-            children.add(child);
+            collect(child, out, skipPanels);
         }
-        for (int child : children) discardNode(child);
-        if (kind[node] == TABBED_PANE || kind[node] == TAB_BAR || kind[node] == SCREEN) {
-            kind[node] = NOT_A_WIDGET;
-            tabsOf[node] = null;
-            tree.setInteractive(node, false);
-            tree.setFocusable(node, false);
+    }
+
+    /** Takes nodes collected from {@code top} out: overlays closed, focus moved on, everything forgotten, nodes given back. */
+    private void take(int top, ArrayList<Integer> nodes) {
+        boolean[] gone = new boolean[layout.nodeCount()];
+        for (int n : nodes) gone[n] = true;
+
+        for (int i = 0; i < overlayCount; i++) {
+            if (gone[overlayNode[i]] || isGone(gone, overlayOwner[i])) {
+                closeOverlaysFrom(i);
+                break;
+            }
         }
-        layout.detach(node);
+        for (int i = 0; i < overlayCount; i++) {
+            if (isGone(gone, overlayFocus[i])) overlayFocus[i] = AegisLayout.NONE;
+        }
+        if (isGone(gone, tree.focused())) {
+            int root = top;
+            while (layout.parent(root) != AegisLayout.NONE) root = layout.parent(root);
+            tree.focus(root == top ? AegisLayout.NONE : tree.nextFocusableAfter(root, top));
+        }
+
+        // Docks inside go, and a drag or the keyboard on one ends.
+        int kept = 0;
+        for (int i = 0; i < dockCount; i++) {
+            if (gone[dockNode[i]]) continue;
+            dockNode[kept] = dockNode[i];
+            dockAfter[kept] = dockAfter[i];
+            kept++;
+        }
+        if (kept != dockCount) {
+            dockCount = kept;
+            dockDragged = -1;
+            dockFocused = -1;
+        }
+        if (isGone(gone, dockFocusBefore)) dockFocusBefore = AegisLayout.NONE;
+
+        // Each after what is in it, so every node is a root with no children when given back.
+        for (int i = nodes.size() - 1; i >= 0; i--) {
+            int n = nodes.get(i);
+            forget(n);
+            tree.forget(n);
+            layout.detach(n);
+            layout.release(n);
+        }
+
+        // What still points in, from outside.
+        for (int n = 0; n < layout.nodeCount(); n++) {
+            if (kind[n] == DIALOG && isGone(gone, defaultButton[n])) defaultButton[n] = AegisLayout.NONE;
+            if (kind[n] == MENU && isGone(gone, menuPointed[n])) menuPointed[n] = AegisLayout.NONE;
+        }
+        if (isGone(gone, firstMenuBar))   firstMenuBar   = AegisLayout.NONE;
+        if (isGone(gone, lastMenuHover))  lastMenuHover  = AegisLayout.NONE;
+        if (isGone(gone, cancelled))      cancelled      = AegisLayout.NONE;
+        if (isGone(gone, dismissedOwner)) dismissedOwner = AegisLayout.NONE;
+        if (isGone(gone, lastRoot))       lastRoot       = AegisLayout.NONE;
+        if (isGone(gone, tipCandidate))   tipCandidate   = AegisLayout.NONE;
+        if (isGone(gone, tipShown))       tipShown       = AegisLayout.NONE;
+        if (isGone(gone, lastPressed))    lastPressed    = AegisLayout.NONE;
+        if (isGone(gone, stepped))        stepped        = AegisLayout.NONE;
+        if (isGone(gone, edited))         edited         = AegisLayout.NONE;
+        if (isGone(gone, lastFocused))    lastFocused    = AegisLayout.NONE;
+        if (isGone(gone, barDragged))     barDragged     = AegisLayout.NONE;
+        if (isGone(gone, activated))      activated      = AegisLayout.NONE;
+        if (isGone(gone, changed))        changed        = AegisLayout.NONE;
+        if (isGone(gone, treePressTree))  treePressTree  = AegisLayout.NONE;
+        if (isGone(gone, hField))         resetHistory();
+    }
+
+    private static boolean isGone(boolean[] gone, int node) {
+        return node >= 0 && node < gone.length && gone[node];
+    }
+
+    /** One node's slot as it was before anything was made on it, for the next widget to take. */
+    private void forget(int n) {
+        kind[n] = NOT_A_WIDGET;
+        label[n] = null;
+        labelEnglish[n] = null;
+        liveText[n] = null;
+        checked[n] = false;
+        sliderValue[n] = 0.0f;
+        sliderMin[n] = 0.0f;
+        sliderMax[n] = 0.0f;
+        sliderStep[n] = 0.0f;
+        spinnerDecimals[n] = 0;
+        tabsOf[n] = null;
+        itemsOf[n] = null;
+        tooltip[n] = null;
+        tooltipEnglish[n] = null;
+        comboItems[n] = null;
+        comboItemNames[n] = null;
+        comboItemEnglish[n] = null;
+        defaultButton[n] = 0;
+        surfaceTexture[n] = 0;
+        surfaceUpsideDown[n] = false;
+        icon[n] = AegisIcons.NONE;
+        toggleGroup[n] = 0;
+        disabled[n] = false;
+        titleMenu[n] = 0;
+        menuOwner[n] = 0;
+        itemSubMenu[n] = 0;
+        itemChecks[n] = false;
+        itemShortcut[n] = null;
+        menuPointed[n] = 0;
+        comboChosen[n] = 0;
+        comboList[n] = 0;
+        listOwner[n] = 0;
+        listHighlight[n] = 0;
+        themeNamed[n] = false;
+        fieldText[n] = null;
+        fieldMaxLength[n] = 0;
+        caret[n] = 0;
+        anchor[n] = 0;
+        fieldScroll[n] = 0.0f;
+        styleOf[n] = null;
+        fittedWidth[n] = 0.0f;
+        fittedHeight[n] = 0.0f;
+        visibleLines[n] = 0;
+        themePath[n] = null;
     }
 
     /** Forgets every dock, before a screen is built again. */
