@@ -1197,6 +1197,10 @@ in Java.** This reverses what an earlier draft of this document said in the out-
 section. The reason is a workflow one rather than a technical one: it lets someone design
 the editor without writing engine code, and see the result without recompiling.
 
+How to write the two files — every property, value and rule, with examples checked against
+the engine — is in [THEME_GUIDE.md](THEME_GUIDE.md) and [LAYOUT_GUIDE.md](LAYOUT_GUIDE.md),
+written for the files' authors. This section is the design behind them.
+
 ### The split
 
 The governing rule is that **the editor declares what a thing is, never what it looks like
