@@ -61,7 +61,7 @@ tasks.named('test') {
 // ---------------------------------------------------------------------------------------
 def allowedCorePackages = [
     'com.aengine.graphics',   // API interfaces only; graphics.opengl is denied below
-    'com.aengine.core',       // Window, Input, Keys, UILayer, RenderMode
+    'com.aengine.core',       // Window, Input, Keys, RenderMode
     'com.aengine.utils',      // Logger, FileSystem
 ]
 def deniedPackages = [

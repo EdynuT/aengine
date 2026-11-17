@@ -11,7 +11,7 @@ The engine is engineered strictly as a decoupled reusable runtime infrastructure
 | Component | Specification |
 |---|---|
 | **Core Language** | Java 25 (OpenJDK) |
-| **Editor Interface** | Dear ImGui (transitional) — migrating to an in-house framework, see [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md) |
+| **Editor Interface** | Aegis, the engine's own UI framework — see [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md) |
 | **Build System** | Gradle 9.1+ (Wrapper orchestrated, 3-module graph) |
 | **Graphics Platform** | OpenGL 3.3 Core Profile minimum (newer versions work; Mesa/ACO optimized) via LWJGL 3.3.4 |
 | **Windowing / Input** | GLFW Native Layer (Wayland & Win32 native hardware deltas) |
@@ -29,11 +29,11 @@ The build is split into three Gradle modules with a one-way dependency graph:
 |---|---|---|
 | `:core` | Renderer, ECS, physics, audio, assets, scripting | — |
 | `:ui` | **Aegis**, the in-house UI framework (`com.aengine.aegis`) | `:core` |
-| `:editor` | Editor surface and application host; Dear ImGui confined here | `:core`, `:ui` |
+| `:editor` | Editor surface and application host; its interface is drawn with Aegis | `:core`, `:ui` |
 
-`:core` carries no UI toolkit. The engine loop drives the interface through the
-`com.aengine.core.UILayer` interface, which the editor implements today with Dear ImGui and
-Aegis will implement later without touching `Engine`.
+`:core` carries no UI toolkit. The engine loop hands the host the rendered scene's texture
+(`Engine.onDrawInterface`) and is told the size to render it at (`Engine.setSceneSize`); what
+draws the interface is the host's choice.
 
 `:ui` is additionally restricted to a subset of core packages, enforced by a
 `checkBoundary` task that fails the build on a disallowed import.
@@ -41,7 +41,7 @@ Aegis will implement later without touching `Engine`.
 ### Single-Process Architecture
 The engine, editor and interface run inside one JVM process, sharing one address space and one object graph. There is no interprocess bridge, no serialization hop and no external UI runtime: editor panels read engine state directly.
 
-The interface currently renders through Dear ImGui as a transitional layer, and is being replaced by Aegis, the engine's own UI framework. The design and migration plan are in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md).
+The interface is drawn by Aegis, the engine's own UI framework, through the same renderer as the scene. Its design is in [docs/UI_FRAMEWORK_ARCHITECTURE.md](docs/UI_FRAMEWORK_ARCHITECTURE.md); how to write its theme and layout files is in [docs/THEME_GUIDE.md](docs/THEME_GUIDE.md) and [docs/LAYOUT_GUIDE.md](docs/LAYOUT_GUIDE.md).
 
 ### Virtual File System (VFS) & Sandboxing
 All hardware asset paths are evaluated via `FileSystem.resolve()`. It enforces strict boundary sandboxing using system path normalization to prevent directory traversal vulnerabilities. Native asset allocations bypass the JVM heap, using `MemoryUtil.memAlloc` and direct `FileChannel` streams to achieve zero-copy transfers straight to the GPU driver pipelines.

@@ -40,8 +40,8 @@ import java.util.function.LongSupplier;
  * widget.</p>
  *
  * <p><strong>Input is handed in.</strong> Like the tree's pointer, the keyboard reaches
- * widgets through {@link #key}, called by whoever owns input — so the editor can keep keys from
- * Aegis while Dear ImGui has the keyboard. Tab and Shift+Tab are handled here too: moving focus
+ * widgets through {@link #key}, called by whoever owns input — so the editor can keep keys of
+ * its own, as Ctrl+S, from the widgets. Tab and Shift+Tab are handled here too: moving focus
  * is part of what the keyboard does to widgets.</p>
  *
  * <p><strong>Activation, not clicks.</strong> A button is activated by a click or, while

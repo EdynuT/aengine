@@ -72,6 +72,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 4e | `remove` and `removeChildren`: a widget and all it owns taken out, focus moved on, the nodes reused by the next ones made |
 | Step 4f | Context menus: a secondary click that is not a drag, Shift+F10 or the Menu key; the docks' tabs offer Close |
 | Step 4g | Undo and redo: the editor's `UndoHistory` of `UndoableEdit`s, Edit menu and Ctrl+Z / Ctrl+Y, an entity's drag the first edit |
+| Phase 5 | Dear ImGui removed: its dependencies, `DebugOverlay`, `ImGuiUILayer` and `UILayer`; the engine hands the host the scene's texture in `onDrawInterface` and takes its size from `setSceneSize` |
 
 ### The plan ahead
 
@@ -663,10 +664,11 @@ also move the published coordinate `aengine-ui`, which is not worth doing mid-fl
 Aegis ever leaves for its own repository, as the section below describes, that is the moment
 to reconsider.
 
-`com.aengine.core.UILayer` and the editor's `ImGuiUILayer` keep their names deliberately:
-they are the engine's generic hook for *any* interface layer, which today is Dear ImGui and
-tomorrow is Aegis. Naming the hook after one of its implementations would be the mistake the
-hook exists to avoid.
+The engine's hook for an interface is not named after one either. Until Phase 5 it was an
+interface, `com.aengine.core.UILayer`, which the editor implemented with Dear ImGui; with
+ImGui gone it is two methods of `Engine` — `onDrawInterface(sceneTexture)`, where the host
+draws, and `setSceneSize(width, height)`, where it says how big the scene's place is — so the
+engine still knows nothing of what draws the interface.
 
 ### Target layout
 
@@ -2284,8 +2286,17 @@ layout names an action. Not decided yet; what was weighed:
 - Rejected for now: plugins trusted outright, as Unity, Godot and Unreal do; WebAssembly, the
   safest, since plugins would no longer be written in Java.
 
-**Phase 5 — Remove Dear ImGui.** Drop the three `io.github.spair` dependencies and the JNI
-boundary with them.
+**Phase 5 ✅ — Dear ImGui removed.** The viewport was already Aegis's: since 4a the scene
+renders into its FrameBuffer and the `surfaceScene` surface shows that texture, sized by the
+layout. What was left of ImGui was plumbing, and it went: the three `io.github.spair`
+dependencies with their native library and JNI boundary, `DebugOverlay`, the editor's
+`ImGuiUILayer`, and the engine's `UILayer` interface, whose lifecycle (`init`, `beginFrame`,
+`endFrame`, a context menu as a `Runnable`) was ImGui's shape. `Engine` now has
+`onDrawInterface(sceneTexture)`, called once a frame after the scene is drawn and the window
+cleared, and `setSceneSize(width, height)`, which resizes the FrameBuffer at the start of the
+next frame; a host that calls neither renders the scene at the window's size and draws
+nothing over it. `Input`'s callbacks are the window's only ones, and the editor's shell no
+longer takes the pointer or the keys from anyone: it reads `Input` directly.
 
 ### Realistic scope
 

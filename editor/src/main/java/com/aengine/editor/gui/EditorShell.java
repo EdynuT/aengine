@@ -30,9 +30,6 @@ import java.nio.file.Path;
  * layout's: hierarchy over assets on the left, viewport over console and output in the
  * middle, inspector on the right, with the menu bar and toolbar above and the status bar
  * below.</p>
- *
- * <p>While Dear ImGui still draws some windows, it draws on top of this: over one of its
- * windows the pointer is ImGui's, and while one of its fields is typed into the keys are.</p>
  */
 public final class EditorShell {
 
@@ -373,10 +370,8 @@ public final class EditorShell {
      * @param width            the window's width in pixels
      * @param height           the window's height in pixels
      * @param sceneTexture     the scene framebuffer's colour texture, for the viewport
-     * @param imguiHasMouse    whether a Dear ImGui window is under the pointer
-     * @param imguiHasKeyboard whether a Dear ImGui field is being typed into
      */
-    public void frame(int width, int height, int sceneTexture, boolean imguiHasMouse, boolean imguiHasKeyboard) {
+    public void frame(int width, int height, int sceneTexture) {
         saveAsked = false;
         quitAsked = false;
         playAsked = false;
@@ -401,10 +396,8 @@ public final class EditorShell {
         aegis.begin(width, height);
         layout.solve(root, 0.0f, 0.0f, width, height);
 
-        // The pointer. Over a Dear ImGui window it is ImGui's, so the tree is given a point
-        // outside the screen.
-        float mouseX = imguiHasMouse ? -1.0f : (float) Input.getMouseX();
-        float mouseY = imguiHasMouse ? -1.0f : (float) Input.getMouseY();
+        float mouseX = (float) Input.getMouseX();
+        float mouseY = (float) Input.getMouseY();
         tree.update(root, mouseX, mouseY, Input.isMouseButtonPressed(0));
 
         // The right button looks around with the camera, so a right press on the viewport
@@ -412,19 +405,17 @@ public final class EditorShell {
         boolean rightDown = Input.isMouseButtonPressed(1);
         if (rightDown && !rightWasDown && tree.hovered() == surfaceScene) tree.focus(surfaceScene);
         rightWasDown = rightDown;
-        ae.secondaryButton(rightDown && !imguiHasMouse);   // a click with it opens context menus
+        ae.secondaryButton(rightDown);   // a click with it opens context menus
 
         boolean viewportHadFocus = tree.focused() == surfaceScene && !ae.isAnyOverlayOpen();
         for (int i = 0; i < Input.eventCount(); i++) {
             Input.EventType type = Input.eventType(i);
             if (type == Input.EventType.SCROLL) {
-                if (imguiHasMouse) continue;
                 // Over the viewport the wheel is the camera's; anywhere else it scrolls.
                 if (tree.hovered() == surfaceScene) viewportWheel += Input.eventScrollY(i);
                 else ae.scroll(Input.eventScrollY(i));
                 continue;
             }
-            if (imguiHasKeyboard) continue;
             switch (type) {
                 case CHAR -> ae.character(Input.eventCode(i));
                 case KEY_PRESS -> {

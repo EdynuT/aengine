@@ -86,8 +86,8 @@ public class Input {
 
     /**
      * Installs the key, character, mouse-button, scroll and cursor callbacks on the window.
-     * Call once, after the window exists and before any UI layer installs its own callbacks
-     * (see {@link UILayer#init(long)}), since those chain onto these. Also decides whether
+     * Call once, after the window exists. These are the window's only input callbacks:
+     * everything else, the interface included, reads what they collect. Also decides whether
      * key repeat is generated here (Wayland) or taken from the operating system.
      *
      * @param windowHandle the GLFW window handle
@@ -96,8 +96,6 @@ public class Input {
         activeWindowHandle = windowHandle;
 
         ownKeyRepeat = glfwGetPlatform() == GLFW_PLATFORM_WAYLAND;
-
-        // Installed before Dear ImGui's, which chains onto them — see UILayer.
 
         glfwSetKeyCallback(windowHandle, (window, key, scancode, action, mods) -> {
             if (key >= 0 && key <= GLFW_KEY_LAST)

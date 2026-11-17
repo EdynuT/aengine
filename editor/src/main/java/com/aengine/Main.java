@@ -11,7 +11,6 @@ import com.aengine.core.Engine;
 import com.aengine.core.Input;
 import com.aengine.core.Keys;
 import com.aengine.core.RenderMode;
-import com.aengine.debug.DebugOverlay;
 import com.aengine.ecs.components.CameraComponent;
 import com.aengine.ecs.components.SpriteComponent;
 import com.aengine.ecs.components.TransformComponent;
@@ -35,11 +34,10 @@ import com.aengine.utils.FileSystem;
 import com.aengine.utils.Logger;
 import com.aengine.utils.ProjectWizard;
 
-import imgui.ImGui;
 
 
 /**
- * The editor application: starts the engine with the Dear ImGui interface, mounts a game
+ * The editor application: starts the engine with the editor's interface, mounts a game
  * project, and runs the edit and play loop.
  *
  * <p>Command line: an optional project path, plus {@code --2d} or {@code --3d} for the render
@@ -63,8 +61,6 @@ public class Main extends Engine {
     private CameraSystem cameraSystem;
     private int cameraEntity;
     
-    private final com.aengine.editor.ImGuiUILayer imguiLayer;
-
     // The editor's interface, drawn by Aegis (Phase 4): panels, menus, the viewport.
     private com.aengine.editor.gui.EditorShell shell;
 
@@ -95,18 +91,14 @@ public class Main extends Engine {
     // Shared execution state capturing target path sent from external process host
     private static String activeProjectPath;
 
-    /** Creates the editor and installs its Dear ImGui interface. The window opens in {@link #run()}. */
+    /** Creates the editor. The window, and the interface with it, open in {@link #run()}. */
     public Main() {
         super("AEngine - ECS Fly-Camera Runtime");
-        this.imguiLayer = new com.aengine.editor.ImGuiUILayer();
-        setUILayer(this.imguiLayer);
     }
 
     @Override
     protected void onInit() {
         Logger.info(Logger.System.CORE, "Initializing core pipeline execution context...");
-        
-        ImGui.getIO().setConfigWindowsMoveFromTitleBarOnly(true);
 
         // Resolve active directory or deploy development workspace bootstrap
         if (activeProjectPath == null || activeProjectPath.trim().isEmpty()) {
@@ -362,15 +354,12 @@ public class Main extends Engine {
     }
 
     @Override
-    protected void onDebugRender(int viewportTextureID) {
-        // The interface, drawn by Aegis. Dear ImGui still runs until Phase 5 removes it, but
-        // opens no window any more; were one open, the pointer over it and the keys typed into
-        // it would be ImGui's.
+    protected void onDrawInterface(int sceneTexture) {
+        // The interface, drawn by Aegis, with the scene in its viewport; the scene renders at
+        // the viewport's size from the next frame.
         shell.showStats(FPSTracker.getCurrentFPS(), registry.getEntityCount());
-        shell.frame(getWindow().getWidth(), getWindow().getHeight(), viewportTextureID,
-            DebugOverlay.ENABLED && ImGui.getIO().getWantCaptureMouse(),
-            DebugOverlay.ENABLED && ImGui.getIO().getWantCaptureKeyboard());
-        imguiLayer.setViewportSize(shell.viewportWidth(), shell.viewportHeight());
+        shell.frame(getWindow().getWidth(), getWindow().getHeight(), sceneTexture);
+        setSceneSize((int) shell.viewportWidth(), (int) shell.viewportHeight());
 
         if (shell.saveAsked()) saveCurrentScene();
         // Esc leaves the editor while the scene has focus, as it did before; anywhere else it

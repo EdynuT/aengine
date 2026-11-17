@@ -26,8 +26,8 @@ import java.util.Arrays;
  *
  * <p><strong>Input is handed in, not read.</strong> {@link #update} takes the mouse position
  * and button as arguments instead of asking the engine's input directly. Whoever calls it
- * decides what the interface is allowed to see: the editor, for one, must hide the mouse from
- * it while the pointer is over a Dear ImGui window, and only the caller knows that.</p>
+ * decides what the interface is allowed to see — a host drawing something of its own over
+ * part of the window can hide the pointer from it there, and only the caller knows that.</p>
  *
  * <p><strong>Only interactive nodes react.</strong> The layout's hit-test finds the innermost
  * node under the pointer, which may be a label inside a button or a spacer. This walks up from

@@ -42,15 +42,12 @@ subprojects {
     ext {
         lwjglVersion = '3.3.4'
         jomlVersion  = '1.10.5'
-        imguiVersion = '1.86.11'
 
         String osName = System.getProperty('os.name').toLowerCase()
         if (osName.contains('win')) {
             lwjglNatives = 'natives-windows'
-            imguiNatives = 'windows'
         } else {
             lwjglNatives = 'natives-linux'
-            imguiNatives = 'linux'
         }
     }
 }

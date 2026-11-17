@@ -18,13 +18,17 @@ import static org.lwjgl.opengl.GL11.glClear;
  * which owns the thread until the window closes. Each frame, in order:</p>
  * <ol>
  *   <li>input is collected ({@link Input#poll()}, {@link Input#update()});</li>
- *   <li>the scene FrameBuffer is resized to the UI's viewport, if the UI reports one;</li>
+ *   <li>the scene FrameBuffer is resized to the size the host asked for with
+ *       {@link #setSceneSize}, if it asked;</li>
  *   <li>{@link #onUpdate(float)} runs;</li>
  *   <li>{@link #onRender()} draws the scene into the FrameBuffer;</li>
- *   <li>the window is cleared and the UI frame is built around
- *       {@link #onDebugRender(int)}, which presents the scene texture;</li>
+ *   <li>the window is cleared and {@link #onDrawInterface(int)} draws the host's interface,
+ *       given the scene's texture to show;</li>
  *   <li>the frame is shown.</li>
  * </ol>
+ *
+ * <p>The engine knows nothing of the interface: it hands over the scene's texture and is told
+ * the size to render it at. The editor draws its interface with Aegis, in {@code :ui}.</p>
  *
  * <p>Steps 3 to 5 run only in {@link EngineState#EDITOR}, the default. Everything runs on
  * the thread that called {@code run()}, which is the GL thread.</p>
@@ -35,14 +39,8 @@ public abstract class Engine {
     private volatile boolean running;
     private FrameBuffer frameBuffer;
 
-    /** Interface implementation driving the editor surface; never null. */
-    private UILayer ui = UILayer.NONE;
-
-    /**
-     * Hoisted out of the frame loop: {@code this::onViewportContextMenu} allocates a new
-     * capturing lambda on every evaluation, and this one is evaluated once per frame.
-     */
-    private final Runnable viewportContextMenu = this::onViewportContextMenu;
+    /** The size the host asked the scene to render at; 0 until it asks, for the window's. */
+    private volatile int sceneWidth, sceneHeight;
 
     /** The ECS world, created with the engine; also available through {@link #getRegistry()}. */
     protected final Registry registry; 
@@ -73,14 +71,16 @@ public abstract class Engine {
     }
 
     /**
-     * Installs the interface implementation. Must be called before {@link #run()}, since
-     * the layer is initialised during engine startup. Passing {@code null} restores
-     * {@link UILayer#NONE}.
+     * The size the scene renders at — an editor's viewport, as its interface last laid it out.
+     * The scene FrameBuffer is resized to it at the start of the next frame. Until this is
+     * called, or with a size of 0, the scene renders at the window's size.
      *
-     * @param layer the interface to drive, or {@code null} for none
+     * @param width  in pixels
+     * @param height in pixels
      */
-    public final void setUILayer(UILayer layer) {
-        this.ui = (layer != null) ? layer : UILayer.NONE;
+    public final void setSceneSize(int width, int height) {
+        this.sceneWidth  = width;
+        this.sceneHeight = height;
     }
 
     /**
@@ -128,10 +128,6 @@ public abstract class Engine {
         window.init();
         Input.init(window.getHandle());
 
-        // Initialise the interface AFTER Input so its GLFW callback installation chains
-        // onto Input's callbacks rather than replacing them silently.
-        ui.init(window.getHandle());
-
         frameBuffer = new FrameBuffer(window.getWidth(), window.getHeight());
 
         if (gameClassName != null) {
@@ -162,9 +158,9 @@ public abstract class Engine {
             Input.poll();     // empties last frame's event queue, then collects this frame's
             Input.update();
 
-            int vpW = (int) ui.viewportWidth();
-            int vpH = (int) ui.viewportHeight();
-            
+            int vpW = sceneWidth;
+            int vpH = sceneHeight;
+
             if (vpW > 0 && vpH > 0) {
                 if (frameBuffer.getWidth() != vpW || frameBuffer.getHeight() != vpH) {
                     frameBuffer.resize(vpW, vpH);
@@ -186,9 +182,7 @@ public abstract class Engine {
                 org.lwjgl.opengl.GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the monitor
 
-                ui.beginFrame();
-                onDebugRender(frameBuffer.getTextureID());
-                ui.endFrame();
+                onDrawInterface(frameBuffer.getTextureID());
 
             } else if (currentState == EngineState.LAUNCHER) {
                 // Just clear the physical monitor for the launcher state. No FBO rendering needed.
@@ -222,9 +216,6 @@ public abstract class Engine {
     private void cleanup() {
         Logger.info(Logger.System.CORE, "Executing engine teardown sequence...");
         onCleanup();
-
-        // Interface must be shut down before the GLFW window is destroyed
-        ui.cleanup();
 
         if (frameBuffer != null) frameBuffer.cleanup();
 
@@ -260,7 +251,7 @@ public abstract class Engine {
     public void setEngineState(EngineState state) { this.currentState = state; }
 
     /**
-     * Called once, after the window, input, UI layer and scene FrameBuffer exist and before
+     * Called once, after the window, input and scene FrameBuffer exist and before
      * the first frame. Load the scene and start subsystems here.
      */
     protected abstract void onInit();
@@ -279,34 +270,17 @@ public abstract class Engine {
     protected abstract void onRender();
 
     /**
-     * Called each frame after the scene FBO is complete but before buffer swap.
-     * Submit all interface panels here. The default implementation presents the scene
-     * FBO as the viewport surface.
+     * Called once per frame, after the scene is drawn into its FrameBuffer and the window is
+     * cleared, before the frame is shown: draw the interface here, showing the scene's
+     * texture where it belongs, and tell {@link #setSceneSize} how big that place is. Draws
+     * nothing by default, which is what a host with no interface wants.
      *
-     * <p>Subclasses should call {@code super.onDebugRender(viewportTextureID)} first
-     * to preserve the viewport, then append their own panels.</p>
-     *
-     * @param viewportTextureID OpenGL texture ID of the rendered scene FrameBuffer
+     * @param sceneTexture OpenGL texture ID of the rendered scene FrameBuffer
      */
-    protected void onDebugRender(int viewportTextureID) {
-        ui.renderViewport(viewportTextureID,
-            window.getWidth(), window.getHeight(), viewportContextMenu);
-    }
+    protected void onDrawInterface(int sceneTexture) {}
 
     /**
-     * Override to inject menu items into the context menu that appears when the user
-     * right-clicks inside the viewport.
-     *
-     * <p>This method is called from within an active popup context, so only popup-safe
-     * widgets should be submitted here.</p>
-     *
-     * <p>Default implementation is empty (no context menu items).</p>
-     */
-    protected void onViewportContextMenu() {}
-
-    /**
-     * Called once when the loop ends, before the UI layer, the FrameBuffer and the window
-     * are released. Free what {@link #onInit()} created.
+     * Called once when the loop ends, before the FrameBuffer and the window are released. Free what {@link #onInit()} created.
      */
     protected abstract void onCleanup();
 }

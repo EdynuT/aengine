@@ -1,9 +1,7 @@
 // Editor surface and application host.
 //
 // Sits at the top of the dependency graph and is the only module allowed to depend on
-// both :core and :ui. Dear ImGui is confined here as a transitional
-// layer: it is installed into the engine through com.aengine.editor.ImGuiUILayer and
-// leaves entirely in Phase 5 of docs/UI_FRAMEWORK_ARCHITECTURE.md.
+// both :core and :ui. Its interface is drawn with Aegis, from :ui.
 
 plugins {
     id 'application'
@@ -19,11 +17,6 @@ dependencies {
 
     // Scene save/load from the editor
     implementation 'com.google.code.gson:gson:2.10.1'
-
-    // Transitional editor interface — removed in Phase 5.
-    implementation "io.github.spair:imgui-java-binding:${imguiVersion}"
-    implementation "io.github.spair:imgui-java-lwjgl3:${imguiVersion}"
-    runtimeOnly   "io.github.spair:imgui-java-natives-${imguiNatives}:${imguiVersion}"
 
     // Tests only, for what the editor does apart from its window — the undo history.
     testImplementation platform('org.junit:junit-bom:5.11.4')
