@@ -59,10 +59,10 @@ public class SceneLoader {
      *       prefab is instantiated through {@link PrefabLoader}, then any
      *       {@code position}, {@code rotation} or {@code scale} under {@code "transform"}
      *       replaces the prefab's value.</li>
-     *   <li><b>Inline</b> — {@code {"components": {...}}}, as written by the editor. Only
-     *       {@code TransformComponent}, {@code ScriptComponent}, {@code ColliderComponent}
-     *       and {@code RigidbodyComponent} are read; sprites and rigidbody velocity are
-     *       not.</li>
+     *   <li><b>Inline</b> — {@code {"components": {...}}}, as written by the editor.
+     *       {@code TransformComponent}, {@code SpriteComponent}, {@code ScriptComponent},
+     *       {@code ColliderComponent} and {@code RigidbodyComponent} are read; rigidbody
+     *       velocity is not.</li>
      * </ul>
      *
      * <p>An entry with neither {@code "prefab"} nor {@code "components"} is skipped.</p>
@@ -135,7 +135,14 @@ public class SceneLoader {
                         activeRegistry.addComponent(entityId, t);
                     }
 
-                    // Read SpriteComponent
+                    // Read SpriteComponent, as a prefab's is read: without it every entity
+                    // leaving Play mode came back with no sprite (KNOWN_ISSUES #1).
+                    if (components.has("SpriteComponent")) {
+                        activeRegistry.addComponent(entityId,
+                            PrefabLoader.readSprite(components.getAsJsonObject("SpriteComponent")));
+                    }
+
+                    // Read ScriptComponent
                     if (components.has("ScriptComponent")) {
                         JsonObject scriptObj = components.getAsJsonObject("ScriptComponent");
                         com.aengine.ecs.components.ScriptComponent scriptCmp = new com.aengine.ecs.components.ScriptComponent();

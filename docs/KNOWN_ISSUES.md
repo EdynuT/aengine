@@ -1,34 +1,35 @@
 # Known Issues
 
 Defects found while documenting the engine, recorded here so they are not lost while the
-affected modules are still unfinished. None of them has been fixed yet.
+affected modules are still unfinished. A fixed one keeps its entry, marked as fixed, with the
+test that now guards it, until the release it ships in.
 
 Each entry names the code by class and method; line numbers drift, so they are given only
 as a starting point. Effects marked *from reading* were worked out from the code and have
 not been reproduced in the running editor.
 
-| # | Severity | Area | Summary |
-|---|---|---|---|
-| 1 | High | Editor / serialization | Leaving Play mode strips every sprite from the scene |
-| 2 | High (latent) | Physics | A large collider can freeze the physics thread and the editor |
-| 3 | Medium | Physics | OBB colliders read rotation as radians; everything else uses degrees |
-| 4 | Medium | Physics | The broad phase can miss spheres and rotated OBBs |
-| 5 | Low | Physics | Two bodies at exactly the same position never separate |
-| 6 | Low (latent) | ECS | Destroying an entity twice makes two new entities share an ID |
-| 7 | Low | Audio | Audio properties apply once; `isPlaying` never resets |
-| 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` |
-| 9 | Low (latent) | Physics | `PhysicsThread` cannot be restarted after `cleanup` |
-| 10 | Medium | Graphics / UI | The UI pass turns depth testing back on in 2D mode |
-| 11 | Low (latent) | Graphics | `Renderer2D.flush` redraws quads already drawn |
-| 12 | Low | Graphics | A texture still loading shows whatever was on its slot |
-| 13 | Low (latent) | Graphics | `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO |
-| 14 | Low | Graphics | `OpenGLTexture` can leak decoded pixels |
-| 15 | Low | Graphics | The CPU name is read with `wmic`, missing on recent Windows |
-| 16 | Low | Graphics | Per-frame allocations on paths documented as allocation-free |
-| 17 | Medium | Assets | Texture hot reload misses files whose names have capitals |
-| 18 | Low | Tooling | `ProjectWizard` writes the project name into JSON unescaped |
-| 19 | Low (latent) | UI | A clip pushed past 32 levels unbalances the clip stack |
-| 20 | Low | UI | On Windows, AltGr shortcuts can fire Ctrl shortcuts in text fields |
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| 1 | High | Editor / serialization | Leaving Play mode strips every sprite from the scene | **Fixed** |
+| 2 | High (latent) | Physics | A large collider can freeze the physics thread and the editor | Open |
+| 3 | Medium | Physics | OBB colliders read rotation as radians; everything else uses degrees | Open |
+| 4 | Medium | Physics | The broad phase can miss spheres and rotated OBBs | Open |
+| 5 | Low | Physics | Two bodies at exactly the same position never separate | Open |
+| 6 | Low (latent) | ECS | Destroying an entity twice makes two new entities share an ID | Open |
+| 7 | Low | Audio | Audio properties apply once; `isPlaying` never resets | Open |
+| 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` | Open |
+| 9 | Low (latent) | Physics | `PhysicsThread` cannot be restarted after `cleanup` | Open |
+| 10 | Medium | Graphics / UI | The UI pass turns depth testing back on in 2D mode | Open |
+| 11 | Low (latent) | Graphics | `Renderer2D.flush` redraws quads already drawn | Open |
+| 12 | Low | Graphics | A texture still loading shows whatever was on its slot | Open |
+| 13 | Low (latent) | Graphics | `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO | Open |
+| 14 | Low | Graphics | `OpenGLTexture` can leak decoded pixels | Open |
+| 15 | Low | Graphics | The CPU name is read with `wmic`, missing on recent Windows | Open |
+| 16 | Low | Graphics | Per-frame allocations on paths documented as allocation-free | Open |
+| 17 | Medium | Assets | Texture hot reload misses files whose names have capitals | Open |
+| 18 | Low | Tooling | `ProjectWizard` writes the project name into JSON unescaped | Open |
+| 19 | Low (latent) | UI | A clip pushed past 32 levels unbalances the clip stack | Open |
+| 20 | Low | UI | On Windows, AltGr shortcuts can fire Ctrl shortcuts in text fields | Open |
 
 ---
 
@@ -53,6 +54,10 @@ saved to disk by the editor hit the same gap when loaded.
 
 **Fix direction:** read `SpriteComponent` (texture path and colour) in the inline branch,
 mirroring `PrefabLoader`, and fix the misleading comment.
+
+**Fixed:** the inline branch reads the sprite with the same `PrefabLoader.readSprite` a prefab
+uses. Reproduced first by `SceneRoundTripTest` (editor), which writes a scene, reads it back
+twice as Play and Stop do, and fails without the fix.
 
 ## 2. A large collider can freeze the physics thread and the editor
 

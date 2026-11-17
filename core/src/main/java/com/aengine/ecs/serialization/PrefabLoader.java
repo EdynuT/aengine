@@ -89,24 +89,7 @@ public class PrefabLoader {
 
                 // Parse Sprite
                 if (components.has("SpriteComponent")) {
-                    JsonObject spriteData = components.getAsJsonObject("SpriteComponent");
-                    SpriteComponent sprite = new SpriteComponent();
-                    
-                    if (spriteData.has("texture")) {
-                        String texturePath = spriteData.get("texture").getAsString();
-                        sprite.texture = com.aengine.graphics.AssetManager.getTexture(texturePath);
-                        sprite.texturePath = texturePath;
-                    }
-                    
-                    if (spriteData.has("color")) {
-                        JsonArray colorArray = spriteData.getAsJsonArray("color");
-                        sprite.color.x = colorArray.get(0).getAsFloat();
-                        sprite.color.y = colorArray.get(1).getAsFloat();
-                        sprite.color.z = colorArray.get(2).getAsFloat();
-                        sprite.color.w = colorArray.get(3).getAsFloat();
-                    }
-                    
-                    activeRegistry.addComponent(entityId, sprite);
+                    activeRegistry.addComponent(entityId, readSprite(components.getAsJsonObject("SpriteComponent")));
                 }
                 
                 // Parse Collider
@@ -162,6 +145,28 @@ public class PrefabLoader {
     }
 
     // Helper updated to use JOML Vector3f instead of float[]
+    /**
+     * A sprite from its JSON — {@code "texture"} and {@code "color"}, both optional — as a
+     * prefab and a scene saved by the editor write it. The texture is requested from the
+     * {@link com.aengine.graphics.AssetManager}, which loads it in the background.
+     */
+    static SpriteComponent readSprite(JsonObject spriteData) {
+        SpriteComponent sprite = new SpriteComponent();
+        if (spriteData.has("texture")) {
+            String texturePath = spriteData.get("texture").getAsString();
+            sprite.texture = com.aengine.graphics.AssetManager.getTexture(texturePath);
+            sprite.texturePath = texturePath;
+        }
+        if (spriteData.has("color")) {
+            JsonArray colorArray = spriteData.getAsJsonArray("color");
+            sprite.color.x = colorArray.get(0).getAsFloat();
+            sprite.color.y = colorArray.get(1).getAsFloat();
+            sprite.color.z = colorArray.get(2).getAsFloat();
+            sprite.color.w = colorArray.get(3).getAsFloat();
+        }
+        return sprite;
+    }
+
     private static void fillVector3(JsonObject source, String key, Vector3f targetVector) {
         if (source.has(key)) {
             JsonArray array = source.getAsJsonArray(key);
