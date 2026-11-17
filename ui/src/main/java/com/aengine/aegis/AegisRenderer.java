@@ -92,7 +92,11 @@ public final class AegisRenderer {
         end();
     }
 
-    /** Restores the pipeline state the engine's scene passes expect. */
+    /**
+     * Leaves the pipeline as the engine starts a frame: no scissor, no blending, depth testing
+     * on. A scene pass that wants something else — 2D draws with depth testing off — sets it
+     * at its own start, every frame, rather than counting on what it set once.
+     */
     private void end() {
         renderer.disableScissor();
         renderer.setBlend(false);

@@ -19,7 +19,7 @@ not been reproduced in the running editor.
 | 7 | Low | Audio | Audio properties apply once; `isPlaying` never resets | Open |
 | 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` | Open |
 | 9 | Low (latent) | Physics | `PhysicsThread` cannot be restarted after `cleanup` | Open |
-| 10 | Medium | Graphics / UI | The UI pass turns depth testing back on in 2D mode | Open |
+| 10 | Medium | Graphics / UI | The UI pass turns depth testing back on in 2D mode | **Fixed** |
 | 11 | Low (latent) | Graphics | `Renderer2D.flush` redraws quads already drawn | Open |
 | 12 | Low | Graphics | A texture still loading shows whatever was on its slot | Open |
 | 13 | Low (latent) | Graphics | `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO | Open |
@@ -194,6 +194,11 @@ reverse of the first frame.
 
 **Fix direction:** have the scene pass set the depth state it needs every frame, or have
 the UI pass restore the previous state instead of a fixed one.
+
+**Fixed:** the editor's `onRender` sets the depth test its render mode needs at the start of
+every frame — off in 2D, on in 3D — instead of once at startup, and `AegisRenderer` documents
+the state it leaves. Checked by running the editor with `--2d`; no automated test, since it
+needs a GL context.
 
 ## 11. `Renderer2D.flush` redraws quads already drawn
 

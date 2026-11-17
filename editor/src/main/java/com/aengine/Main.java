@@ -155,12 +155,10 @@ public class Main extends Engine {
 
         if (RenderMode.active() == RenderMode.MODE_3D) {
             Logger.info(Logger.System.RENDERER, "Enforcing Core 3D Perspective execution pipeline.");
-            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
             // Use the editorFov variable instead of the hardcoded value
             registry.addComponent(cameraEntity, new CameraComponent(editorFov, getWindow().getWidth(), getWindow().getHeight(), 0.1f, 1000.0f, true));
         } else {
             Logger.info(Logger.System.RENDERER, "Enforcing Core 2D Orthographic execution pipeline. Z-Axis dropped.");
-            org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
             
             // False enforces 2D Orthographic projection matrix calculation, dropping spatial depth distortions
             registry.addComponent(cameraEntity, new CameraComponent(0.0f, getWindow().getWidth(), getWindow().getHeight(), -1.0f, 100.0f, false));
@@ -289,6 +287,13 @@ public class Main extends Engine {
 
     @Override
     protected void onRender() {
+        // The depth test the render mode needs, set every frame rather than once at startup:
+        // the interface's pass, drawn after the scene, leaves depth testing on, which in 2D
+        // would make overlapping quads at the same Z keep the first one drawn instead of the
+        // last (KNOWN_ISSUES #10).
+        if (RenderMode.active() == RenderMode.MODE_3D) org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        else                                           org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+
         // Acquire the physics sync lock for the duration of this render pass.
         synchronized (physicsThread.getSyncLock()) {
 
