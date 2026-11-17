@@ -74,6 +74,8 @@ public class PhysicsSystem {
      * still O(cells_spanned), not O(N). Increase cellSize if most colliders are larger.
      */
     private final SpatialHashGrid grid = new SpatialHashGrid(2.0f);
+    /** Scratch for each collider's broad-phase half-extents. */
+    private final Vector3f bounds = new Vector3f();
 
     // -------------------------------------------------------------------------
     // Diagnostics
@@ -172,11 +174,12 @@ public class PhysicsSystem {
             float cy = t.position.y + c.offset.y;
             float cz = t.position.z + c.offset.z;
 
-            // Insert the full AABB (centre ± half-extents) into the hash grid.
-            // If scale affects collider size, multiply c.size by t.scale here.
+            // Insert the world-space box that encloses the shape: the radius on every
+            // axis for a sphere, the rotated corners' reach for an OBB.
+            NarrowPhase.boundsHalfExtents(t, c, bounds);
             grid.insert(entity,
-                cx - c.size.x, cy - c.size.y, cz - c.size.z,
-                cx + c.size.x, cy + c.size.y, cz + c.size.z);
+                cx - bounds.x, cy - bounds.y, cz - bounds.z,
+                cx + bounds.x, cy + bounds.y, cz + bounds.z);
         }
 
         int[]  pairs      = grid.buildPairs();

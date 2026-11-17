@@ -12,9 +12,9 @@ not been reproduced in the running editor.
 |---|---|---|---|---|
 | 1 | High | Editor / serialization | Leaving Play mode strips every sprite from the scene | **Fixed** |
 | 2 | High (latent) | Physics | A large collider can freeze the physics thread and the editor | **Fixed** |
-| 3 | Medium | Physics | OBB colliders read rotation as radians; everything else uses degrees | Open |
-| 4 | Medium | Physics | The broad phase can miss spheres and rotated OBBs | Open |
-| 5 | Low | Physics | Two bodies at exactly the same position never separate | Open |
+| 3 | Medium | Physics | OBB colliders read rotation as radians; everything else uses degrees | **Fixed** |
+| 4 | Medium | Physics | The broad phase can miss spheres and rotated OBBs | **Fixed** |
+| 5 | Low | Physics | Two bodies at exactly the same position never separate | **Fixed** |
 | 6 | Low (latent) | ECS | Destroying an entity twice makes two new entities share an ID | Open |
 | 7 | Low | Audio | Audio properties apply once; `isPlaying` never resets | Open |
 | 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` | Open |
@@ -102,6 +102,10 @@ convert it with `Math.toRadians`. `buildOBBAxes` passes the same values straight
 
 **Fix direction:** convert with `Math.toRadians` in `buildOBBAxes`.
 
+**Fixed:** `buildOBBAxes` converts each angle with `Math.toRadians`, in the XYZ order the
+renderers use. `NarrowPhaseTest` (core) turns a plank 90° and checks it collides along the
+axis it is drawn on, and no longer along the old one.
+
 ## 4. The broad phase can miss spheres and rotated OBBs
 
 **Where:** the grid insertion in `PhysicsSystem.update`
@@ -118,6 +122,11 @@ that touch may never share a cell and are never passed to the narrow phase.
 **Fix direction:** insert a sphere as `centre ± radius` on all axes, and a rotated OBB with
 its world-space bounding box.
 
+**Fixed:** `NarrowPhase.boundsHalfExtents` gives the grid the box that encloses the shape:
+`size` for an AABB, the radius on every axis for a sphere, and for an OBB the reach of the
+rotated box along each world axis (`Σ |R[axis][k]| · size[k]`). It lives beside the OBB tests
+so both read the rotation the same way. Covered by `NarrowPhaseTest`.
+
 ## 5. Two bodies at exactly the same position never separate
 
 **Where:** `NarrowPhase.testAABB_AABB` and the "sphere centre inside the box" branch of
@@ -133,6 +142,10 @@ handles this case by picking +Y.
 
 **Fix direction:** pick a fixed fallback axis when the distance is zero, as the
 sphere-sphere test does.
+
+**Fixed:** the box-box test and the "sphere inside the box" branch take a zero distance as
+positive, so coinciding centres separate along + of the chosen axis. Covered by
+`NarrowPhaseTest`, for both orders of the box-sphere pair.
 
 ## 6. Destroying an entity twice makes two new entities share an ID
 
