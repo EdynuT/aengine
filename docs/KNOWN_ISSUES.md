@@ -24,11 +24,11 @@ not been reproduced in the running editor.
 | 12 | Low | Graphics | A texture still loading shows whatever was on its slot | Open |
 | 13 | Low (latent) | Graphics | `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO | Open |
 | 14 | Low | Graphics | `OpenGLTexture` can leak decoded pixels | Open |
-| 15 | Low | Graphics | The CPU name is read with `wmic`, missing on recent Windows | Open |
+| 15 | Low | Graphics | The CPU name is read with `wmic`, missing on recent Windows | **Fixed** |
 | 16 | Low | Graphics | Per-frame allocations on paths documented as allocation-free | Open |
-| 17 | Medium | Assets | Texture hot reload misses files whose names have capitals | Open |
-| 18 | Low | Tooling | `ProjectWizard` writes the project name into JSON unescaped | Open |
-| 19 | Low (latent) | UI | A clip pushed past 32 levels unbalances the clip stack | Open |
+| 17 | Medium | Assets | Texture hot reload misses files whose names have capitals | **Fixed** |
+| 18 | Low | Tooling | `ProjectWizard` writes the project name into JSON unescaped | **Fixed** |
+| 19 | Low (latent) | UI | A clip pushed past 32 levels unbalances the clip stack | **Fixed** |
 | 20 | Low | UI | On Windows, AltGr shortcuts can fire Ctrl shortcuts in text fields | **Fixed** |
 
 ---
@@ -313,6 +313,11 @@ else depends on the value.
 **Fix direction:** read the `ProcessorNameString` registry value, or query through
 PowerShell's `Get-CimInstance Win32_Processor`.
 
+**Fixed:** on Windows the name is read with `reg query` from the registry value
+`ProcessorNameString` (`reg.exe` ships with every Windows), falling back to the
+`PROCESSOR_IDENTIFIER` variable. The line parsing is covered by `HardwareCapabilitiesTest`
+(core); the query itself was not run here, as this machine is Linux.
+
 ## 16. Per-frame allocations on paths documented as allocation-free
 
 **Where:** `core/src/main/java/com/aengine/graphics/Renderer2D.java` and `Renderer3D.java`.
@@ -345,6 +350,10 @@ the cache lookup still does not.
 **Fix direction:** lowercase only for the extension check and build the virtual path from
 the original name.
 
+**Fixed:** the watcher lowercases only for the extension test and builds the virtual path
+from the name as it is (`AssetWatcher.bakedTexturePath`). Covered by `AssetWatcherTest`
+(core).
+
 ## 18. `ProjectWizard` writes the project name into JSON unescaped
 
 **Where:** `ProjectWizard.generateProjectManifest` in
@@ -357,6 +366,9 @@ inserted as is.
 editor currently creates only a fixed name, so this does not trigger today.
 
 **Fix direction:** write the manifest with Gson, which the engine already uses.
+
+**Fixed:** the manifest is built as a Gson `JsonObject` and written in UTF-8. Covered by
+`ProjectWizardTest` (core), with a name holding quotes, a backslash and an accent.
 
 ## 19. A clip pushed past 32 levels unbalances the clip stack
 
@@ -371,6 +383,9 @@ pop uses the clip of one level further out, so it can draw outside the panel it 
 Nothing nests that deep today.
 
 **Fix direction:** count ignored pushes and let the matching pops consume them first.
+
+**Fixed:** `AegisDrawList` counts the ignored pushes (reset by `begin`) and their pops
+consume them first. Covered by `AegisDrawListTest` (ui).
 
 ## 20. On Windows, AltGr shortcuts can fire Ctrl shortcuts in text fields
 

@@ -1,8 +1,12 @@
 package com.aengine.utils;
 
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 /**
  * Creates a new, empty game project on disk: the standard folder layout and a
@@ -87,19 +91,27 @@ public class ProjectWizard {
     private static void generateProjectManifest(File projectRoot, String projectName) {
         File configFile = new File(projectRoot, "config/project.json");
         
-        // Dynamic primitive JSON string template assembly
-        String jsonContent = "{\n" +
-                "  \"projectName\": \"" + projectName + "\",\n" +
-                "  \"engineVersion\": \"1.0.0-alpha\",\n" +
-                "  \"targetAPI\": \"OPENGL\"\n" +
-                "}\n";
-
-        try (FileWriter writer = new FileWriter(configFile)) {
-            writer.write(jsonContent);
+        try {
+            Files.writeString(configFile.toPath(), manifestJson(projectName), StandardCharsets.UTF_8);
             Logger.info(Logger.System.CORE, "Project manifest descriptor serialized to disk.");
         } catch (IOException e) {
             Logger.error(Logger.System.CORE, "Critical I/O fault writing manifest: %s", e.getMessage());
             throw new RuntimeException("Failed to write project metadata file.", e);
         }
+    }
+
+    /**
+     * The text of {@code config/project.json}, written by Gson so any project name, quotes
+     * and backslashes included, comes out as valid JSON.
+     *
+     * @param projectName the name as the user typed it
+     * @return the manifest, pretty-printed, ending in a newline
+     */
+    static String manifestJson(String projectName) {
+        JsonObject manifest = new JsonObject();
+        manifest.addProperty("projectName", projectName);
+        manifest.addProperty("engineVersion", "1.0.0-alpha");
+        manifest.addProperty("targetAPI", "OPENGL");
+        return new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(manifest) + "\n";
     }
 }

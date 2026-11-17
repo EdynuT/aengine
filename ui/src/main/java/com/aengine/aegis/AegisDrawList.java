@@ -110,6 +110,7 @@ public final class AegisDrawList {
 
     private final float[] clipStack;      // x, y, w, h per level
     private int clipDepth = 0;
+    private int ignoredClipPushes = 0;    // pushes past MAX_CLIP_DEPTH, owed to their pops
 
     /** One glyph's quad, written by {@link AegisFont#placeGlyph} and reused for every glyph. */
     private final float[] glyphQuad = new float[8];
@@ -163,6 +164,7 @@ public final class AegisDrawList {
         opacity          = 1.0f;
 
         clipDepth = 0;
+        ignoredClipPushes = 0;
         setClip(0, 0.0f, 0.0f, viewportWidth, viewportHeight);
         clipDepth = 1;
     }
@@ -184,7 +186,9 @@ public final class AegisDrawList {
      * effect — a child panel can never draw outside its parent, however it is positioned.
      *
      * <p>Coordinates are in pixels, origin top-left. Every push needs a matching
-     * {@link #popClipRect}. Clips nest up to 32 deep; a push beyond that is ignored.</p>
+     * {@link #popClipRect}. Clips nest up to 32 deep; a push beyond that is ignored (the
+     * clip in effect stays) and its matching pop is ignored too, so the levels below stay
+     * paired.</p>
      *
      * @param x      left edge
      * @param y      top edge
@@ -192,7 +196,10 @@ public final class AegisDrawList {
      * @param height height
      */
     public void pushClipRect(float x, float y, float width, float height) {
-        if (clipDepth >= MAX_CLIP_DEPTH) return;
+        if (clipDepth >= MAX_CLIP_DEPTH) {
+            ignoredClipPushes++;
+            return;
+        }
 
         int parent = (clipDepth - 1) * 4;
 
@@ -213,6 +220,10 @@ public final class AegisDrawList {
 
     /** Restores the clip in effect before the matching {@link #pushClipRect}. */
     public void popClipRect() {
+        if (ignoredClipPushes > 0) {
+            ignoredClipPushes--;
+            return;
+        }
         if (clipDepth <= 1) return;
 
         flushCommand();
