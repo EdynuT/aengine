@@ -1640,6 +1640,19 @@ rights. The user's data directory is always writable by its owner and survives r
 or updating the engine; the installation keeps only what the engine itself guarantees. The
 future theme list shows both kinds together.
 
+**The designer's files are the factory — decided, for when they arrive.** Once the designer
+delivers the default theme and layout, they are kept in one place in the repository, under
+`editor/src/dist`, and the build makes both copies from it: the installation's file, and the
+same text compiled into the editor as the factory's. So the two are always identical, and
+`FactoryLayout`'s hand-written text, provisional until then, goes. A test reads the compiled
+copy and fails the build on any warning, so a broken file never becomes the factory.
+
+When the installation's file is **missing**, the editor uses the factory's copy and writes it
+back, so the next start finds it again. It never writes over a file that exists, even a broken
+one — the designer may be editing it — and that one is set aside with a warning, as now. An
+installation that cannot be written to, under `/opt` or `Program Files`, is left alone with a
+warning; the factory's copy serves just the same. The user's own files are never touched.
+
 ### The files are data, never behaviour
 
 **Decision: nothing a user can edit reaches what the engine does.** `theme.json` and
