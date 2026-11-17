@@ -11,7 +11,7 @@ not been reproduced in the running editor.
 | # | Severity | Area | Summary | Status |
 |---|---|---|---|---|
 | 1 | High | Editor / serialization | Leaving Play mode strips every sprite from the scene | **Fixed** |
-| 2 | High (latent) | Physics | A large collider can freeze the physics thread and the editor | Open |
+| 2 | High (latent) | Physics | A large collider can freeze the physics thread and the editor | **Fixed** |
 | 3 | Medium | Physics | OBB colliders read rotation as radians; everything else uses degrees | Open |
 | 4 | Medium | Physics | The broad phase can miss spheres and rotated OBBs | Open |
 | 5 | Low | Physics | Two bodies at exactly the same position never separate | Open |
@@ -77,6 +77,16 @@ logged at 75 % occupancy, before the hang.
 **Fix direction:** bound the probe loop and handle a full table (grow it, or fall back to
 testing the oversized entity against everything), and consider keeping very large static
 colliders out of the grid.
+
+**Fixed:** the grid is hierarchical. Level 0 keeps cells of 2 units; each level above has
+cells four times wider, and a box goes to the lowest level whose cell fits its largest side,
+so it covers at most eight cells whatever its size (the 200×200 floor takes eight slots on
+the level of 512-unit cells). Boxes on the same level pair inside shared cells; a box also
+looks up the coarser levels in use, so a far-away wall is not a candidate for everything.
+The cell table doubles past 70 % occupancy, so the probe always ends on a free slot; it
+allocates only when a scene first reaches a new size. Coordinates are clamped to ±10⁹ units,
+so infinite or NaN bounds cannot loop either. Covered by `SpatialHashGridTest` (core), run
+only against the fixed grid.
 
 ## 3. OBB colliders read rotation as radians; everything else uses degrees
 
