@@ -70,6 +70,7 @@ transitional editor layer, with Aegis drawing test scaffolding on top of it.
 | Step 4c | Docks the user resizes by their edge or F8; panels closed and reopened from the View menu; the arrangement written to the user's `layout.json`; Restore default layout |
 | Step 4d | The status bar — scene state, frame rate, entities, project — and `setLabel` copying any text into the label, allocating nothing |
 | Step 4e | `remove` and `removeChildren`: a widget and all it owns taken out, focus moved on, the nodes reused by the next ones made |
+| Step 4f | Context menus: a secondary click that is not a drag, Shift+F10 or the Menu key; the docks' tabs offer Close |
 
 ### The plan ahead
 
@@ -2193,12 +2194,45 @@ handle inside is no longer valid once removed, and may be handed out again. Part
 widget — a tab bar, a divider, a combo's list, a dialog's title bar — go only with their
 widget, a tab's content with its pane, and a panel is the screens', closed and never removed.
 
+**4f ✅ — context menus.** `ae.contextMenu("menuDock")` makes a menu on no bar, filled as any
+menu and translated by its name (`menuDock.menuItemClose`); `ae.setContextMenu(node, menu)` gives
+it to any node, and what is inside one with none of its own opens it too — Swing's
+`setComponentPopupMenu` with `setInheritsPopupMenu`. It opens on a secondary click: a press and
+release of the secondary button, handed in each frame with `ae.secondaryButton(down)`, that
+moves less than four pixels and has no key pressed while held — so looking around the scene
+with the right button, or flying with WASD, opens nothing, as in Unreal — on the release, where
+the pointer is. What the click lands on is selected first, a tab or a tree's item, and focused.
+From the keyboard Shift+F10 or the Menu key opens the focused widget's, pointing at its first
+item. `ae.wasContextMenuOpened(menu)` is the frame to enable its items for
+`ae.contextTarget()`, what it was opened for. Its keys are a menu's, Left and Right only going in
+and out of submenus; and a disabled item is now passed by the arrows and never chosen, in any
+menu. The editor gives the docks' tab bars one: *Close*, for a dock the View menu can open again.
+
 **Next**, in an order to be agreed:
 
-- **What any panel will need:** a context menu; undo and redo.
+- **What any panel will need:** undo and redo.
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.
+
+**Later, a phase of its own — plugins.** Behaviour other developers add, without the files
+becoming more than data: a jar registers actions and panels through a public engine API, and a
+layout names an action. Not decided yet; what was weighed:
+
+- The `SecurityManager` is gone for good since Java 24, so code loaded in the editor's process
+  can do whatever the editor can. A barrier has to be built.
+- Leaning towards checking a jar as it is loaded: every class a `.class` file uses is named in
+  it, obfuscated or not, so the ClassFile API can refuse a jar that reaches past an allowlist
+  — no `File`, `Files`, `ProcessBuilder`, reflection or class loaders — backed by a class
+  loader that refuses the same. Files only through an engine API that keeps every path inside
+  the project, checked as it runs, since a path built at run time cannot be read from the jar.
+  Not a hard boundary: a JVM flaw or a leaky allowed class gets past it, and nothing stops a
+  plugin looping forever.
+- With the same plugin API, a plugin can later move to a process of its own confined by the
+  system — Landlock and seccomp on Linux, AppContainer and job objects on Windows — if plugins
+  from unknown authors ever need a hard boundary.
+- Rejected for now: plugins trusted outright, as Unity, Godot and Unreal do; WebAssembly, the
+  safest, since plugins would no longer be written in Java.
 
 **Phase 5 — Remove Dear ImGui.** Drop the three `io.github.spair` dependencies and the JNI
 boundary with them.

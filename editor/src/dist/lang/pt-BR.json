@@ -13,6 +13,7 @@
   "menuView.menuItemConsole": "Console",
   "menuView.menuItemOutput": "Saída",
   "menuView.menuItemRestoreLayout": "Restaurar layout padrão",
+  "menuDock.menuItemClose": "Fechar",
 
   "toolbar.toggleSelect.tooltip": "Selecionar",
   "toolbar.toggleMove.tooltip": "Mover",

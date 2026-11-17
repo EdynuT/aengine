@@ -36,6 +36,7 @@ final class TestShell {
     void frame() {
         layout.solve(root, 0.0f, 0.0f, 800.0f, 600.0f);
         tree.update(root, pointerX, pointerY, buttonDown);
+        ae.secondaryButton(secondaryDown);
         ae.update(root);
         layout.solve(root, 0.0f, 0.0f, 800.0f, 600.0f);
     }
@@ -56,6 +57,22 @@ final class TestShell {
 
     void press()   { buttonDown = true; }
     void release() { buttonDown = false; }
+
+    private boolean secondaryDown;
+
+    void pressSecondary()   { secondaryDown = true; }
+    void releaseSecondary() { secondaryDown = false; }
+
+    /** A secondary click on a node, where a context menu opens: move there, press, release, each its own frame. */
+    void secondaryClick(int node) {
+        frame();
+        pointerOn(node);
+        frame();
+        pressSecondary();
+        frame();
+        releaseSecondary();
+        frame();
+    }
 
     /** A whole click on a node: move there, press, release, each its own frame. */
     void click(int node) {

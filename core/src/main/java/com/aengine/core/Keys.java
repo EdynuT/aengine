@@ -194,6 +194,8 @@ public final class Keys {
     public static final int F11 = GLFW_KEY_F11;
     /** Function key F12. */
     public static final int F12 = GLFW_KEY_F12;
+    /** The Menu key, beside the right Ctrl: opens the focused widget's context menu. */
+    public static final int MENU = GLFW_KEY_MENU;
 
     // ── Modifier bits (used with Input.eventMods — test with &, e.g. (mods & MOD_SHIFT) != 0)
     /** Bit set in {@link Input#eventMods(int)} while either Shift is held. */

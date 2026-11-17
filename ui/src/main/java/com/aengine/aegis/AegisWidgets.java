@@ -244,6 +244,18 @@ public final class AegisWidgets {
     private boolean menuEnter;      // Enter, Space
     private boolean pendingF10;
 
+    // Context menus — step 4f: the menu a secondary click on each node, or on what is in it,
+    // opens; the secondary button, where it went down and whether it has since moved past the
+    // slop or a key was pressed while it was held — a drag or a camera flight, not a click;
+    // Shift+F10 or the Menu key; and what the last menu was opened for.
+    private static final float CONTEXT_SLOP = 4.0f;
+    private final int[] contextMenuOf;
+    private boolean secondaryDown, secondaryWasDown, secondaryMoved;
+    private float   secondaryX, secondaryY;
+    private boolean pendingContextKey;
+    private int     contextTarget = AegisLayout.NONE;
+    private int     contextOpened = AegisLayout.NONE;
+
     /** The icon each button, toggle or label shows before its text — an index of the icon set — or AegisIcons.NONE. */
     private final int[] icon;
 
@@ -505,6 +517,8 @@ public final class AegisWidgets {
         this.itemChecks      = new boolean[capacity];
         this.itemShortcut    = new String[capacity];
         this.menuPointed     = new int[capacity];
+        this.contextMenuOf   = new int[capacity];
+        Arrays.fill(this.contextMenuOf, AegisLayout.NONE);
         this.comboChosen     = new int[capacity];
         this.comboList       = new int[capacity];
         this.listOwner       = new int[capacity];
@@ -1492,7 +1506,7 @@ public final class AegisWidgets {
     }
 
     /** The tab under an x in a tab bar, or -1: tabs follow each other from the bar's left edge. */
-    private int tabAt(int bar, float px) {
+    int tabAt(int bar, float px) {
         AegisStyle style = styleOf(bar);
         TabSet tabs = tabsOf[bar];
         float x = layout.x(bar);
@@ -2145,8 +2159,12 @@ public final class AegisWidgets {
      */
     private void dismissPopups() {
         dismissedOwner = AegisLayout.NONE;
-        if (!tree.pointerWentDown() || overlayCount == 0) return;
-        float px = tree.pointerX(), py = tree.pointerY();
+        if (tree.pointerWentDown()) dismissPopupsAt(tree.pointerX(), tree.pointerY());
+    }
+
+    /** Closes the popups above the topmost overlay holding a point, down to a modal one. */
+    private void dismissPopupsAt(float px, float py) {
+        if (overlayCount == 0) return;
         int keep = overlayCount;
         while (keep > 0) {
             int i = keep - 1;
@@ -2628,7 +2646,7 @@ public final class AegisWidgets {
             int at = from == AegisLayout.NONE ? (step > 0 ? k - 1 : count - k) : Math.floorMod(index + k * step, count);
             int c = layout.firstChild(menu);
             for (int j = 0; j < at; j++) c = layout.nextSibling(c);
-            if (kind[c] == MENU_ITEM) return c;
+            if (kind[c] == MENU_ITEM && !disabled[c]) return c;
         }
         return AegisLayout.NONE;
     }
@@ -2657,6 +2675,7 @@ public final class AegisWidgets {
 
     /** Chooses an item: a submenu opens; anything else is activated, ticked if it ticks, and the menus close. */
     private void chooseMenuItem(int item, boolean byKeyboard) {
+        if (disabled[item]) return;
         if (itemSubMenu[item] != AegisLayout.NONE) {
             openSubMenu(item, byKeyboard);
             return;
@@ -2670,6 +2689,7 @@ public final class AegisWidgets {
     /** The menu bar a menu belongs to, through the titles and items that opened it. */
     private int barOf(int menu) {
         int owner = menuOwner[menu];
+        if (owner == AegisLayout.NONE) return AegisLayout.NONE;   // a context menu: on no bar
         return kind[owner] == MENU_TITLE ? layout.parent(owner) : barOf(layout.parent(owner));
     }
 
@@ -2739,15 +2759,20 @@ public final class AegisWidgets {
                 for (int k = 0; k < Math.abs(menuLines); k++) item = nextMenuItem(menu, item, Integer.signum(menuLines));
                 menuPointed[menu] = item;
             }
+            // Right opens a submenu, or the next title's menu; Left closes a submenu, or opens the
+            // title's before. A context menu has no titles beside it: there they do nothing.
             if (menuSteps > 0) {
+                int first = menuOwner[firstOpenMenu()];
                 if (pointed != AegisLayout.NONE && itemSubMenu[pointed] != AegisLayout.NONE) {
                     openSubMenu(pointed, true);
-                } else {
-                    openTopMenu(titleBeside(menuOwner[firstOpenMenu()], +1), true);
+                } else if (first != AegisLayout.NONE) {
+                    openTopMenu(titleBeside(first, +1), true);
                 }
             } else if (menuSteps < 0) {
-                if (kind[menuOwner[menu]] == MENU_ITEM) closeOverlay(menu);
-                else openTopMenu(titleBeside(menuOwner[menu], -1), true);
+                int owner = menuOwner[menu];
+                if (owner == AegisLayout.NONE)        { /* the context menu itself */ }
+                else if (kind[owner] == MENU_ITEM)    closeOverlay(menu);
+                else                                  openTopMenu(titleBeside(owner, -1), true);
             }
             if (menuEnter && pointed != AegisLayout.NONE) chooseMenuItem(pointed, true);
         }
@@ -2755,6 +2780,164 @@ public final class AegisWidgets {
         menuSteps  = 0;
         menuEnter  = false;
         pendingF10 = false;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Context menus — step 4f
+    // -----------------------------------------------------------------------------------
+
+    /**
+     * A context menu: a menu on no bar, opened where the user asks for it — a secondary click,
+     * or Shift+F10 or the Menu key on the focused widget — as Swing's {@code JPopupMenu}. Fill
+     * it as any menu, with {@link #menuItem}, {@link #menuCheckItem}, {@link #subMenu} and
+     * {@link #separator}, and give it to the widgets it belongs to with {@link #setContextMenu}.
+     * Its keys are a menu's: Up and Down, Right into a submenu and Left out, Enter, Esc.
+     *
+     * <p>Its items are reached by its name — {@code menuDock.menuItemClose}, for a theme and a
+     * locale alike.</p>
+     *
+     * @param name its name, with the {@code menu} prefix — {@code "menuDock"}
+     * @return the menu, a column hanging nowhere until it is opened
+     * @throws IllegalArgumentException for a name without the prefix
+     */
+    public int contextMenu(String name) {
+        checkWidgetName(name, "menu", "a context menu");
+        AegisLayout.checkNodeName(name);
+        int menu = newMenu(name, AegisLayout.NONE);
+        themePath[menu] = List.of(name);
+        return menu;
+    }
+
+    /**
+     * Gives a node the context menu a secondary click on it opens — on it or on anything in it
+     * that has none of its own, as Swing's {@code setComponentPopupMenu} with
+     * {@code setInheritsPopupMenu}. Any node will do: a widget, a row, a panel. The click is a
+     * press and release of the secondary button that neither moves more than a few pixels nor
+     * has a key pressed while it is held, so a drag with it — looking around a scene — opens
+     * nothing; it opens on the release, where the pointer is. What the click is on is selected
+     * first, as a primary press would select it — a tab, a tree's item — and given focus.
+     *
+     * @param node the node
+     * @param menu a menu {@link #contextMenu} made, or {@link AegisLayout#NONE} to take it off
+     * @throws IllegalArgumentException for a menu that is not a context menu
+     */
+    public void setContextMenu(int node, int menu) {
+        if (menu != AegisLayout.NONE && (kind[menu] != MENU || menuOwner[menu] != AegisLayout.NONE)) {
+            throw new IllegalArgumentException("Node " + menu + " is not a menu contextMenu() made.");
+        }
+        contextMenuOf[node] = menu;
+    }
+
+    /**
+     * The context menu a node opens: its own, or the nearest one above it.
+     *
+     * @param node the node
+     * @return the menu, or {@link AegisLayout#NONE}
+     */
+    public int contextMenuFor(int node) {
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (contextMenuOf[up] != AegisLayout.NONE) return contextMenuOf[up];
+        }
+        return AegisLayout.NONE;
+    }
+
+    /**
+     * Opens a context menu from code, at a point — for a widget whose clicks code reads itself.
+     * Nothing is selected or focused, and {@link #contextTarget} is the one given.
+     *
+     * @param menu   a menu {@link #contextMenu} made
+     * @param x      where its corner goes; it is kept inside the window
+     * @param y      the same, down
+     * @param target what it is opened for, or {@link AegisLayout#NONE}
+     */
+    public void openContextMenu(int menu, float x, float y, int target) {
+        closeAllMenus();
+        openOverlay(menu, x, y, false, AegisLayout.NONE);
+        menuPointed[menu] = AegisLayout.NONE;
+        contextTarget = target;
+        contextOpened = menu;
+    }
+
+    /**
+     * The secondary button — the right one, for most — as it is this frame. Hand it in once a
+     * frame before {@link #update}, as the primary one is handed to {@link AegisTree#update}.
+     *
+     * @param down whether it is held
+     */
+    public void secondaryButton(boolean down) { secondaryDown = down; }
+
+    /**
+     * Whether a context menu opened this frame: the moment to enable or tick its items for
+     * what it was opened for, before it is drawn.
+     *
+     * @param menu the menu
+     * @return {@code true} on the frame it opened
+     */
+    public boolean wasContextMenuOpened(int menu) { return contextOpened == menu; }
+
+    /**
+     * What the last context menu was opened for: the deepest node under the pointer when it
+     * was clicked, or the widget focused when a key opened it — a tab bar, a tree, a row.
+     *
+     * @return the node, or {@link AegisLayout#NONE}
+     */
+    public int contextTarget() { return contextTarget; }
+
+    /** The secondary button and the context keys, for this frame: what opens a context menu. */
+    private void updateContextMenus() {
+        contextOpened = AegisLayout.NONE;
+        float px = tree.pointerX(), py = tree.pointerY();
+        boolean wentDown = secondaryDown && !secondaryWasDown;
+        boolean wentUp   = !secondaryDown && secondaryWasDown;
+        secondaryWasDown = secondaryDown;
+
+        if (wentDown) {
+            secondaryX = px;
+            secondaryY = py;
+            secondaryMoved = false;
+            dismissPopupsAt(px, py);   // a press outside the popups closes them, as a primary one does
+        } else if (secondaryDown && (Math.abs(px - secondaryX) > CONTEXT_SLOP || Math.abs(py - secondaryY) > CONTEXT_SLOP)) {
+            secondaryMoved = true;
+        }
+        if (wentUp && !secondaryMoved && lastRoot != AegisLayout.NONE) {
+            int under = tree.nodeUnder(lastRoot, px, py);
+            if (under != AegisLayout.NONE && !isInOpenMenu(under)) contextClick(under, px, py);
+        }
+
+        if (pendingContextKey) {
+            pendingContextKey = false;
+            int focused = tree.focused();
+            int menu = focused == AegisLayout.NONE ? AegisLayout.NONE : contextMenuFor(focused);
+            if (menu != AegisLayout.NONE) {
+                openContextMenu(menu, layout.x(focused), layout.y(focused) + layout.height(focused), focused);
+                menuPointed[menu] = nextMenuItem(menu, AegisLayout.NONE, 1);
+            }
+        }
+    }
+
+    /** A secondary click on a node: what it is on selected and focused, then the menu it belongs to opened. */
+    private void contextClick(int node, float px, float py) {
+        int menu = contextMenuFor(node);
+        if (menu == AegisLayout.NONE) return;
+        if (kind[node] == TAB_BAR) {
+            int tab = tabAt(node, px);
+            if (tab >= 0) userSelectsTab(node, tab);
+        } else if (kind[node] == TREE_VIEW) {
+            int item = itemOnRow(itemsOf[node], (int) Math.floor((py - layout.y(node)) / treeRowHeight(styleOf(node))));
+            if (item != NO_ITEM) userSelectsItem(node, item);
+        }
+        for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) {
+            if (tree.isFocusable(up)) { tree.focus(up); break; }
+        }
+        openContextMenu(menu, px, py, node);
+    }
+
+    /** Whether a node is in a menu that is open: a secondary click there is the menu's, and opens nothing. */
+    private boolean isInOpenMenu(int node) {
+        for (int i = 0; i < overlayCount; i++) {
+            if (kind[overlayNode[i]] == MENU && isUnder(node, overlayNode[i])) return true;
+        }
+        return false;
     }
 
     /** The bottom open menu: the one a bar's title opened. */
@@ -3145,6 +3328,8 @@ public final class AegisWidgets {
      * @param repeat whether this is a repeat of a held key rather than a fresh press
      */
     public void key(int key, int mods, boolean repeat) {
+        // A key while the secondary button is held — flying the camera — makes its release no click.
+        if (secondaryDown) secondaryMoved = true;
         // F8 hands the keyboard to the docks' handles, one after another, as Swing's split
         // pane does; while one has it, the arrows move it and Esc, Enter or Tab give it back.
         if (key == Keys.F8) {
@@ -3176,6 +3361,11 @@ public final class AegisWidgets {
             else if (!repeat && (key == Keys.ENTER || key == Keys.SPACE)) menuEnter = true;
             else if (!repeat && key == Keys.ESCAPE)              pendingEscape = true;
             else if (!repeat && key == Keys.F10)                 pendingF10 = true;
+            return;
+        }
+        // Shift+F10 and the Menu key open the focused widget's context menu, as on Windows and GTK.
+        if (!repeat && (key == Keys.MENU || (key == Keys.F10 && mods == Keys.MOD_SHIFT))) {
+            pendingContextKey = true;
             return;
         }
         if (!repeat && key == Keys.F10 && mods == 0 && tree.topModal() == AegisLayout.NONE) {
@@ -3787,6 +3977,7 @@ public final class AegisWidgets {
         // the field's edge keeps selecting, and the text scrolls to follow the caret. A text box
         // picks the line under the pointer first, and dragging selects across lines.
         updateCombo(pressed, focused);
+        updateContextMenus();
         updateMenus(pressed);
         updateDialog(pressed);
 
@@ -5151,7 +5342,8 @@ public final class AegisWidgets {
      */
     public void remove(int node) {
         if (!layout.isInUse(node)) throw new IllegalArgumentException("Node " + node + " is not in use.");
-        if (kind[node] == MENU) node = menuOwner[node];   // the handle menu() gave: with its title, or its item
+        // The handle menu() or subMenu() gave goes with its title or its item; a context menu, alone.
+        if (kind[node] == MENU && menuOwner[node] != AegisLayout.NONE) node = menuOwner[node];
         switch (kind[node]) {
             case TAB_BAR, DIVIDER, COMBO_LIST, DIALOG_TITLE -> throw new IllegalArgumentException(
                 "Node " + node + " is part of a widget, and goes with it: remove the widget.");
@@ -5271,7 +5463,10 @@ public final class AegisWidgets {
         for (int n = 0; n < layout.nodeCount(); n++) {
             if (kind[n] == DIALOG && isGone(gone, defaultButton[n])) defaultButton[n] = AegisLayout.NONE;
             if (kind[n] == MENU && isGone(gone, menuPointed[n])) menuPointed[n] = AegisLayout.NONE;
+            if (isGone(gone, contextMenuOf[n])) contextMenuOf[n] = AegisLayout.NONE;
         }
+        if (isGone(gone, contextTarget))  contextTarget  = AegisLayout.NONE;
+        if (isGone(gone, contextOpened))  contextOpened  = AegisLayout.NONE;
         if (isGone(gone, firstMenuBar))   firstMenuBar   = AegisLayout.NONE;
         if (isGone(gone, lastMenuHover))  lastMenuHover  = AegisLayout.NONE;
         if (isGone(gone, cancelled))      cancelled      = AegisLayout.NONE;
@@ -5325,6 +5520,7 @@ public final class AegisWidgets {
         itemChecks[n] = false;
         itemShortcut[n] = null;
         menuPointed[n] = 0;
+        contextMenuOf[n] = AegisLayout.NONE;
         comboChosen[n] = 0;
         comboList[n] = 0;
         listOwner[n] = 0;

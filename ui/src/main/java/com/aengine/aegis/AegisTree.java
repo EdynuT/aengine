@@ -173,6 +173,9 @@ public final class AegisTree {
         layerCount = 0;
     }
 
+    /** Whether a node takes focus now: marked focusable, and neither disabled nor hidden. */
+    boolean isFocusable(int node) { return focusable[node] && !isOutOfReach(node); }
+
     /**
      * Forgets one node — step 4e, as it is given back: its settings, and the pointer or the
      * focus if it held them. Whoever moves focus elsewhere does it first.

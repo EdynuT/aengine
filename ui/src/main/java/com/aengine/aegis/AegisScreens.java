@@ -375,6 +375,32 @@ public final class AegisScreens {
     public boolean isPanelClosable(String name) { return tabOf.containsKey(name); }
 
     /**
+     * The tabbed pane a layout put a panel in — step 4f, to give its bar a context menu.
+     *
+     * @param name a registered panel's name
+     * @return the pane, or {@link AegisLayout#NONE} for a panel not shown as a tab
+     */
+    public int paneOf(String name) {
+        int[] at = tabOf.get(name);
+        return at == null ? AegisLayout.NONE : at[0];
+    }
+
+    /**
+     * The panel whose tab a layout's tabbed pane is showing.
+     *
+     * @param pane a pane {@link #paneOf} gave, or its bar
+     * @return the panel's name, or {@code null} for a pane no layout built
+     */
+    public String panelShownIn(int pane) {
+        for (Map.Entry<String, int[]> e : tabOf.entrySet()) {
+            int[] at = e.getValue();
+            boolean thisPane = at[0] == pane || layout.firstChild(at[0]) == pane;   // the pane, or its bar
+            if (thisPane && widgets.selectedTab(at[0]) == at[1]) return e.getKey();
+        }
+        return null;
+    }
+
+    /**
      * Whether a panel is open — on its screen, or closed by the user.
      *
      * @param name a registered panel's name

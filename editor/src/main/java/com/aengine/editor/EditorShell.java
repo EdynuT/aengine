@@ -51,6 +51,10 @@ public final class EditorShell {
     private static final String[] DOCKS = { "hierarchy", "assets", "inspector", "console", "output" };
     private final int[] menuItemDocks = new int[DOCKS.length];
     private final int menuItemRestoreLayout;
+
+    /** The docks' tabs' context menu (4f), and the dock it was last opened for. */
+    private final int menuDock, menuItemCloseDock;
+    private String dockMenuFor;
     private final String layoutName;
 
     /** When to write the arrangement down: a second after the user last changed it; 0 for not due. */
@@ -127,6 +131,12 @@ public final class EditorShell {
         menuItemDocks[4] = ae.menuCheckItem(menuView, "menuItemOutput",    "Output");
         ae.separator(menuView, "separatorView");
         menuItemRestoreLayout = ae.menuItem(menuView, "menuItemRestoreLayout", "Restore default layout");
+
+        // The docks' tabs (4f): a secondary click on one, or Shift+F10 on its bar, offers to
+        // close it, as the tabs of Unity's and Godot's docks do. Given to the bars once the
+        // screen is built, since the layout makes them.
+        menuDock = ae.contextMenu("menuDock");
+        menuItemCloseDock = ae.menuItem(menuDock, "menuItemClose", "Close");
 
         // Toolbar (4b): the tools on the left, Play, Pause and Stop in the middle, as Unity's
         // and Godot's. Each is an icon alone, so each has a tooltip saying what it does.
@@ -235,6 +245,20 @@ public final class EditorShell {
         String check = System.getProperty("aengine.localeCheck");
         ShellFiles.reportLocale(locale, tag, check != null ? Path.of(check) : null);
         showDocksInMenu();
+        giveDocksTheirMenu();
+    }
+
+    /** Gives the bar of every tabbed pane holding a dock the docks' context menu. */
+    private void giveDocksTheirMenu() {
+        for (String dock : DOCKS) {
+            int pane = screens.paneOf(dock);
+            if (pane != AegisLayout.NONE) ae.setContextMenu(layout.firstChild(pane), menuDock);
+        }
+    }
+
+    private static boolean isDock(String panel) {
+        for (String dock : DOCKS) if (dock.equals(panel)) return true;
+        return false;
     }
 
     /** Ticks each dock's View item while it is open; one the layout does not put in tabs cannot be closed. */
@@ -259,6 +283,7 @@ public final class EditorShell {
         ae.applyTheme(theme, root);
         ae.applyLocale(locale);
         showDocksInMenu();
+        giveDocksTheirMenu();
         Logger.info(Logger.System.UI, "Layout restored.");
     }
 
@@ -315,6 +340,7 @@ public final class EditorShell {
         boolean rightDown = Input.isMouseButtonPressed(1);
         if (rightDown && !rightWasDown && tree.hovered() == surfaceScene) tree.focus(surfaceScene);
         rightWasDown = rightDown;
+        ae.secondaryButton(rightDown && !imguiHasMouse);   // a click with it opens context menus
 
         boolean viewportHadFocus = tree.focused() == surfaceScene && !ae.isAnyOverlayOpen();
         for (int i = 0; i < Input.eventCount(); i++) {
@@ -354,6 +380,17 @@ public final class EditorShell {
             if (ae.wasActivated(menuItemDocks[i])) screens.setPanelOpen(DOCKS[i], ae.isChecked(menuItemDocks[i]));
         }
         boolean restore = ae.wasActivated(menuItemRestoreLayout);
+
+        // A dock's tab: Close is offered for a dock the View menu can open again — not for the
+        // viewport, which can share a pane with them.
+        if (ae.wasContextMenuOpened(menuDock)) {
+            dockMenuFor = screens.panelShownIn(ae.contextTarget());
+            ae.setEnabled(menuItemCloseDock, dockMenuFor != null && isDock(dockMenuFor) && screens.isPanelClosable(dockMenuFor));
+        }
+        if (ae.wasActivated(menuItemCloseDock) && dockMenuFor != null) {
+            screens.setPanelOpen(dockMenuFor, false);
+            showDocksInMenu();
+        }
 
         // The arrangement the user changed — a dock resized or closed — is written down a
         // second after the last change, so a drag is one write, not one per frame.
