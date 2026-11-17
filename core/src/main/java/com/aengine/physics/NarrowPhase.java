@@ -9,20 +9,25 @@ import com.aengine.ecs.components.TransformComponent;
 /**
  * Narrow Phase — stateless collision shape tests.
  *
- * All methods write their result into a pre-leased {@link CollisionManifold} and return
+ * <p>All methods write their result into a pre-leased {@link CollisionManifold} and return
  * {@code true} on a hit.  The manifold's {@code normal} consistently points
- * FROM entity A TOWARD entity B in world space.
+ * FROM entity A TOWARD entity B in world space.</p>
  *
- * Supported shape pairs:
- *   AABB   vs AABB   — 3-axis SAT (axis-aligned separating axes)
- *   SPHERE vs SPHERE — distance vs radius sum
- *   AABB   vs SPHERE — closest-point-on-AABB test
- *   SPHERE vs AABB   — (symmetric)
- *   OBB    vs OBB    — full 15-axis SAT (3 face normals each + 9 edge-edge cross products)
- *   OBB    vs AABB   — SAT treating AABB as zero-rotation OBB (identity axes)
- *   AABB   vs OBB    — (symmetric)
- *   OBB    vs SPHERE — closest-point-on-oriented-box to sphere
- *   SPHERE vs OBB    — (symmetric)
+ * <p>Supported shape pairs:</p>
+ * <ul>
+ *   <li>AABB vs AABB — 3-axis SAT (axis-aligned separating axes)</li>
+ *   <li>SPHERE vs SPHERE — distance vs radius sum</li>
+ *   <li>AABB vs SPHERE, and the reverse — closest-point-on-AABB test</li>
+ *   <li>OBB vs OBB — full 15-axis SAT (3 face normals each + 9 edge-edge cross products)</li>
+ *   <li>OBB vs AABB, and the reverse — SAT treating AABB as zero-rotation OBB (identity axes)</li>
+ *   <li>OBB vs SPHERE, and the reverse — closest-point-on-oriented-box to sphere</li>
+ * </ul>
+ *
+ * <p>Shapes are placed at {@code transform.position + collider.offset}. The transform's
+ * scale is ignored. Only OBB reads the transform's rotation.</p>
+ *
+ * <p>Not thread-safe: the tests share static scratch vectors, so only one thread may test
+ * at a time (in practice, the physics thread under its sync lock).</p>
  */
 public final class NarrowPhase {
 
@@ -50,10 +55,18 @@ public final class NarrowPhase {
     /**
      * Run the appropriate shape-pair test and populate {@code out} on a hit.
      *
-     * @param entityA / entityB ECS entity IDs
-     * @param tA / tB           Transform components
-     * @param cA / cB           Collider components
-     * @param out               Pre-leased manifold to write contact data into
+     * <p>On a hit, every field of {@code out} is written: both entity IDs, the normal
+     * (A toward B), the depth, and {@code isTrigger} (true if either collider is a
+     * trigger). On a miss, {@code out} may hold partial values and must be ignored.
+     * Touching exactly at the surface counts as a miss.</p>
+     *
+     * @param entityA ECS entity ID of A, copied into the manifold
+     * @param tA      Transform component of A
+     * @param cA      Collider component of A
+     * @param entityB ECS entity ID of B, copied into the manifold
+     * @param tB      Transform component of B
+     * @param cB      Collider component of B
+     * @param out     Pre-leased manifold to write contact data into
      * @return {@code true} if the shapes are intersecting
      */
     public static boolean test(
@@ -210,19 +223,22 @@ public final class NarrowPhase {
     // -------------------------------------------------------------------------
     // AABB vs Sphere
     //
-    // Normal convention here: points FROM the sphere centre TOWARD the AABB surface
-    // (i.e., from B toward A when the AABB is A).
-    // The dispatch above calls negate() so the final manifold always reads A→B.
+    // Normal convention here: points FROM the AABB surface TOWARD the sphere centre
+    // (i.e., box -> sphere, which is A->B when the AABB is A).
+    // The dispatch above calls negate() when the sphere is A, so the final manifold
+    // always reads A->B.
     // -------------------------------------------------------------------------
 
     /**
-     * Test an AABB (param order: box first, sphere second).
+     * Test an AABB against a sphere (param order: box first, sphere second).
      *
-     * Algorithm:
-     *   1. Find the closest point on the box surface to the sphere centre.
-     *   2. If the squared distance to that point is less than radius², we have a hit.
-     *   3. Special case: sphere centre is fully inside the box — push out via
-     *      the face of minimum signed distance to avoid a zero normal.
+     * <p>Algorithm:</p>
+     * <ol>
+     *   <li>Find the closest point on the box surface to the sphere centre.</li>
+     *   <li>If the squared distance to that point is less than radius², we have a hit.</li>
+     *   <li>Special case: sphere centre is fully inside the box — push out via
+     *       the face of minimum signed distance to avoid a zero normal.</li>
+     * </ol>
      */
     private static boolean testAABB_Sphere(
             TransformComponent tBox, ColliderComponent cBox,     // AABB
@@ -364,14 +380,16 @@ public final class NarrowPhase {
     /**
      * Test an OBB against a Sphere using the closest-point-on-oriented-box algorithm.
      *
-     * Algorithm:
-     *   1. Project the sphere centre onto each OBB local axis to get OBB-local coordinates.
-     *   2. Clamp those coordinates to the OBB half-extents.
-     *   3. Reconstruct the closest world-space point from the clamped local coordinates.
-     *   4. Compare squared distance from sphere centre to that point against radius².
-     *   5. Handle the degenerate case (sphere inside box) by finding the nearest exit face.
+     * <p>Algorithm:</p>
+     * <ol>
+     *   <li>Project the sphere centre onto each OBB local axis to get OBB-local coordinates.</li>
+     *   <li>Clamp those coordinates to the OBB half-extents.</li>
+     *   <li>Reconstruct the closest world-space point from the clamped local coordinates.</li>
+     *   <li>Compare squared distance from sphere centre to that point against radius².</li>
+     *   <li>Handle the degenerate case (sphere inside box) by finding the nearest exit face.</li>
+     * </ol>
      *
-     * Normal: FROM OBB surface TOWARD sphere centre (A→B when OBB=A).
+     * <p>Normal: FROM OBB surface TOWARD sphere centre (A→B when OBB=A).</p>
      */
     private static boolean testOBB_Sphere(
             TransformComponent tOBB, ColliderComponent cOBB,
@@ -452,26 +470,33 @@ public final class NarrowPhase {
     /**
      * Separating Axis Theorem test for two OBBs with pre-computed world-space axes.
      *
-     * Tests 15 candidate separating axes:
-     *   Axes [0-2]  — 3 face normals of A    (each axis projects A to one half-extent)
-     *   Axes [3-5]  — 3 face normals of B
-     *   Axes [6-14] — 9 edge-edge cross products (one edge direction from each box)
+     * <p>Tests 15 candidate separating axes:</p>
+     * <ul>
+     *   <li>Axes [0-2] — 3 face normals of A (each axis projects A to one half-extent)</li>
+     *   <li>Axes [3-5] — 3 face normals of B</li>
+     *   <li>Axes [6-14] — 9 edge-edge cross products (one edge direction from each box)</li>
+     * </ul>
      *
-     * For each axis L the overlap is:
-     *   pen = (projA + projB) − |dot(T, L)|        where projX = Σ_k |dot(axX[k], L)| * hXk
+     * <p>For each axis L the overlap is
+     * {@code pen = (projA + projB) - |dot(T, L)|}, where
+     * {@code projX = sum over k of |dot(axX[k], L)| * hXk}.
      * If pen ≤ 0 on any axis, a separating plane exists → no collision.
-     * The axis with the minimum positive pen becomes the contact normal.
+     * The axis with the minimum positive pen becomes the contact normal.</p>
      *
-     * Cross products of nearly-parallel edge pairs (|L|² < ε) are skipped to prevent
-     * division-by-near-zero and numerically meaningless normal directions.
+     * <p>Cross products of nearly-parallel edge pairs (|L|² &lt; ε) are skipped to prevent
+     * division-by-near-zero and numerically meaningless normal directions.</p>
      *
-     * @param axA      world-space unit axes of OBB A (length-3 array)
-     * @param hAx hAy hAz  half-extents of A along its three local axes
-     * @param axB      world-space unit axes of OBB B
-     * @param hBx hBy hBz  half-extents of B
-     * @param T        world-space vector FROM A centre TOWARD B centre
-     * @param out      manifold to write depth and normal into on hit
-     * @return         true if the OBBs overlap on all 15 axes
+     * @param axA world-space unit axes of OBB A (length-3 array)
+     * @param hAx half-extent of A along {@code axA[0]}
+     * @param hAy half-extent of A along {@code axA[1]}
+     * @param hAz half-extent of A along {@code axA[2]}
+     * @param axB world-space unit axes of OBB B (length-3 array)
+     * @param hBx half-extent of B along {@code axB[0]}
+     * @param hBy half-extent of B along {@code axB[1]}
+     * @param hBz half-extent of B along {@code axB[2]}
+     * @param T   world-space vector FROM A centre TOWARD B centre
+     * @param out manifold to write depth and normal into on hit
+     * @return    true if the OBBs overlap on all 15 axes
      */
     private static boolean performSAT(
             Vector3f[] axA, float hAx, float hAy, float hAz,

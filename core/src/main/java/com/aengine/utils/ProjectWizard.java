@@ -4,15 +4,29 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 
+/**
+ * Creates a new, empty game project on disk: the standard folder layout and a
+ * {@code config/project.json} manifest.
+ */
 public class ProjectWizard {
 
     private ProjectWizard() {}
 
     /**
      * Deploys a standardized engine project structure at the specified target destination.
-     * * @param targetDirectory The base parent directory on the host filesystem.
-     * @param projectName     The name of the sub-folder and project instance.
+     *
+     * <p>Creates {@code assets/src} (source art), {@code assets/baked} (engine-ready files),
+     * {@code assets/data} (prefabs, scenes, scripts), {@code config}, {@code logs} and
+     * {@code .aengine/cache}.</p>
+     *
+     * @param targetDirectory The base parent directory on the host filesystem.
+     * @param projectName     The name of the sub-folder and project instance. Written into
+     *                        the JSON manifest as is, so it must not contain {@code "} or
+     *                        {@code \}.
      * @return The absolute path to the newly created project root directory.
+     * @throws IllegalArgumentException if {@code targetDirectory} is not an existing directory
+     * @throws IllegalStateException    if the project folder already exists
+     * @throws RuntimeException         if a folder or the manifest cannot be written
      */
     public static String createProject(String targetDirectory, String projectName) {
         File parentDir = new File(targetDirectory);

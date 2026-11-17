@@ -7,6 +7,26 @@ import org.joml.Vector2f;
 import com.aengine.utils.FileUtils;
 import com.aengine.utils.Logger;
 
+/**
+ * Batched quad renderer: collects textured, tinted quads and draws them in as few draw
+ * calls as possible.
+ *
+ * <p>A batch holds up to 1000 quads and as many different textures as the GPU has sampler
+ * slots ({@link HardwareCapabilities#getMaxTextureSlots()}). When either runs out, the
+ * batch is drawn and a new one starts, transparently. Per frame:</p>
+ * <pre>{@code
+ * Renderer2D.beginScene(camera);
+ * Renderer2D.drawEntityQuad(transform, sprite);   // any number of times
+ * Renderer2D.endScene();                          // draws what is left
+ * }</pre>
+ *
+ * <p>A quad is 1x1 world units before scaling, centred on its position. Quads keep their
+ * real Z and rotation, so with depth testing on (the default) nearer quads hide farther
+ * ones regardless of submission order; translucent pixels are not sorted.</p>
+ *
+ * <p>All state is static: there is one 2D renderer per process. Every method must run on
+ * the GL thread, after {@link #init()}.</p>
+ */
 public class Renderer2D {
 
     private static final int MAX_QUADS = 1000;
@@ -46,6 +66,13 @@ public class Renderer2D {
         new Vector2f(0.0f, 1.0f)
     };
 
+    private Renderer2D() {}
+
+    /**
+     * Reads the GPU limits, creates the backend renderer, compiles the batch shader (sized
+     * to the GPU's sampler count) and reserves the batch buffers. Call once, on the GL
+     * thread, after the window exists.
+     */
     public static void init() {
         Logger.info(Logger.System.RENDERER, "Initializing Batch Renderer pipeline...");
 
@@ -69,6 +96,12 @@ public class Renderer2D {
         Logger.info(Logger.System.RENDERER, "Batch storage allocations verified. Capable of %d quads per draw call.", MAX_QUADS);
     }
 
+    /**
+     * Starts a frame: loads the camera's matrix into the batch shader and empties the batch.
+     *
+     * @param camera the camera to draw through; its matrix is read now, so moving it
+     *               before {@link #endScene()} does not affect this frame
+     */
     public static void beginScene(Camera camera) {
         batchShader.bind();
         batchShader.setMat4("u_ViewProjection", camera.getViewProjection());
@@ -87,10 +120,19 @@ public class Renderer2D {
         textureSlotIndex = 0;
     }
 
+    /** Ends a frame by drawing whatever is still in the batch. */
     public static void endScene() {
         flush();
     }
 
+    /**
+     * Draws the quads collected so far without starting a new batch. Used by
+     * {@link Renderer3D} before drawing meshes, so the quads reach the depth buffer first.
+     * Does nothing when the batch is empty.
+     *
+     * <p>The quads stay in the batch, so a second flush before the next
+     * {@link #beginScene} would draw them again.</p>
+     */
     public static void flush() {
         if (indexCount == 0) return;
 
@@ -112,14 +154,36 @@ public class Renderer2D {
         startBatch();
     }
 
+    /**
+     * Queues an untextured, unrotated quad of one colour.
+     *
+     * @param position centre in world units
+     * @param size     width, height and depth scale; a quad is flat, so Z has no visible effect
+     * @param color    RGBA from 0 to 1
+     */
     public static void drawQuad(Vector3f position, Vector3f size, Vector4f color) {
         drawQuad(position, size, null, color);
     }
 
+    /**
+     * Queues an unrotated quad showing a texture with no tint.
+     *
+     * @param position centre in world units
+     * @param size     width, height and depth scale
+     * @param texture  the texture to show
+     */
     public static void drawQuad(Vector3f position, Vector3f size, TextureAPI texture) {
         drawQuad(position, size, texture, new Vector4f(1.0f));
     }
 
+    /**
+     * Queues an unrotated quad, the general form of the other {@code drawQuad} overloads.
+     *
+     * @param position centre in world units
+     * @param size     width, height and depth scale
+     * @param texture  the texture to show, or {@code null} for the tint colour alone
+     * @param tint     RGBA from 0 to 1, multiplied with the texture
+     */
     public static void drawQuad(Vector3f position, Vector3f size, TextureAPI texture, Vector4f tint) {
         if (indexCount >= MAX_INDICES) {
             nextBatch();
@@ -162,8 +226,11 @@ public class Renderer2D {
     private static final org.joml.Vector4f tempVertexPos = new org.joml.Vector4f();
 
     /**
-     * Specialized ECS integration path. Evaluates packed component data arrays sequentially 
+     * Specialized ECS integration path. Evaluates packed component data arrays sequentially
      * without creating auxiliary wrapper objects during batch submission. Supports full 3D rotations.
+     *
+     * @param transform position, rotation (degrees, applied X then Y then Z) and scale of the quad
+     * @param sprite    texture and colour; a {@code null} texture draws the colour alone
      */
     public static void drawEntityQuad(com.aengine.ecs.components.TransformComponent transform, com.aengine.ecs.components.SpriteComponent sprite) {
         if (indexCount >= MAX_INDICES) {
@@ -205,6 +272,7 @@ public class Renderer2D {
         indexCount += INDICES_PER_QUAD;
     }
 
+    /** Deletes the batch shader and the backend renderer's buffers. */
     public static void cleanup() {
         Logger.info(Logger.System.RENDERER, "Deallocating internal Batch Renderer pipeline elements...");
         if (batchShader != null) 
@@ -213,10 +281,31 @@ public class Renderer2D {
             renderer.cleanup();
     }
 
+    /**
+     * Sets the colour the render target is cleared to.
+     *
+     * @param r red, 0 to 1
+     * @param g green, 0 to 1
+     * @param b blue, 0 to 1
+     * @param a alpha, 0 to 1
+     */
     public static void setClearColor(float r, float g, float b, float a) {
         renderer.setClearColor(new Vector4f(r, g, b, a));
     }
     
+    /**
+     * Returns the batch slot a texture occupies, reserving the next free slot the first
+     * time the texture is seen in this batch. If every slot is taken, the current batch is
+     * drawn first and the texture gets slot 0 of a new one. Used by the {@code draw}
+     * methods; public for code that writes its own vertices.
+     *
+     * <p>Logs a warning when the texture is larger than the GPU accepts. The texture is
+     * compared by {@link TextureAPI#getID()}.</p>
+     *
+     * @param texture the texture, or {@code null}
+     * @return the slot index as a float (the shader reads it from a vertex), or {@code -1}
+     *         for {@code null}, which the shader draws as plain colour
+     */
     public static float getOrCreateTextureIndex(TextureAPI texture) {
         if (texture == null) return -1.0f;
         

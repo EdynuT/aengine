@@ -8,6 +8,19 @@ import com.aengine.utils.Logger;
 
 import static org.lwjgl.opengl.GL30.*;
 
+/**
+ * Draws simple 3D geometry — a flat plane (used for the editor grid) and solid-colour
+ * cubes — alongside the 2D batch.
+ *
+ * <p>Each call is its own draw, not batched. Before drawing, it flushes
+ * {@link Renderer2D} so quads queued earlier go through the depth buffer first.
+ * {@link #beginScene} also starts the 2D renderer, so a 3D frame is framed with this
+ * class's {@code beginScene}/{@code endScene} and may mix both kinds of drawing.</p>
+ *
+ * <p>Requires {@link Renderer2D#init()} as well as {@link #init()}. All state is static,
+ * and every method must run on the GL thread. This class calls OpenGL directly, so it is
+ * tied to the OpenGL backend.</p>
+ */
 public class Renderer3D {
 
     private static ShaderAPI gridShader;
@@ -21,6 +34,9 @@ public class Renderer3D {
     private static int gridVAO, gridVBO, gridEBO;
     private static int cubeVAO, cubeVBO, cubeEBO;
 
+    private Renderer3D() {}
+
+    /** Compiles the grid and solid-colour shaders and uploads the plane and cube meshes. */
     public static void init() {
         Logger.info(Logger.System.RENDERER, "Initializing core 3D Projection Subsystem...");
         
@@ -114,11 +130,25 @@ public class Renderer3D {
         glBindVertexArray(0);
     }
 
+    /**
+     * Starts a frame for both renderers.
+     *
+     * @param camera the camera to draw through; kept until the next {@code beginScene}
+     */
     public static void beginScene(Camera camera) {
         activeCameraContext = camera;
         Renderer2D.beginScene(camera);
     }
 
+    /**
+     * Draws a flat 1x1 plane lying in the XZ plane (facing up) through the grid shader,
+     * which draws grid lines rather than a solid fill.
+     *
+     * @param position centre in world units
+     * @param rotation rotation in degrees, applied X then Y then Z
+     * @param scale    size on each axis; a plane has no height, so Y has no visible effect
+     * @param color    grid line colour, RGBA from 0 to 1
+     */
     public static void drawPlane(Vector3f position, Vector3f rotation, Vector3f scale, Vector4f color) {
         // Force the 2D renderer to clear its queue to preserve depth testing order
         Renderer2D.flush();
@@ -148,9 +178,14 @@ public class Renderer3D {
     /**
      * Draws a solid cube with the entity's real position, rotation and scale.
      *
-     * <p>Unlike {@code Renderer2D.drawEntityQuad}, which billboards a flat quad toward the
-     * camera, this puts actual volumetric geometry through the depth buffer. Colour only —
+     * <p>Unlike {@code Renderer2D.drawEntityQuad}, which draws a flat quad, this puts actual
+     * volumetric geometry through the depth buffer. Colour only, with no lighting —
      * texturing a cube needs UV coordinates on the mesh, which it does not carry yet.</p>
+     *
+     * @param position centre in world units
+     * @param rotation rotation in degrees, applied X then Y then Z
+     * @param scale    size on each axis; the unscaled cube is 1x1x1
+     * @param color    RGBA from 0 to 1
      */
     public static void drawCube(Vector3f position, Vector3f rotation, Vector3f scale, Vector4f color) {
         // Force the 2D renderer to clear its queue to preserve depth testing order
@@ -176,10 +211,12 @@ public class Renderer3D {
         basicShader.unbind();
     }
 
+    /** Ends the frame, drawing whatever the 2D batch still holds. */
     public static void endScene() {
         Renderer2D.endScene();
     }
 
+    /** Deletes both shaders and the plane and cube meshes. */
     public static void cleanup() {
         Logger.info(Logger.System.RENDERER, "3D Context terminated.");
         if (gridShader  != null) gridShader.cleanup();

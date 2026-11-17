@@ -12,7 +12,38 @@ import com.aengine.graphics.Camera;
 import org.joml.Vector3f;
 import static org.lwjgl.glfw.GLFW.*;
 
+/**
+ * The editor's fly camera: moves the primary camera from mouse and keyboard input
+ * and keeps its {@link Camera} in step with its {@link TransformComponent}.
+ *
+ * <p>Controls, all while the window has focus:</p>
+ * <ul>
+ *   <li><b>Right mouse button + drag</b> — in 3D, looks around (yaw and pitch, with pitch
+ *       held between -89.9 and 89.9 degrees); in 2D, pans the view.</li>
+ *   <li><b>Shift + right mouse button + drag</b> — in 3D, slides sideways and forwards
+ *       instead of turning.</li>
+ *   <li><b>Right mouse button held + W A S D</b> — flies at 6 units per second: in 3D forward,
+ *       left, back and right along where the camera looks; in 2D up, left, down and right.
+ *       Held with the button, as in Unity, Unreal and Godot, so the letters stay free to type
+ *       and to use as shortcuts otherwise.</li>
+ *   <li><b>Space / Ctrl</b> — moves straight up / down at 6 units per second, in 2D and 3D.</li>
+ * </ul>
+ *
+ * <p>The cursor is hidden and captured while the right button is held and moving, and
+ * released when the button is let go. The 2D/3D choice comes from
+ * {@link RenderMode#is2D()}.</p>
+ *
+ * <p>Yaw and pitch are kept in this system, not in the entity, so they are shared by
+ * whichever camera is primary and are not saved with the scene.</p>
+ *
+ * <p>The controls work only while {@link #setInputEnabled input is enabled}. The editor
+ * enables it while its viewport has focus, so Space typed into a text field does not also
+ * raise the camera; a host with no interface leaves it enabled.</p>
+ */
 public final class CameraSystem extends System {
+
+    /** Creates the system looking down the -Z axis (yaw -90, pitch 0). */
+    public CameraSystem() {}
 
     private final Vector3f movementDelta = new Vector3f();
     private final Vector3f forwardDirection = new Vector3f();
@@ -30,6 +61,16 @@ public final class CameraSystem extends System {
     private boolean isCursorHidden = false;
 
     private static final int BUTTON_RIGHT = 1; 
+
+    private boolean inputEnabled = true;
+
+    /**
+     * Whether the controls move the camera. Off, the camera keeps its place and stays in step
+     * with its transform, and a cursor captured for looking around is let go.
+     *
+     * @param enabled {@code true} for the controls to work; {@code true} until set
+     */
+    public void setInputEnabled(boolean enabled) { this.inputEnabled = enabled; }
 
     @Override
     public void update(Registry registry, float deltaTime) {
@@ -89,7 +130,7 @@ public final class CameraSystem extends System {
             float speedModifier = movementSpeed * deltaTime;
 
             // 3. State Machine: Is Right Click Engaged?
-            if (Input.isMouseButtonPressed(BUTTON_RIGHT)) {
+            if (inputEnabled && Input.isMouseButtonPressed(BUTTON_RIGHT)) {
                 
                 if (!isCursorHidden && (Math.abs(deltaX) > 0.0f || Math.abs(deltaY) > 0.0f)) {
                     long windowHandle = glfwGetCurrentContext();
@@ -139,12 +180,28 @@ public final class CameraSystem extends System {
                 }
             }
 
-            // 4. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
+            // 4. Flying with W A S D while the right button is held
+            if (inputEnabled && Input.isMouseButtonPressed(BUTTON_RIGHT)) {
+                float ahead = 0.0f, aside = 0.0f;
+                if (Input.isKeyPressed(Keys.W)) ahead += 1.0f;
+                if (Input.isKeyPressed(Keys.S)) ahead -= 1.0f;
+                if (Input.isKeyPressed(Keys.D)) aside += 1.0f;
+                if (Input.isKeyPressed(Keys.A)) aside -= 1.0f;
+                if (is2DMode) {
+                    movementDelta.x += aside * speedModifier;
+                    movementDelta.y += ahead * speedModifier;
+                } else {
+                    movementDelta.fma(ahead * speedModifier, forwardDirection);
+                    movementDelta.fma(aside * speedModifier, rightDirection);
+                }
+            }
+
+            // 5. Vertical Space Elevation Processing (Space to Ascend / Left Ctrl to Descend)
             // Works identically in 2D and 3D as requested
-            if (Input.isKeyPressed(Keys.SPACE)) {
+            if (inputEnabled && Input.isKeyPressed(Keys.SPACE)) {
                 movementDelta.add(new Vector3f(verticalUp).mul(speedModifier));
             }
-            if (Input.isKeyPressed(Keys.CTRL_L) || Input.isKeyPressed(Keys.CTRL_R)) {
+            if (inputEnabled && (Input.isKeyPressed(Keys.CTRL_L) || Input.isKeyPressed(Keys.CTRL_R))) {
                 movementDelta.sub(new Vector3f(verticalUp).mul(speedModifier));
             }
 

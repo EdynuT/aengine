@@ -14,18 +14,37 @@ import java.util.Map;
 import static org.lwjgl.opengl.GL11.GL_FALSE;
 import static org.lwjgl.opengl.GL20.*;
 
+/**
+ * OpenGL implementation of {@link ShaderAPI}: one linked GLSL program. Obtain it through
+ * {@link com.aengine.graphics.RenderContext#createShader} rather than directly.
+ *
+ * <p>Uniform locations are looked up once per name and cached.</p>
+ */
 public class OpenGLShader implements ShaderAPI {
 
     private int programId;
     private final Map<String, Integer> uniformCache = new HashMap<>();
 
-    // Standard path-based initialization wrapper.
+    /**
+     * Standard path-based initialization wrapper: compiles and links two classpath resources.
+     *
+     * @param vertexPath   classpath path of the vertex shader
+     * @param fragmentPath classpath path of the fragment shader
+     * @throws RuntimeException if a stage fails to compile or the program fails to link
+     */
     public OpenGLShader(String vertexPath, String fragmentPath) {
         Logger.debug(Logger.System.SHADER, "Loading pipeline shaders from paths: [Vert: %s | Frag: %s]", vertexPath, fragmentPath);
         initFromSource(FileUtils.readResource(vertexPath), FileUtils.readResource(fragmentPath));
     }
 
-    // Overloaded constructor accepting raw or dynamically generated GLSL source code directly.
+    /**
+     * Overloaded constructor accepting raw or dynamically generated GLSL source code directly.
+     *
+     * @param vertexSource   GLSL source of the vertex shader
+     * @param fragmentSource GLSL source of the fragment shader
+     * @param isRawSource    ignored; only distinguishes this overload from the path-based one
+     * @throws RuntimeException if a stage fails to compile or the program fails to link
+     */
     public OpenGLShader(String vertexSource, String fragmentSource, boolean isRawSource) {
         Logger.debug(Logger.System.SHADER, "Compiling pipeline shaders from dynamic runtime raw source strings.");
         initFromSource(vertexSource, fragmentSource);

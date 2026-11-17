@@ -1,5 +1,9 @@
 package com.aengine.utils;
 
+/**
+ * Counts frames per second. Call {@link #update(float)} once per frame; once a second the
+ * count is stored for {@link #getCurrentFPS()} and written to the log at INFO level.
+ */
 public final class FPSTracker {
 
     private static float timeAccumulator = 0.0f;
@@ -13,6 +17,8 @@ public final class FPSTracker {
 
     /**
      * Accumulates delta time and logs telemetry every 1 second.
+     *
+     * @param deltaTime seconds since the previous frame
      */
     public static void update(float deltaTime) {
         timeAccumulator += deltaTime;
@@ -32,6 +38,8 @@ public final class FPSTracker {
 
     /**
      * Retrieves the last calculated stable frames-per-second metric.
+     *
+     * @return frames counted in the last full second; 0 during the first second
      */
     public static int getCurrentFPS() {
         return currentFPS;

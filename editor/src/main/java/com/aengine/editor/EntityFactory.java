@@ -30,7 +30,11 @@ public final class EntityFactory {
 
     /**
      * Creates a coloured 1×1 quad at {@code (x, y, 0)} — intended for 2D mode.
+     * It gets a transform, a sprite and the display name {@code "Quad #<id>"}.
      *
+     * @param registry the world to create it in
+     * @param x        world X
+     * @param y        world Y
      * @return the new entity ID
      */
     public static int createQuad(Registry registry, float x, float y) {
@@ -48,7 +52,7 @@ public final class EntityFactory {
     }
 
     // =========================================================================
-    // 3D — billboard sprite at (x, y, z)
+    // 3D — cube at (x, y, z)
     // =========================================================================
 
     /**
@@ -61,6 +65,10 @@ public final class EntityFactory {
      * (solid colour only) — textured cubes require UV coordinates on the cube mesh, not
      * yet implemented.</p>
      *
+     * @param registry the world to create it in
+     * @param x        world X
+     * @param y        world Y
+     * @param z        world Z
      * @return the new entity ID
      */
     public static int createCube(Registry registry, float x, float y, float z) {

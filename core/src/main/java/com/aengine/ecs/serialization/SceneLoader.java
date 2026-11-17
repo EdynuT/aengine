@@ -23,6 +23,16 @@ import java.io.FileReader;
 public class SceneLoader {
     private static final Gson gson = new Gson();
 
+    private SceneLoader() {}
+
+    /**
+     * Reads a scene file and adds its entities to the registry. Existing entities are kept;
+     * call {@link Registry#clearScene()} first to replace the current scene.
+     *
+     * @param activeRegistry the registry to add the entities to
+     * @param virtualPath    virtual path of the scene file, resolved through
+     *                       {@link com.aengine.utils.FileSystem#resolve(String)}
+     */
     public static void load(Registry activeRegistry, String virtualPath) {
         File file = FileSystem.resolve(virtualPath);
         
@@ -39,6 +49,27 @@ public class SceneLoader {
         }
     }
 
+    /**
+     * Adds the entities of an already parsed scene to the registry.
+     *
+     * <p>The scene holds a {@code "name"} and an {@code "entities"} array. Each entity is
+     * written in one of two ways:</p>
+     * <ul>
+     *   <li><b>Prefab</b> — {@code {"prefab": "<virtual path>", "transform": {...}}}: the
+     *       prefab is instantiated through {@link PrefabLoader}, then any
+     *       {@code position}, {@code rotation} or {@code scale} under {@code "transform"}
+     *       replaces the prefab's value.</li>
+     *   <li><b>Inline</b> — {@code {"components": {...}}}, as written by the editor. Only
+     *       {@code TransformComponent}, {@code ScriptComponent}, {@code ColliderComponent}
+     *       and {@code RigidbodyComponent} are read; sprites and rigidbody velocity are
+     *       not.</li>
+     * </ul>
+     *
+     * <p>An entry with neither {@code "prefab"} nor {@code "components"} is skipped.</p>
+     *
+     * @param activeRegistry the registry to add the entities to
+     * @param root           the scene's root JSON object
+     */
     public static void load(Registry activeRegistry, JsonObject root) {
         String sceneName = root.has("name") ? root.get("name").getAsString() : "Unnamed_Scene";
         Logger.info(Logger.System.CORE, "Mounting Scene Workspace: [%s]", sceneName);

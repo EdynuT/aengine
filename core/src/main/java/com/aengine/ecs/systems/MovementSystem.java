@@ -6,7 +6,15 @@ import com.aengine.ecs.System;
 import com.aengine.ecs.components.TransformComponent;
 import com.aengine.utils.Logger;
 
+/**
+ * Test system that slides every entity with a {@link TransformComponent} at a fixed
+ * speed: 1.5 units per second on X and 0.5 on Y. It moves all transforms, cameras
+ * included, and is not registered by the editor.
+ */
 public final class MovementSystem extends System {
+
+    /** Creates the system; it keeps no state between frames. */
+    public MovementSystem() {}
 
     @Override
     public void update(Registry registry, float deltaTime) {

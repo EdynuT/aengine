@@ -5,6 +5,16 @@ import static org.lwjgl.opengl.GL30.*;
 
 import com.aengine.utils.Logger;
 
+/**
+ * An off-screen render target: a colour texture plus a depth-and-stencil buffer.
+ *
+ * <p>The editor renders the scene into one and shows its colour texture inside the
+ * viewport panel. Draw into it between {@link #bind()} and {@link #unbind()}; read the
+ * result through {@link #getTextureID()}.</p>
+ *
+ * <p>This class calls OpenGL directly rather than going through {@link RenderContext},
+ * so it is tied to the OpenGL backend. Every method must run on the GL thread.</p>
+ */
 public final class FrameBuffer {
 
     private int fboID = 0;
@@ -14,15 +24,40 @@ public final class FrameBuffer {
     private int width;
     private int height;
 
+    /**
+     * Creates the target and allocates its GPU storage.
+     *
+     * @param width  width in pixels; must be greater than 0
+     * @param height height in pixels; must be greater than 0
+     */
     public FrameBuffer(int width, int height) {
         this.width = width;
         this.height = height;
         invalidate();
     }
 
+    /**
+     * Returns the width.
+     *
+     * @return width in pixels
+     */
     public int getWidth() { return width; }
+
+    /**
+     * Returns the height.
+     *
+     * @return height in pixels
+     */
     public int getHeight() { return height; }
 
+    /**
+     * Changes the size, recreating the GPU storage. The old contents are lost and the
+     * colour texture gets a new ID, so fetch {@link #getTextureID()} again afterwards.
+     * Does nothing if the size is unchanged.
+     *
+     * @param newWidth  width in pixels; must be greater than 0
+     * @param newHeight height in pixels; must be greater than 0
+     */
     public void resize(int newWidth, int newHeight) {
         // Ignore if the resolution is the same to save CPU
         if (this.width == newWidth && this.height == newHeight) return;
@@ -32,6 +67,11 @@ public final class FrameBuffer {
         invalidate(); // Recreate textures in hardware
     }
 
+    /**
+     * Deletes the current GPU objects, if any, and creates new ones at the current size.
+     * An incomplete framebuffer is logged as an error, not thrown. Leaves the default
+     * framebuffer bound.
+     */
     public void invalidate() {
         if (fboID != 0) {
             cleanup();
@@ -61,20 +101,32 @@ public final class FrameBuffer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    /** Directs drawing into this target and sets the viewport to its full size. */
     public void bind() {
         glBindFramebuffer(GL_FRAMEBUFFER, fboID);
         glViewport(0, 0, width, height);
     }
 
+    /**
+     * Directs drawing back to the window. The viewport is not restored; set it to the
+     * window size before drawing there.
+     */
     public void unbind() {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    /** Deletes the framebuffer, its colour texture and its depth buffer. */
     public void cleanup() {
         glDeleteFramebuffers(fboID);
         glDeleteTextures(textureID);
         glDeleteRenderbuffers(rboID);
     }
 
+    /**
+     * Returns the colour texture, for showing the rendered image, e.g. through
+     * {@link RendererAPI#bindTexture(int, int)}.
+     *
+     * @return the OpenGL texture name; changes on every {@link #resize}
+     */
     public int getTextureID() { return textureID; }
 }

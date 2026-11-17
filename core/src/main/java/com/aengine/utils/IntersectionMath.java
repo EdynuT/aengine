@@ -6,6 +6,11 @@ import org.joml.Vector3f;
  * HARDWARE CONTEXT: LOW-LEVEL VECTOR INTERSECTION CORE
  * Contains dimensional-isolated primitives for narrow-phase resolution.
  * Strictly avoids Math.sqrt() on hot-paths using squared distance operations.
+ *
+ * <p>Yes/no overlap tests with no contact data. Sizes are half-extents (the distance from
+ * the centre to a face). Touching exactly counts as overlapping. The physics system uses
+ * {@link com.aengine.physics.NarrowPhase} instead; nothing in the engine calls this class
+ * today.</p>
  */
 public final class IntersectionMath {
 
@@ -15,11 +20,29 @@ public final class IntersectionMath {
     // 2D PIPELINE INTERSECTIONS (Z-Axis Culled / Ignored)
     // =========================================================================
 
+    /**
+     * Tests two axis-aligned rectangles on the XY plane. Z is ignored.
+     *
+     * @param posA  centre of A
+     * @param sizeA half-extents of A
+     * @param posB  centre of B
+     * @param sizeB half-extents of B
+     * @return {@code true} if they overlap or touch
+     */
     public static boolean testAABB2D(Vector3f posA, Vector3f sizeA, Vector3f posB, Vector3f sizeB) {
         return (posA.x - sizeA.x <= posB.x + sizeB.x && posA.x + sizeA.x >= posB.x - sizeB.x) &&
                (posA.y - sizeA.y <= posB.y + sizeB.y && posA.y + sizeA.y >= posB.y - sizeB.y);
     }
 
+    /**
+     * Tests two circles on the XY plane. Z is ignored.
+     *
+     * @param posA    centre of A
+     * @param radiusA radius of A
+     * @param posB    centre of B
+     * @param radiusB radius of B
+     * @return {@code true} if they overlap or touch
+     */
     public static boolean testSphere2D(Vector3f posA, float radiusA, Vector3f posB, float radiusB) {
         float dx = posB.x - posA.x;
         float dy = posB.y - posA.y;
@@ -31,6 +54,15 @@ public final class IntersectionMath {
     /**
      * 2D OBB Collision using Separating Axis Theorem (SAT)
      * Projects entities along 4 potential separating axes (2 local axes per OBB).
+     * Z is ignored.
+     *
+     * @param posA  centre of A
+     * @param sizeA half-extents of A along its own axes
+     * @param rotA  rotation of A around Z, in <b>radians</b>
+     * @param posB  centre of B
+     * @param sizeB half-extents of B along its own axes
+     * @param rotB  rotation of B around Z, in radians
+     * @return {@code true} if they overlap or touch
      */
     public static boolean testOBB2D(Vector3f posA, Vector3f sizeA, float rotA, Vector3f posB, Vector3f sizeB, float rotB) {
         // Matrizes de orientação locais 2D
@@ -68,12 +100,30 @@ public final class IntersectionMath {
     // 3D PIPELINE INTERSECTIONS
     // =========================================================================
 
+    /**
+     * Tests two axis-aligned boxes.
+     *
+     * @param posA  centre of A
+     * @param sizeA half-extents of A
+     * @param posB  centre of B
+     * @param sizeB half-extents of B
+     * @return {@code true} if they overlap or touch
+     */
     public static boolean testAABB3D(Vector3f posA, Vector3f sizeA, Vector3f posB, Vector3f sizeB) {
         return (posA.x - sizeA.x <= posB.x + sizeB.x && posA.x + sizeA.x >= posB.x - sizeB.x) &&
                (posA.y - sizeA.y <= posB.y + sizeB.y && posA.y + sizeA.y >= posB.y - sizeB.y) &&
                (posA.z - sizeA.z <= posB.z + sizeB.z && posA.z + sizeA.z >= posB.z - sizeB.z);
     }
 
+    /**
+     * Tests two spheres.
+     *
+     * @param posA    centre of A
+     * @param radiusA radius of A
+     * @param posB    centre of B
+     * @param radiusB radius of B
+     * @return {@code true} if they overlap or touch
+     */
     public static boolean testSphere3D(Vector3f posA, float radiusA, Vector3f posB, float radiusB) {
         float dx = posB.x - posA.x;
         float dy = posB.y - posA.y;

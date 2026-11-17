@@ -95,6 +95,22 @@ public class PhysicsSystem {
     // Update
     // -------------------------------------------------------------------------
 
+    /** Creates the system with an empty 2-unit spatial hash grid. */
+    public PhysicsSystem() {}
+
+    /**
+     * Runs one physics step over every entity, in the order listed on the class:
+     * integrate forces, find candidate pairs, test them, push overlapping bodies apart
+     * and bounce them.
+     *
+     * <p>Only entities with a {@link TransformComponent} and a {@link RigidbodyComponent}
+     * move; kinematic ones are skipped. Only entities with a {@link TransformComponent}
+     * and a {@link ColliderComponent} collide. A collider without a rigidbody acts as an
+     * immovable obstacle.</p>
+     *
+     * @param registry       the ECS world to simulate
+     * @param fixedDeltaTime the step length in seconds; keep it constant for stable results
+     */
     public void update(Registry registry, float fixedDeltaTime) {
 
         // =======================================================================

@@ -19,3 +19,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# The editor's local sandbox for theme and layout files (-PtestShell); each developer keeps their own
+editor/test-shell/

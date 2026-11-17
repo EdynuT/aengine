@@ -17,11 +17,45 @@ import org.joml.Vector3f;
 import java.io.File;
 import java.io.FileReader;
 
+/**
+ * Creates entities from prefab files: JSON descriptions of one entity and its components.
+ *
+ * <p>A prefab looks like this; every key is optional:</p>
+ * <pre>{@code
+ * {
+ *   "name": "Crate",
+ *   "components": {
+ *     "TransformComponent": { "position": [0,0,0], "rotation": [0,0,0], "scale": [1,1,1] },
+ *     "SpriteComponent":    { "texture": "assets://baked/textures/box.atex", "color": [1,1,1,1] },
+ *     "ColliderComponent":  { "type": "AABB", "size": [0.5,0.5,0.5], "offset": [0,0,0] },
+ *     "RigidbodyComponent": { "mass": 1, "restitution": 0, "friction": 0.2,
+ *                             "isKinematic": false, "velocity": [0,0,0] },
+ *     "ScriptComponent":    { "scriptPath": "assets://scripts/crate.lua" }
+ *   }
+ * }
+ * }</pre>
+ *
+ * <p>Component keys that are not listed above are ignored. {@code isTrigger} on the
+ * collider is not read from prefabs.</p>
+ */
 public class PrefabLoader {
 
     private static final Gson gson = new Gson();
 
-    // The active Registry instance is now passed to the instantiator
+    private PrefabLoader() {}
+
+    /**
+     * Reads a prefab file and creates one entity from it in the given registry.
+     *
+     * <p>If the file cannot be parsed part-way through, the entity already created is
+     * left in the registry with the components added so far, and {@code -1} is returned.</p>
+     *
+     * @param activeRegistry the registry to create the entity in
+     * @param virtualPath    virtual path of the prefab file, resolved through
+     *                       {@link com.aengine.utils.FileSystem#resolve(String)}
+     * @return the new entity ID, or {@code -1} if the file is missing or invalid (the
+     *         error is logged)
+     */
     public static int instantiate(Registry activeRegistry, String virtualPath) {
         File file = FileSystem.resolve(virtualPath);
         

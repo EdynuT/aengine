@@ -10,16 +10,52 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Runs entity scripts through optional language plugins.
+ *
+ * <p>Each supported language lives in its own plugin class (Lua, JavaScript, Python). At
+ * construction the system tries to load each one by name; a plugin that is not on the
+ * classpath is skipped quietly. Every frame, each entity with a {@link TransformComponent}
+ * and a {@link ScriptComponent} is handed to the runtime that matches its script's file
+ * extension.</p>
+ *
+ * <p>A script whose extension has no runtime is reported once as an error and then
+ * switched off by setting its {@code scriptPath} to {@code null}.</p>
+ */
 public class ScriptSystem {
 
-    // Public contract that plugins must follow
+    /**
+     * Public contract that plugins must follow.
+     *
+     * <p>An implementation needs a public no-argument constructor and must live at one of
+     * the class names the system looks for, e.g.
+     * {@code com.aengine.ecs.systems.plugins.LuaRuntime}.</p>
+     */
     public interface ScriptRuntime {
+        /**
+         * Compiles a script and binds it to its entity. Called when the component has no
+         * compiled state yet and the script file exists. The implementation must store its
+         * compiled state in {@link ScriptComponent#internalRuntimeState}; while that stays
+         * {@code null}, this method is called again on the next frame.
+         *
+         * @param script     the entity's script component
+         * @param transform  the entity's transform, for the script to read and move
+         * @param scriptFile the script file on disk, already resolved from its virtual path
+         */
         void initialize(ScriptComponent script, TransformComponent transform, File scriptFile);
+
+        /**
+         * Runs one frame of an already initialised script.
+         *
+         * @param script    the entity's script component, with its compiled state
+         * @param deltaTime seconds since the previous frame
+         */
         void update(ScriptComponent script, float deltaTime);
     }
 
     private final Map<String, ScriptRuntime> runtimes = new HashMap<>();
 
+    /** Creates the system and registers every scripting plugin found on the classpath. */
     public ScriptSystem() {
         // Tries to register runtimes for different scripting languages. If the dependency is not present in the user's Gradle, the JVM throws an exception
         registerRuntime(".lua", "com.aengine.ecs.systems.plugins.LuaRuntime");
@@ -39,6 +75,12 @@ public class ScriptSystem {
         }
     }
 
+    /**
+     * Initialises new scripts and runs one frame of every active script.
+     *
+     * @param registry  the ECS world
+     * @param deltaTime seconds since the previous frame
+     */
     public void update(Registry registry, float deltaTime) {
         var scriptedEntities = registry.getEntitiesWith(TransformComponent.class, ScriptComponent.class);
 

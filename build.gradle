@@ -9,7 +9,7 @@
 
 allprojects {
     group   = 'com.aengine'
-    version = '0.16.0'
+    version = '0.17.0'
 
     repositories {
         mavenCentral()
@@ -32,21 +32,51 @@ subprojects {
         archivesName = "aengine-${project.name}"
     }
 
+    // Sources hold accented characters now that text covers Latin-1. Without this, javac
+    // uses the platform charset, so the same file compiles differently on a machine whose
+    // default is not UTF-8 — a build that mangles 'ç' rather than failing.
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+
     ext {
         lwjglVersion = '3.3.4'
         jomlVersion  = '1.10.5'
-        imguiVersion = '1.86.11'
 
         String osName = System.getProperty('os.name').toLowerCase()
         if (osName.contains('win')) {
             lwjglNatives = 'natives-windows'
-            imguiNatives = 'windows'
-        } else if (osName.contains('mac')) {
-            lwjglNatives = 'natives-macos'
-            imguiNatives = 'macos'
         } else {
             lwjglNatives = 'natives-linux'
-            imguiNatives = 'linux'
         }
+    }
+}
+
+// One Javadoc site for the whole engine. `./gradlew javadoc` writes it to build/docs/javadoc
+// here in the root, rather than one site inside each module's own build folder.
+apply plugin: 'java-base'
+
+tasks.register('javadoc', Javadoc) {
+    group       = 'documentation'
+    description = 'Generates one Javadoc site for all modules, in the root build folder.'
+
+    def mains = subprojects.collect { it.sourceSets.main }
+
+    source         = files(mains.collect { it.allJava })
+    classpath      = files(mains.collect { it.compileClasspath })
+    destinationDir = layout.buildDirectory.dir('docs/javadoc').get().asFile
+    javadocTool    = javaToolchains.javadocToolFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+
+    title = "AEngine ${version} API"
+    options.encoding = 'UTF-8'
+    options.charSet  = 'UTF-8'
+}
+
+// The modules' own javadoc tasks would repeat the same pages inside core/, ui/ and editor/.
+subprojects {
+    tasks.named('javadoc') {
+        enabled = false
     }
 }

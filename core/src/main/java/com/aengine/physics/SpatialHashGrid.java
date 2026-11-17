@@ -7,26 +7,36 @@ import java.util.Arrays;
 /**
  * BROAD PHASE: Deterministic Spatial Hash Grid
  *
- * Converts 3D AABB world-space bounds into discrete grid cells using prime-number hashing,
+ * <p>Converts 3D AABB world-space bounds into discrete grid cells using prime-number hashing,
  * replacing the previous O(N²) brute-force collision loop with an O(K) candidate pipeline
- * where K is the average cell occupancy.
+ * where K is the average cell occupancy.</p>
  *
- * Insertion formula (prime mixing — cast to long BEFORE multiplication to prevent overflow):
- *   key = ((long)cx * 73856093L) ^ ((long)cy * 19349663L) ^ ((long)cz * 83492791L)
+ * <p>The result is a list of <em>candidate</em> pairs: two entities whose boxes share a
+ * cell. They may still not touch; {@link NarrowPhase} decides. The grid only sees the
+ * boxes it is given, so a box smaller than the real shape can make it miss a pair.</p>
  *
- * Internal layout (zero boxing, zero GC):
- *   - Cell storage uses a raw open-addressing hash table: long[] cellKeys + IntList[] cellValues.
- *     No java.util.HashMap → no Long boxing on every insert.
- *   - The occupied-slot tracker (int[] occupiedSlots) lets clear() touch only the K used slots
- *     instead of scanning the full CELL_CAP array each frame.
- *   - Pair deduplication uses a second open-addressing long[] set — each unique pair appears
- *     exactly once in the output buffer regardless of how many cells the entities share.
+ * <p>Insertion formula (prime mixing — cast to long BEFORE multiplication to prevent overflow):
+ * {@code key = ((long)cx * 73856093L) ^ ((long)cy * 19349663L) ^ ((long)cz * 83492791L)}</p>
  *
- * Usage per physics step:
- *   1. grid.clear()
- *   2. grid.insert(entity, minX, minY, minZ, maxX, maxY, maxZ) for every collidable entity
- *   3. int[] pairs = grid.buildPairs()  /  int count = grid.getPairCount()
- *   4. Pass candidate pairs to NarrowPhase for precise shape tests
+ * <p>Internal layout (zero boxing, zero GC):</p>
+ * <ul>
+ *   <li>Cell storage uses a raw open-addressing hash table: {@code long[] cellKeys} +
+ *       {@code IntList[] cellValues}. No {@code java.util.HashMap} → no Long boxing on every insert.</li>
+ *   <li>The occupied-slot tracker ({@code int[] occupiedSlots}) lets {@code clear()} touch only
+ *       the K used slots instead of scanning the full CELL_CAP array each frame.</li>
+ *   <li>Pair deduplication uses a second open-addressing {@code long[]} set — each unique pair
+ *       appears exactly once in the output buffer regardless of how many cells the entities share.</li>
+ * </ul>
+ *
+ * <p>Usage per physics step:</p>
+ * <ol>
+ *   <li>{@code grid.clear()}</li>
+ *   <li>{@code grid.insert(entity, minX, minY, minZ, maxX, maxY, maxZ)} for every collidable entity</li>
+ *   <li>{@code int[] pairs = grid.buildPairs(); int count = grid.getPairCount();}</li>
+ *   <li>Pass candidate pairs to NarrowPhase for precise shape tests</li>
+ * </ol>
+ *
+ * <p>Capacity is fixed at 4096 distinct cells per step. Not thread-safe.</p>
  */
 public final class SpatialHashGrid {
 
@@ -91,6 +101,8 @@ public final class SpatialHashGrid {
     // -------------------------------------------------------------------------
 
     /**
+     * Creates an empty grid. All storage is allocated here, once.
+     *
      * @param cellSize World-space size of each hash cell.
      *                 Best set to roughly 2× the radius of an average collider so that
      *                 most entities occupy a single cell per axis (1 cell × 1 cell × 1 cell),
@@ -144,10 +156,15 @@ public final class SpatialHashGrid {
      *
      * An entity whose AABB spans S cells per axis will be inserted into S³ cells.
      * Keep {@code cellSize} larger than the typical entity extent to keep S = 1.
+     * Inserting the same entity twice in one step is harmless: pairs are deduplicated.
      *
-     * @param entity         ECS entity ID
-     * @param minX minY minZ World-space AABB minimum corner
-     * @param maxX maxY maxZ World-space AABB maximum corner
+     * @param entity ECS entity ID; must be zero or positive
+     * @param minX   World-space AABB minimum corner, X
+     * @param minY   World-space AABB minimum corner, Y
+     * @param minZ   World-space AABB minimum corner, Z
+     * @param maxX   World-space AABB maximum corner, X
+     * @param maxY   World-space AABB maximum corner, Y
+     * @param maxZ   World-space AABB maximum corner, Z
      */
     public void insert(int entity,
                        float minX, float minY, float minZ,
@@ -168,10 +185,15 @@ public final class SpatialHashGrid {
     /**
      * Collect all unique candidate collision pairs from entities sharing the same cell.
      *
-     * Each pair (A, B) with A < B is emitted exactly once even if the two entities share
+     * Each pair (A, B) with {@code A < B} is emitted exactly once even if the two entities share
      * multiple cells — the open-addressing pair set deduplicates across all cells.
      *
+     * <p>Call it once per step, after all inserts; a second call before {@link #clear()}
+     * appends nothing new but returns the same pairs.</p>
+     *
      * @return Internal flat buffer [a₀,b₀, a₁,b₁, ...]. Valid until the next {@link #clear()}.
+     *         The array is usually longer than the data: read only the first
+     *         {@code 2 * getPairCount()} entries.
      */
     public int[] buildPairs() {
         // pairCount was reset in clear() — safe to accumulate from 0
@@ -202,7 +224,11 @@ public final class SpatialHashGrid {
         return pairBuf;
     }
 
-    /** Number of unique candidate pairs produced by the last {@link #buildPairs()} call. */
+    /**
+     * Number of unique candidate pairs produced by the last {@link #buildPairs()} call.
+     *
+     * @return the pair count; the buffer holds twice as many entity IDs
+     */
     public int getPairCount() {
         return pairCount;
     }
@@ -211,6 +237,8 @@ public final class SpatialHashGrid {
      * Current pair-set occupancy as a fraction of capacity [0, 1].
      * Values above 0.70 indicate the dedup set is under pressure; near 1.0 means pairs
      * may not be fully deduplicated and duplicates can enter the narrow phase.
+     *
+     * @return the fraction of pair-set slots in use this step
      */
     public float pairSetLoad() {
         return (float) pairSetCount / PAIR_SET_CAP;
@@ -219,6 +247,8 @@ public final class SpatialHashGrid {
     /**
      * Current cell-table occupancy as a fraction of capacity [0, 1].
      * Values above 0.75 increase average probe depth.
+     *
+     * @return the fraction of cell-table slots in use this step
      */
     public float cellTableLoad() {
         return (float) occupiedCount / CELL_CAP;
