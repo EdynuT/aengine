@@ -52,6 +52,9 @@ public class Renderer2D {
     /** {@code "u_Textures[i]"} for every slot, built once in {@link #init()}. */
     private static String[] textureUniforms;
 
+    /** Textures already reported as larger than the GPU accepts, so each is reported once. */
+    private static final java.util.Set<Integer> oversizeReported = new java.util.HashSet<>();
+
     /** The tint of an untinted quad. Read only. */
     private static final Vector4f WHITE = new Vector4f(1.0f);
 
@@ -304,8 +307,9 @@ public class Renderer2D {
      * drawn first and the texture gets slot 0 of a new one. Used by the {@code draw}
      * methods; public for code that writes its own vertices.
      *
-     * <p>Logs a warning when the texture is larger than the GPU accepts. The texture is
-     * compared by {@link TextureAPI#getID()}.</p>
+     * <p>Logs a warning the first time a texture larger than the GPU accepts is seen, once
+     * per texture for the whole session. The texture is compared by
+     * {@link TextureAPI#getID()}.</p>
      *
      * @param texture the texture, or {@code null}
      * @return the slot index as a float (the shader reads it from a vertex), or {@code -1}
@@ -328,7 +332,8 @@ public class Renderer2D {
         //     );
         // }
 
-        if (textureWidth > maxHardwareSize || textureHeight > maxHardwareSize) {
+        if ((textureWidth > maxHardwareSize || textureHeight > maxHardwareSize)
+                && oversizeReported.add(texture.getID())) {
             Logger.warn(Logger.System.RENDERER, 
                 "Hardware Limit: Texture [ID: %d] size (%dx%d px) exceeds maximum GPU capabilities (%dx%d px). This might cause rendering issues.",
                 texture.getID(), textureWidth, textureHeight, maxHardwareSize, maxHardwareSize
