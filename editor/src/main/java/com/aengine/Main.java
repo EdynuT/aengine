@@ -64,7 +64,7 @@ public class Main extends Engine {
     private final com.aengine.editor.ImGuiUILayer imguiLayer;
 
     // The editor's interface, drawn by Aegis (Phase 4): panels, menus, the viewport.
-    private com.aengine.editor.EditorShell shell;
+    private com.aengine.editor.gui.EditorShell shell;
 
     // Dedicated physics thread — 120 Hz fixed-timestep loop, fully decoupled from the render rate.
     // All ECS Transform writes from the physics side are guarded by physicsThread.getSyncLock().
@@ -131,7 +131,7 @@ public class Main extends Engine {
 
         // The interface: panels registered, the screen built from the layouts in line, the
         // theme and the language applied. See EditorShell.
-        shell = new com.aengine.editor.EditorShell(getWindow());
+        shell = new com.aengine.editor.gui.EditorShell(getWindow());
         shell.showProject(activeProjectPath);
         
         // Atmospheric sky blue background clear color registration (0.45f, 0.65f, 0.85f, 1.0f) 

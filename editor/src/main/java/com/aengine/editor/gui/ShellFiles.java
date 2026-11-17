@@ -1,4 +1,4 @@
-package com.aengine.editor;
+package com.aengine.editor.gui;
 
 import com.aengine.aegis.AegisLayoutFile;
 import com.aengine.aegis.AegisLocale;

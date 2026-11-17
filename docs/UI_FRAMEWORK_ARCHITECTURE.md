@@ -677,6 +677,18 @@ AEngine/
 └── editor/             editor panels built with :ui; depends on both
 ```
 
+Inside `:editor`, the interface has a package of its own, apart from what the editor does:
+
+```
+com.aengine.editor            what the editor does — EditorState, EntityFactory, SceneSerializer
+com.aengine.editor.gui        the interface — EditorShell, FactoryLayout, ShellFiles, ThemeWatcher
+com.aengine.editor.gui.panels one class per panel, as they are made
+```
+
+`gui` reads the editor's state and calls into it; nothing outside `gui` imports it — the same
+one-way rule `:ui` keeps towards `:editor`, one level down. It stays in `:editor`, not `:ui`: it
+knows scenes and entities, and `:ui` must not.
+
 Directories are short; published artifacts are not. `archivesName` keeps the jars and Maven
 coordinates as `aengine-core`, `aengine-ui` and `aengine-editor`, so the names stay
 unambiguous outside this repository.
