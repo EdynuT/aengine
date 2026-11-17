@@ -20,12 +20,12 @@ not been reproduced in the running editor.
 | 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` | **Fixed** |
 | 9 | Low (latent) | Physics | `PhysicsThread` cannot be restarted after `cleanup` | **Fixed** |
 | 10 | Medium | Graphics / UI | The UI pass turns depth testing back on in 2D mode | **Fixed** |
-| 11 | Low (latent) | Graphics | `Renderer2D.flush` redraws quads already drawn | Open |
-| 12 | Low | Graphics | A texture still loading shows whatever was on its slot | Open |
-| 13 | Low (latent) | Graphics | `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO | Open |
-| 14 | Low | Graphics | `OpenGLTexture` can leak decoded pixels | Open |
+| 11 | Low (latent) | Graphics | `Renderer2D.flush` redraws quads already drawn | **Fixed** |
+| 12 | Low | Graphics | A texture still loading shows whatever was on its slot | **Fixed** |
+| 13 | Low (latent) | Graphics | `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO | **Fixed** |
+| 14 | Low | Graphics | `OpenGLTexture` can leak decoded pixels | **Fixed** |
 | 15 | Low | Graphics | The CPU name is read with `wmic`, missing on recent Windows | **Fixed** |
-| 16 | Low | Graphics | Per-frame allocations on paths documented as allocation-free | Open |
+| 16 | Low | Graphics | Per-frame allocations on paths documented as allocation-free | **Fixed** |
 | 17 | Medium | Assets | Texture hot reload misses files whose names have capitals | **Fixed** |
 | 18 | Low | Tooling | `ProjectWizard` writes the project name into JSON unescaped | **Fixed** |
 | 19 | Low (latent) | UI | A clip pushed past 32 levels unbalances the clip stack | **Fixed** |
@@ -257,6 +257,9 @@ frame today (2D mode draws only quads, 3D mode only meshes), so nothing shows ye
 **Fix direction:** empty the batch after a flush (as `nextBatch` does), keeping the texture
 slots consistent.
 
+**Fixed:** `flush` empties the batch (vertices, indices and texture slots) after drawing, so
+`nextBatch` is now just a flush. No automated test: it needs a GL context.
+
 ## 12. A texture still loading shows whatever was on its slot
 
 **Where:** `OpenGLTexture.bind` in
@@ -270,6 +273,10 @@ hot reload, a sprite samples whatever texture was last bound to that unit, possi
 sprite's image, instead of a neutral placeholder.
 
 **Fix direction:** bind a 1×1 white (or checkerboard) placeholder while loading or failed.
+
+**Fixed:** until a texture's first upload, `bind` binds a shared 1×1 white texture, so a
+sprite shows its own colour; during a hot reload the previous image stays bound instead.
+Checked by running the editor in 2D; no automated test, since it needs a GL context.
 
 ## 13. `OpenGLDynamicMesh.upload` binds its index buffer outside its VAO
 
@@ -285,6 +292,9 @@ should be bound when the UI uploads, and this is not expected to show today.
 
 **Fix direction:** bind the mesh's VAO before binding the EBO in `upload` (and unbind after).
 
+**Fixed:** `upload` binds the mesh's own VAO around the EBO update and unbinds it after.
+Checked by running the editor (the interface draws whole); no automated test.
+
 ## 14. `OpenGLTexture` can leak decoded pixels
 
 **Where:** `OpenGLTexture.cleanup`, `OpenGLTexture.reload`.
@@ -298,6 +308,11 @@ that overwrites the first buffer without freeing it.
 
 **Fix direction:** have the worker check a "disposed" flag before publishing, and free any
 pending pixels at the start of `reload`.
+
+**Fixed:** pending pixels change hands under the texture's lock. A decode that finishes
+after `cleanup` sees the `disposed` flag and frees its own pixels; `reload` and a new decode
+free pixels that never reached the GPU before replacing them. No automated test: the timing
+windows need the GL thread and the decode pool.
 
 ## 15. The CPU name is read with `wmic`, missing on recent Windows
 
@@ -332,6 +347,10 @@ editor uses for sprites, is allocation-free.
 
 **Fix direction:** reuse scratch objects as `drawEntityQuad` does, and precompute the
 `u_Textures[i]` names once in `init`.
+
+**Fixed:** `drawQuad` reuses the scratch vector `drawEntityQuad` uses and a shared white
+tint, `beginScene` reads the uniform names built once in `init`, and `drawPlane`/`drawCube`
+reuse one scratch matrix.
 
 ## 17. Texture hot reload misses files whose names have capitals
 

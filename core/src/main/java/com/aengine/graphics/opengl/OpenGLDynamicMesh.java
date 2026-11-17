@@ -90,8 +90,12 @@ public final class OpenGLDynamicMesh implements DynamicMeshAPI {
         vbo.bind();
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertexStaging);
 
+        // The index-buffer binding belongs to the bound VAO: bind this mesh's own, or the
+        // EBO would replace the index buffer of whichever VAO happens to be current.
+        vao.bind();
         ebo.bind();
         glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, indexStaging);
+        vao.unbind();
     }
 
     @Override
