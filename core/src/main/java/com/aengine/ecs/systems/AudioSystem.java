@@ -18,8 +18,9 @@ import static org.lwjgl.openal.AL10.*;
  *       do not follow the camera's rotation.</li>
  *   <li>For every entity with a {@link TransformComponent} and an
  *       {@link AudioSourceComponent}: on the first frame, loads the audio buffer, creates
- *       the source, applies the acoustic properties and starts it if
- *       {@code playOnAwake}; on every frame, moves the source to the transform's position.</li>
+ *       the source and starts it if {@code playOnAwake}; on every frame, moves the source to the
+ *       transform's position, sends the acoustic properties as they are now and reads back
+ *       whether the source is playing.</li>
  * </ol>
  *
  * <p>Requires {@link com.aengine.audio.AudioDevice#init()} to have run, and must be
@@ -59,24 +60,29 @@ public final class AudioSystem extends System {
                 if (audio.bufferId != -1) {
                     audio.sourceId = alGenSources();
                     alSourcei(audio.sourceId, AL_BUFFER, audio.bufferId);
-                    alSourcei(audio.sourceId, AL_LOOPING, audio.loop ? AL_TRUE : AL_FALSE);
-                    alSourcef(audio.sourceId, AL_PITCH, audio.pitch);
-                    alSourcef(audio.sourceId, AL_GAIN, audio.gain);
-                    alSourcef(audio.sourceId, AL_REFERENCE_DISTANCE, audio.referenceDistance);
-                    alSourcef(audio.sourceId, AL_MAX_DISTANCE, audio.maxDistance);
-                    
-                    if (audio.playOnAwake) {
-                        alSourcePlay(audio.sourceId);
-                        audio.isPlaying = true;
-                    }
+                    applyProperties(audio);
+
+                    if (audio.playOnAwake) alSourcePlay(audio.sourceId);
                 }
                 audio.requiresHardwareInit = false;
             }
 
-            // Dynamic Positional Synchronization at 60Hz
+            // Every frame: the position, the properties as the component holds them now,
+            // and whether the source is still playing.
             if (audio.sourceId != -1) {
                 alSource3f(audio.sourceId, AL_POSITION, t.position.x, t.position.y, t.position.z);
+                applyProperties(audio);
+                audio.isPlaying = alGetSourcei(audio.sourceId, AL_SOURCE_STATE) == AL_PLAYING;
             }
         }
+    }
+
+    /** Sends the component's acoustic properties to its source. */
+    private static void applyProperties(AudioSourceComponent audio) {
+        alSourcei(audio.sourceId, AL_LOOPING, audio.loop ? AL_TRUE : AL_FALSE);
+        alSourcef(audio.sourceId, AL_PITCH, audio.pitch);
+        alSourcef(audio.sourceId, AL_GAIN, audio.gain);
+        alSourcef(audio.sourceId, AL_REFERENCE_DISTANCE, audio.referenceDistance);
+        alSourcef(audio.sourceId, AL_MAX_DISTANCE, audio.maxDistance);
     }
 }

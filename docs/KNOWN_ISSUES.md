@@ -15,10 +15,10 @@ not been reproduced in the running editor.
 | 3 | Medium | Physics | OBB colliders read rotation as radians; everything else uses degrees | **Fixed** |
 | 4 | Medium | Physics | The broad phase can miss spheres and rotated OBBs | **Fixed** |
 | 5 | Low | Physics | Two bodies at exactly the same position never separate | **Fixed** |
-| 6 | Low (latent) | ECS | Destroying an entity twice makes two new entities share an ID | Open |
-| 7 | Low | Audio | Audio properties apply once; `isPlaying` never resets | Open |
-| 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` | Open |
-| 9 | Low (latent) | Physics | `PhysicsThread` cannot be restarted after `cleanup` | Open |
+| 6 | Low (latent) | ECS | Destroying an entity twice makes two new entities share an ID | **Fixed** |
+| 7 | Low | Audio | Audio properties apply once; `isPlaying` never resets | **Fixed** |
+| 8 | Low (latent) | Audio | `AudioDevice` does not guard against repeated `init`/`cleanup` | **Fixed** |
+| 9 | Low (latent) | Physics | `PhysicsThread` cannot be restarted after `cleanup` | **Fixed** |
 | 10 | Medium | Graphics / UI | The UI pass turns depth testing back on in 2D mode | **Fixed** |
 | 11 | Low (latent) | Graphics | `Renderer2D.flush` redraws quads already drawn | Open |
 | 12 | Low | Graphics | A texture still loading shows whatever was on its slot | Open |
@@ -161,6 +161,10 @@ pending-delete marker, so this is not expected to trigger today.
 **Fix direction:** ignore IDs that are not active, e.g. by checking `activeEntities` or
 keeping a per-ID alive flag.
 
+**Fixed:** `destroyEntity` returns at once for an ID that is not in `activeEntities`, so a
+repeated destroy (or one of an ID never created) queues nothing. Covered by `RegistryTest`
+(core).
+
 ## 7. Audio properties apply once; `isPlaying` never resets
 
 **Where:** `AudioSystem.update` in `core/src/main/java/com/aengine/ecs/systems/AudioSystem.java`.
@@ -175,6 +179,11 @@ effect, and `isPlaying` stays `true` after a one-shot sound ends.
 **Fix direction:** push changed properties to the source each frame (or on change), and read
 `AL_SOURCE_STATE` to keep `isPlaying` accurate.
 
+**Fixed:** `AudioSystem` sends the five properties to each source every frame, beside its
+position, and reads `AL_SOURCE_STATE` back into `isPlaying`, which now turns false when a
+one-shot sound ends. Five OpenAL calls per source per frame. No automated test: it needs an
+OpenAL device.
+
 ## 8. `AudioDevice` does not guard against repeated `init`/`cleanup`
 
 **Where:** `core/src/main/java/com/aengine/audio/AudioDevice.java`.
@@ -187,6 +196,10 @@ is logged but initialisation continues.
 handles again. Neither happens in the current startup and shutdown path.
 
 **Fix direction:** make both calls idempotent by checking and clearing the handles.
+
+**Fixed:** `init` returns when the device is already open, and closes the device again if
+the context cannot be created; `cleanup` resets both handles, so a second call does nothing
+and a later `init` opens the device afresh. No automated test: it needs an OpenAL device.
 
 ## 9. `PhysicsThread` cannot be restarted after `cleanup`
 
@@ -201,6 +214,12 @@ not do this today; it pauses with `setPaused` instead.
 
 **Fix direction:** document it (already done in the Javadoc) or wrap the loop in a
 restartable owner instead of extending `Thread`.
+
+**Fixed:** `PhysicsThread` owns its Java thread instead of extending `Thread`: `init` starts
+a new one each time, `cleanup` stops it, and `isRunning` tells which. A loop runs only while
+it is still the current worker, so a thread that outlives the 2-second wait in `cleanup`
+stops at its next check even if `init` has started another. Covered by `PhysicsThreadTest`
+(core).
 
 ## 10. The UI pass turns depth testing back on in 2D mode
 

@@ -105,16 +105,16 @@ public final class Registry {
     /**
      * Destroys an entity: removes its components from every pool and queues its ID for reuse.
      *
-     * <p>The call is not guarded against repeats. Destroying the same ID twice queues it
-     * twice, and two later {@link #createEntity()} calls would then return the same ID.</p>
+     * <p>An ID that is not alive (never created, or already destroyed) is ignored, so a
+     * repeated destroy cannot queue the same ID twice for reuse.</p>
      *
      * @param entity the entity to destroy
      */
     public void destroyEntity(int entity) {
+        if (!activeEntities.remove(Integer.valueOf(entity))) return;
         Logger.debug(Logger.System.CORE, "Initiating global teardown sequence for Entity ID: %d", entity);
         freeEntities.add(entity);
-        activeEntities.remove(Integer.valueOf(entity));
-        
+
         for (Map.Entry<Class<?>, ComponentPool<?>> entry : componentPools.entrySet()) {
             entry.getValue().remove(entity);
         }
