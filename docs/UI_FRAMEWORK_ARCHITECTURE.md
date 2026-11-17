@@ -2256,6 +2256,14 @@ the history can outlive a play.
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.
+- **A theme and layout selector — soon.** Today the user's own `layouts/default.json`, which
+  the editor writes when a dock is resized, hides the installation's file of the same name, so
+  a designer editing the installed layout sees nothing change. The plan, after Unity's
+  *Window › Layouts*: the arrangement the user adjusts goes to a file of its own, recording the
+  layout it came from, and never over a layout file; *View › Layout* lists the installed and
+  the user's layouts and loads the one chosen afresh, without restarting; a theme list, the
+  choice kept in `editor.json`. Until then the status bar shows the theme and the layout in
+  use and whose each is — yours, installed or factory — and the log says where each file is.
 
 **Later, a phase of its own — plugins.** Behaviour other developers add, without the files
 becoming more than data: a jar registers actions and panels through a public engine API, and a

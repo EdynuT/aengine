@@ -41,6 +41,34 @@ public final class ShellFiles {
 
     private ShellFiles() { }
 
+    /** Whose a theme or a layout is: in the order the status bar's labels for it are made. */
+    public enum Origin {
+        /** The user's directory: made or changed by the user, or written by the editor. */
+        USER("yours"),
+        /** The installation's: what the engine ships. */
+        INSTALLATION("installed"),
+        /** Compiled into the engine: no file was found, or none could be used. */
+        FACTORY("factory");
+
+        private final String word;
+        Origin(String word) { this.word = word; }
+
+        /** @return how the log says it */
+        public String word() { return word; }
+    }
+
+    /**
+     * Whose a theme or layout is, from where it was read: its {@code source()}.
+     *
+     * @param source a file path, {@code "factory"} for the factory theme, or
+     *               {@link FactoryLayout#SOURCE}
+     * @return the origin
+     */
+    public static Origin originOf(String source) {
+        if (source.equals("factory") || source.equals(FactoryLayout.SOURCE)) return Origin.FACTORY;
+        return Path.of(source).toAbsolutePath().startsWith(userDir()) ? Origin.USER : Origin.INSTALLATION;
+    }
+
     /**
      * {@code <install>/ui/}: the shipped defaults. {@code aengine.home} if set, else the working directory.
      *

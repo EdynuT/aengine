@@ -74,6 +74,7 @@ public final class AegisScreens {
     private final Map<String, AegisLayoutFile.Node> builtFrom = new HashMap<>();
     private final Map<String, Map<AegisLayoutFile.Node, Integer>> builtNodes = new HashMap<>();
     private final Map<String, Integer> builtRoots = new HashMap<>();
+    private final Map<String, AegisLayoutFile> builtFile = new HashMap<>();
 
     /**
      * Each panel as code made it, before any layout file set its size, spacing or alignment —
@@ -210,6 +211,7 @@ public final class AegisScreens {
             int built = build.node(root, AegisLayout.NONE);
             this.widgets.markScreen(built);   // drawn as the window's background
             builtFrom.put(screen, root);
+            builtFile.put(screen, file);
             builtNodes.put(screen, build.handles);
             builtRoots.put(screen, built);
             build.registerDocks(root, null);
@@ -477,8 +479,18 @@ public final class AegisScreens {
         builtFrom.remove(screen);
         builtNodes.remove(screen);
         builtRoots.remove(screen);
+        builtFile.remove(screen);
         return build(screen, inLine);
     }
+
+    /**
+     * The file a screen was built from — the first in line that described it without errors —
+     * so the editor can say which layout is in use, and whose.
+     *
+     * @param screen a screen {@link #build} built
+     * @return the file, or {@code null} for a screen not built
+     */
+    public AegisLayoutFile builtFrom(String screen) { return builtFile.get(screen); }
 
     private boolean isUnder(int node, int above) {
         for (int up = node; up != AegisLayout.NONE; up = layout.parent(up)) if (up == above) return true;

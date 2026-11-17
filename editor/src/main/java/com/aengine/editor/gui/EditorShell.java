@@ -84,6 +84,15 @@ public final class EditorShell {
     private final int labelEditing, labelPlaying, labelPaused;
     private final int labelFpsValue, labelEntitiesValue, labelProject;
 
+    /**
+     * Which theme and which layout are in use, and whose — the user's, the installation's or
+     * the factory's — shown on the status bar, so a copy of the user's hiding the installed
+     * file is never a surprise. The names are code's text; the origins, three translatable
+     * labels each, of which one is shown, as the scene's state is.
+     */
+    private final int labelThemeName, labelLayoutName;
+    private final int[] labelThemeOrigin = new int[3], labelLayoutOrigin = new int[3];
+
     /** Reused every frame to write the status bar's numbers into: §9, nothing allocated. */
     private final StringBuilder statusText = new StringBuilder(16);
 
@@ -233,6 +242,18 @@ public final class EditorShell {
         int statusSpace = layout.box(status);
         layout.setNodeName(statusSpace, "boxStatusSpace");
         layout.setGrow(statusSpace, 1.0f);
+        ae.label(status, "labelTheme", "Theme");
+        labelThemeName = ae.label(status, "labelThemeName", "");
+        labelThemeOrigin[0] = ae.label(status, "labelThemeYours",     "(yours)");
+        labelThemeOrigin[1] = ae.label(status, "labelThemeInstalled", "(installed)");
+        labelThemeOrigin[2] = ae.label(status, "labelThemeFactory",   "(factory)");
+        ae.separator(status, "separatorTheme");
+        ae.label(status, "labelLayout", "Layout");
+        labelLayoutName = ae.label(status, "labelLayoutName", "");
+        labelLayoutOrigin[0] = ae.label(status, "labelLayoutYours",     "(yours)");
+        labelLayoutOrigin[1] = ae.label(status, "labelLayoutInstalled", "(installed)");
+        labelLayoutOrigin[2] = ae.label(status, "labelLayoutFactory",   "(factory)");
+        ae.separator(status, "separatorLayout");
         labelProject = ae.label(status, "labelProject", "");
         showPlayState(false, false);
 
@@ -265,6 +286,28 @@ public final class EditorShell {
         ShellFiles.reportLocale(locale, tag, check != null ? Path.of(check) : null);
         showDocksInMenu();
         giveDocksTheirMenu();
+        showSources(true);
+    }
+
+    /**
+     * Shows on the status bar the theme and the layout in use, and whose each is; with
+     * {@code log}, says it in the log too, with where each file is.
+     */
+    private void showSources(boolean log) {
+        ShellFiles.Origin themeOrigin = ShellFiles.originOf(theme.source());
+        AegisLayoutFile layoutFile = screens.builtFrom("editor");
+        ShellFiles.Origin layoutOrigin = ShellFiles.originOf(layoutFile.source());
+        ae.setLabel(labelThemeName, theme.name());
+        ae.setLabel(labelLayoutName, layoutFile.name());
+        for (int i = 0; i < 3; i++) {
+            layout.setHidden(labelThemeOrigin[i],  i != themeOrigin.ordinal());
+            layout.setHidden(labelLayoutOrigin[i], i != layoutOrigin.ordinal());
+        }
+        if (log) {
+            Logger.info(Logger.System.UI, "Interface: theme \"%s\" (%s, %s); layout \"%s\" (%s, %s).",
+                theme.name(), themeOrigin.word(), theme.source(),
+                layoutFile.name(), layoutOrigin.word(), layoutFile.source());
+        }
     }
 
     /** Gives the bar of every tabbed pane holding a dock the docks' context menu. */
@@ -312,6 +355,7 @@ public final class EditorShell {
         showDocksInMenu();
         giveDocksTheirMenu();
         Logger.info(Logger.System.UI, "Layout restored.");
+        showSources(true);
     }
 
     /** A dock's panel with nothing in it yet but its title. */
@@ -348,6 +392,7 @@ public final class EditorShell {
             AegisTheme reloaded = ShellFiles.reloadTheme(themeName, theme);
             if (reloaded != theme) {
                 theme = reloaded;
+                showSources(false);
                 ae.applyTheme(theme, root);
             }
         }
