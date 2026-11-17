@@ -116,6 +116,24 @@ class AegisWidgetsTest {
     }
 
     @Test
+    void altGrIsNotCtrlInATextField() {
+        // Windows reports AltGr as Control plus Alt (KNOWN_ISSUES #20).
+        int field = ae.textField(shell.root, "fieldName", 32);
+        shell.tab();
+        shell.type("Player");
+
+        shell.key(Keys.Z, Keys.MOD_CONTROL | Keys.MOD_ALT);
+        assertEquals("Player", ae.text(field).toString(), "AltGr+Z does not undo");
+        shell.key(Keys.A, Keys.MOD_CONTROL | Keys.MOD_ALT);
+        shell.waitMillis(2000);   // a pause, seen by a frame: what is typed next is an undo step of its own
+        shell.frame();
+        shell.type("!");
+        assertEquals("Player!", ae.text(field).toString(), "AltGr+A selected nothing, so typing appends");
+        shell.key(Keys.Z, Keys.MOD_CONTROL);
+        assertEquals("Player", ae.text(field).toString(), "Ctrl alone still undoes");
+    }
+
+    @Test
     void aTextFieldRefusesControlCharacters() {
         int field = ae.textField(shell.root, "fieldName");
         shell.tab();

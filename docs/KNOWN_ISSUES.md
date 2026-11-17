@@ -29,7 +29,7 @@ not been reproduced in the running editor.
 | 17 | Medium | Assets | Texture hot reload misses files whose names have capitals | Open |
 | 18 | Low | Tooling | `ProjectWizard` writes the project name into JSON unescaped | Open |
 | 19 | Low (latent) | UI | A clip pushed past 32 levels unbalances the clip stack | Open |
-| 20 | Low | UI | On Windows, AltGr shortcuts can fire Ctrl shortcuts in text fields | Open |
+| 20 | Low | UI | On Windows, AltGr shortcuts can fire Ctrl shortcuts in text fields | **Fixed** |
 
 ---
 
@@ -343,3 +343,7 @@ copy the selection. Characters typed with AltGr on other letters of that set beh
 way on other layouts. Linux is not affected.
 
 **Fix direction:** treat a key as a Ctrl shortcut only when Alt is not also held.
+
+**Fixed:** `Keys.isCtrlShortcut(mods)` — Control held, Alt not — is what the text fields and
+the editor's own keys (Ctrl+S, Ctrl+R, Ctrl+Z, Ctrl+Y) test now, so AltGr+R typing ® no longer
+reloads the theme either. Guarded by `AegisWidgetsTest.altGrIsNotCtrlInATextField`.

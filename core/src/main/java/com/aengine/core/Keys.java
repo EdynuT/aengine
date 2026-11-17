@@ -205,6 +205,18 @@ public final class Keys {
     /** Bit set in {@link Input#eventMods(int)} while either Alt is held. */
     public static final int MOD_ALT     = GLFW_MOD_ALT;
 
+    /**
+     * Whether modifiers make a Ctrl shortcut: Control held, Alt not. Windows reports AltGr as
+     * Control plus Alt, so a character typed with AltGr — "₢" is AltGr+C on a Brazilian
+     * keyboard — would otherwise also fire Ctrl+C.
+     *
+     * @param mods modifier bits, as {@link Input#eventMods(int)} gives them
+     * @return {@code true} for a Ctrl shortcut
+     */
+    public static boolean isCtrlShortcut(int mods) {
+        return (mods & MOD_CONTROL) != 0 && (mods & MOD_ALT) == 0;
+    }
+
     // ── Mouse buttons (used with Input.isMouseButtonPressed) ─────────────────
     /** The left mouse button. */
     public static final int MOUSE_LEFT   = GLFW_MOUSE_BUTTON_LEFT;

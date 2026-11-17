@@ -3476,7 +3476,7 @@ public final class AegisWidgets {
         StringBuilder text = fieldText[node];
         int at = caret[node];
         boolean shift     = (mods & Keys.MOD_SHIFT) != 0;
-        boolean ctrl      = (mods & Keys.MOD_CONTROL) != 0;
+        boolean ctrl      = Keys.isCtrlShortcut(mods);   // not AltGr, which Windows reports as Ctrl+Alt
         boolean selection = anchor[node] != at;
         boolean box       = kind[node] == TEXT_BOX;
 
