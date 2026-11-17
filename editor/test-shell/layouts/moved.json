@@ -13,9 +13,11 @@
           { "type": "widget", "widget": "toggleMove" },
           { "type": "widget", "widget": "toggleRotate" },
           { "type": "widget", "widget": "toggleScale" },
+          { "type": "widget", "widget": "boxSpaceBefore" },
           { "type": "widget", "widget": "togglePlay" },
           { "type": "widget", "widget": "togglePause" },
-          { "type": "widget", "widget": "buttonStop" }
+          { "type": "widget", "widget": "buttonStop" },
+          { "type": "widget", "widget": "boxSpaceAfter" }
         ]},
         { "type": "row", "grow": 1, "gap": 6, "alignY": "stretch", "children": [
           { "type": "tabs", "grow": 1, "panels": ["viewport"] },

@@ -178,7 +178,9 @@ public final class EditorShell {
 
         // Play and Pause stay pressed while the scene plays or is paused; Pause and Stop can
         // be used only while it plays. A box that grows on each side keeps them in the middle.
+        // The spacers are named, as boxes are (§7, Conventions), so a layout file can place them.
         int spaceBefore = layout.box(toolbar);
+        layout.setNodeName(spaceBefore, "boxSpaceBefore");
         layout.setGrow(spaceBefore, 1.0f);
         togglePlay = ae.toggleButton(toolbar, "togglePlay", "");
         ae.setIcon(togglePlay, "play");
@@ -190,6 +192,7 @@ public final class EditorShell {
         ae.setIcon(buttonStop, "stop");
         ae.setTooltip(buttonStop, "Stop and go back to the scene as it was (F5)");
         int spaceAfter = layout.box(toolbar);
+        layout.setNodeName(spaceAfter, "boxSpaceAfter");
         layout.setGrow(spaceAfter, 1.0f);
 
         // The docks. Empty for now, each showing its title on its tab.
@@ -228,6 +231,7 @@ public final class EditorShell {
         ae.setLabel(labelFpsValue, "0");        // numbers are code's text from the start:
         ae.setLabel(labelEntitiesValue, "0");   // nothing for a locale to translate
         int statusSpace = layout.box(status);
+        layout.setNodeName(statusSpace, "boxStatusSpace");
         layout.setGrow(statusSpace, 1.0f);
         labelProject = ae.label(status, "labelProject", "");
         showPlayState(false, false);
