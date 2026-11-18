@@ -90,3 +90,7 @@ tasks.named('run') {
         systemProperty 'aengine.localeCheck', layout.buildDirectory.dir('locale-check').get().asFile.absolutePath
     }
 }
+
+
+// Packaging the editor as a native application: ./gradlew :editor:packageApp. See packaging.gradle.
+apply from: 'packaging.gradle'
