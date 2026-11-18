@@ -40,4 +40,19 @@ class AegisScaleTest {
         float right = shell.layout.x(dialog) + shell.layout.width(dialog);
         assertTrue(right <= 1000.0f + 0.5f, "the dialog ends at " + right);
     }
+
+    @Test
+    void textMeasuresTheSameInUnitsAndIsBakedForThePixels() {
+        String text = "Hierarquia, Viewport e Inspetor";
+        float atOne = shell.aegis.measure(text);
+        int atlasAtOne = shell.aegis.font().atlasHeight();
+
+        shell.aegis.begin(1500, 900, 1.5f);   // the scale changed: font and icons baked again
+        float atOneAndHalf = shell.aegis.measure(text);
+        shell.aegis.end();
+
+        assertEquals(atOne, atOneAndHalf, atOne * 0.02f, "the same width in units, within rounding");
+        assertTrue(shell.aegis.font().atlasHeight() >= atlasAtOne * 1.5f - 1, "the glyphs are rasterised larger");
+        assertEquals(18.0f, shell.aegis.font().pixelHeight(), "the size is still in units");
+    }
 }

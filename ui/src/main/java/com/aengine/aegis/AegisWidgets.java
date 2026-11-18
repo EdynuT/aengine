@@ -678,10 +678,16 @@ public final class AegisWidgets {
         for (Map.Entry<String, String> title : aegis.screens().panelTitles().entrySet()) {
             locale.text(title.getKey() + "." + AegisLocale.TITLE, title.getValue());
         }
-        for (int node = 0; node < nodes; node++) {
-            if (kind[node] != NOT_A_WIDGET) fitToContent(node);
-        }
+        refitAll();
         locale.report();
+    }
+
+    /** Fits every widget to its content again: after the language or the font changed. */
+    void refitAll() {
+        int nodes = layout.nodeCount();
+        for (int node = 0; node < nodes; node++) {
+            if (kind[node] != NOT_A_WIDGET && layout.isInUse(node)) fitToContent(node);
+        }
     }
 
     /**

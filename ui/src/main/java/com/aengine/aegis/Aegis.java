@@ -74,6 +74,12 @@ public final class Aegis {
     private int   framebufferHeight;
     private float scale = 1.0f;
 
+    /** What the font and the icons were loaded from, to bake them again at another scale, and the scale they were baked for. */
+    private String fontPath, iconsMap;
+    private float  fontSize, iconsSize;
+    private int    fontAtlasWidth, fontAtlasHeight;
+    private float  bakedScale = 1.0f;
+
     /**
      * Creates the renderer, draw list, layout, tree and widgets. No font is loaded yet; call
      * {@link #loadFont} before drawing text. Must be called on the GL thread.
@@ -121,10 +127,47 @@ public final class Aegis {
      */
     public AegisFont loadFont(String resourcePath, float pixelHeight,
                               int atlasWidth, int atlasHeight) {
-        AegisFont loaded = new AegisFont(resourcePath, pixelHeight, atlasWidth, atlasHeight, renderer != null);
+        AegisFont loaded = new AegisFont(resourcePath, pixelHeight, atlasWidth, atlasHeight, renderer != null, bakedScale);
         if (font != null) font.cleanup();
         font = loaded;
+        fontPath = resourcePath;
+        fontSize = pixelHeight;
+        fontAtlasWidth  = atlasWidth;
+        fontAtlasHeight = atlasHeight;
         return loaded;
+    }
+
+    /**
+     * The scale the font and the icons are baked for, before any frame says it: call it before
+     * {@link #loadFont} and {@link #loadIcons} with the screen's scale, so they are baked once,
+     * at the right size, rather than at 100 % and again at the first frame. Afterwards it bakes
+     * them again, as a frame at another scale would.
+     *
+     * @param scale pixels per unit; anything not positive is taken as 1
+     */
+    public void bakeFor(float scale) {
+        float s = scale > 0.0f && Float.isFinite(scale) ? scale : 1.0f;
+        if (s != bakedScale) rebake(s);
+    }
+
+    /**
+     * Bakes the font and the icons again for a new scale — the screen's scale changed, or the
+     * window moved to a screen set differently — so text stays sharp, and fits every widget to
+     * its text again: the measures in units come out a fraction different from a new bake.
+     */
+    private void rebake(float scale) {
+        bakedScale = scale;
+        if (fontPath != null) {
+            AegisFont loaded = new AegisFont(fontPath, fontSize, fontAtlasWidth, fontAtlasHeight, renderer != null, scale);
+            if (font != null) font.cleanup();
+            font = loaded;
+        }
+        if (iconsMap != null) {
+            AegisIcons loaded = new AegisIcons(iconsMap, iconsSize, renderer != null, scale);
+            if (icons != null) icons.cleanup();
+            icons = loaded;
+        }
+        widgets.refitAll();
     }
 
     /**
@@ -138,9 +181,11 @@ public final class Aegis {
      * @throws IllegalStateException for a set that cannot be read, a bug in the engine
      */
     public AegisIcons loadIcons(String mapResource, float pixelHeight) {
-        AegisIcons loaded = new AegisIcons(mapResource, pixelHeight, renderer != null);
+        AegisIcons loaded = new AegisIcons(mapResource, pixelHeight, renderer != null, bakedScale);
         if (icons != null) icons.cleanup();
         icons = loaded;
+        iconsMap  = mapResource;
+        iconsSize = pixelHeight;
         return loaded;
     }
 
@@ -191,6 +236,7 @@ public final class Aegis {
      */
     public void begin(int framebufferWidth, int framebufferHeight, float scale) {
         this.scale = scale > 0.0f && Float.isFinite(scale) ? scale : 1.0f;
+        if (this.scale != bakedScale) rebake(this.scale);
         this.framebufferWidth  = framebufferWidth;
         this.framebufferHeight = framebufferHeight;
         viewportWidth  = framebufferWidth  / this.scale;

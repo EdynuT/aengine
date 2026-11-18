@@ -154,6 +154,7 @@ public final class EditorShell {
         this.history = history;
         this.window  = window;
         aegis = new Aegis(MAX_QUADS);
+        aegis.bakeFor(window.getContentScale());   // text and icons baked once, for this screen's scale
         // 18px Latin-1 is 224 glyphs: 86 rows of the atlas. 128 leaves room for a larger size.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
         // The icons, by the engine's names — a provisional set until the designer's (4b).
