@@ -125,6 +125,8 @@ The framework dynamically switches execution pipelines at startup using JVM comm
 
 ---
 
+Every build command — the development options, the tests and the packaging — is listed in [docs/BUILDING.md](docs/BUILDING.md).
+
 ## Troubleshooting: OpenGL not supported
 
 The engine requests an **OpenGL 3.3 Core** context. When the CPU/GPU or its driver cannot provide one, the window never opens and the log shows one of:
