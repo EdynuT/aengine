@@ -2307,13 +2307,31 @@ and status bar have titles too; a layout's `1e39` is reported as too large, not 
   | A window dragged tiny | Panels overlap and menus open outside the window: unusable, as expected |
 
   Still to do: **a minimum window size** (`glfwSetWindowSizeLimits`), set from what the
-  interface needs; **docks that shrink** in small windows, a choice for the factory layout; the
-  **project path** on the status bar, the first thing to cut when it runs out of room; and
-  **scaling above 100 %** (HiDPI), the real test for 4K screens. From reading the code, that
-  last one should break: the pointer arrives in window coordinates while the interface is laid
-  out in framebuffer pixels, which differ by the scale, so clicks would land off by that
-  factor; and nothing reads the content scale, so text stays at 18 px on a 4K screen. To be
-  confirmed by running the editor with the system's scaling at 150 % or 200 %.
+  interface needs; **docks that shrink** in small windows, a choice for the factory layout; and
+  the **project path** on the status bar, the first thing to cut when it runs out of room.
+
+**HiDPI ✅ — the display's scale.** At 150 % the editor was drawn a third too small and clicks
+landed off by the scale, as reading the code had predicted: the pointer arrives in window
+coordinates (logical units on Wayland) while the interface was laid out in framebuffer pixels.
+Now, in three steps:
+
+1. **Units.** Aegis lays out and draws in *units*: `begin(framebufferWidth, framebufferHeight,
+   scale)` records a frame framebuffer/scale units wide, the renderer draws it over the whole
+   framebuffer, and clip rectangles are scaled to pixels for `glScissor`. The `Window` reports the
+   content scale and the framebuffer pixels per window coordinate; the pointer becomes units as
+   `coordinate × pixelRatio ÷ scale`, which is right on Wayland (ratio = scale) and on Windows
+   (ratio 1, coordinates already pixels). The scene renders at the viewport's size in pixels.
+2. **Sharp text.** The font and the icons are rasterised at `size × scale` pixels and give every
+   measure in units; glyphs snap to whole pixels, not units, so the atlas is sampled one to one.
+   A layout measures the same at any scale. The editor bakes them once, for the screen's scale,
+   before the first frame (`Aegis.bakeFor`).
+3. **Live changes.** The scale is read every frame: changing it in the system settings, or
+   moving the window to a screen set differently, bakes text and icons again (about 15 ms) and
+   refits every widget.
+
+Seen working on Wayland (KDE) at 100 % and 150 %, switching while open, and moving between a
+2560×1440 monitor at 150 % and a 1920×1080 TV at 100 %. Not yet seen on Windows, where the
+pointer path differs (ratio 1); the formula covers it, a run there will tell.
 
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
