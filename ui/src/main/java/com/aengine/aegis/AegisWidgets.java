@@ -2142,12 +2142,12 @@ public final class AegisWidgets {
 
     /** The rectangle overlays are kept inside: the window, or before the first frame the root. */
     private float boundsW() {
-        int w = aegis.viewportWidth();
+        float w = aegis.viewportWidth();
         return w > 0 ? w : lastRoot != AegisLayout.NONE ? layout.x(lastRoot) + layout.width(lastRoot) : 0.0f;
     }
 
     private float boundsH() {
-        int h = aegis.viewportHeight();
+        float h = aegis.viewportHeight();
         return h > 0 ? h : lastRoot != AegisLayout.NONE ? layout.y(lastRoot) + layout.height(lastRoot) : 0.0f;
     }
 

@@ -63,9 +63,16 @@ public final class Aegis {
     /** The icons widgets draw, or null before loadIcons — step 4b. */
     private AegisIcons icons;
 
-    /** Viewport of the frame being recorded, kept so {@link #end()} can present it. */
-    private int viewportWidth;
-    private int viewportHeight;
+    /**
+     * The frame being recorded: its size in interface units, which everything is laid out
+     * and drawn in, and the framebuffer it is presented to, in pixels. A unit is
+     * {@code scale} pixels — 1 on a screen at 100 %, 1.5 at 150 %.
+     */
+    private float viewportWidth;
+    private float viewportHeight;
+    private int   framebufferWidth;
+    private int   framebufferHeight;
+    private float scale = 1.0f;
 
     /**
      * Creates the renderer, draw list, layout, tree and widgets. No font is loaded yet; call
@@ -161,16 +168,44 @@ public final class Aegis {
     // -----------------------------------------------------------------------------------
 
     /**
-     * Starts a frame. Everything submitted after this lands in one draw list.
+     * Starts a frame at 100 %: a unit is a pixel. See {@link #begin(int, int, float)}.
      *
      * @param width  target width in pixels
      * @param height target height in pixels
      */
     public void begin(int width, int height) {
-        viewportWidth  = width;
-        viewportHeight = height;
-        drawList.begin(width, height);
+        begin(width, height, 1.0f);
     }
+
+    /**
+     * Starts a frame. Everything submitted after this lands in one draw list, in interface
+     * units: the frame is {@code framebufferWidth / scale} units wide, and each unit is drawn
+     * as {@code scale} pixels — so at 150 % the interface is the size the system asks for,
+     * not a third smaller. Solve the layout at {@link #width()} by {@link #height()}, and give
+     * the pointer in units too.
+     *
+     * @param framebufferWidth  the framebuffer's width, in pixels
+     * @param framebufferHeight the framebuffer's height, in pixels
+     * @param scale             pixels per unit: the system's content scale; 1 or more is usual,
+     *                          anything not positive is taken as 1
+     */
+    public void begin(int framebufferWidth, int framebufferHeight, float scale) {
+        this.scale = scale > 0.0f && Float.isFinite(scale) ? scale : 1.0f;
+        this.framebufferWidth  = framebufferWidth;
+        this.framebufferHeight = framebufferHeight;
+        viewportWidth  = framebufferWidth  / this.scale;
+        viewportHeight = framebufferHeight / this.scale;
+        drawList.begin(viewportWidth, viewportHeight);
+    }
+
+    /** @return the frame's width in units, as {@link #begin} set it */
+    public float width()  { return viewportWidth; }
+
+    /** @return the frame's height in units */
+    public float height() { return viewportHeight; }
+
+    /** @return pixels per unit for the frame being recorded */
+    public float scale()  { return scale; }
 
     /**
      * Closes the frame and draws it.
@@ -179,15 +214,15 @@ public final class Aegis {
      * order, every time. Separating them bought no freedom and only offered the chance to
      * forget the second.</p>
      */
-    /** The width of the frame being recorded, as handed to {@link #begin}; 0 before the first. */
-    int viewportWidth()  { return viewportWidth; }
+    /** The width of the frame being recorded, in units; 0 before the first. */
+    float viewportWidth()  { return viewportWidth; }
 
-    /** The height of the frame being recorded; 0 before the first. */
-    int viewportHeight() { return viewportHeight; }
+    /** The height of the frame being recorded, in units; 0 before the first. */
+    float viewportHeight() { return viewportHeight; }
 
     public void end() {
         drawList.end();
-        if (renderer != null) renderer.render(drawList, viewportWidth, viewportHeight);
+        if (renderer != null) renderer.render(drawList, viewportWidth, viewportHeight, framebufferWidth, framebufferHeight, scale);
     }
 
     // -----------------------------------------------------------------------------------

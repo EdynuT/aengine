@@ -43,6 +43,11 @@ public final class EditorShell {
     private static final int MAX_QUADS = 8192;
 
     private final Aegis aegis;
+    private final Window window;
+
+    /** This frame's pixels per interface unit, and the pointer in units. */
+    private float pixelScale = 1.0f;
+    private float pointerX, pointerY;
     private final AegisLayout layout;
     private final AegisTree tree;
     private final AegisWidgets ae;
@@ -147,6 +152,7 @@ public final class EditorShell {
      */
     public EditorShell(Window window, UndoHistory history) {
         this.history = history;
+        this.window  = window;
         aegis = new Aegis(MAX_QUADS);
         // 18px Latin-1 is 224 glyphs: 86 rows of the atlas. 128 leaves room for a larger size.
         aegis.loadFont("/fonts/DejaVuSans/DejaVuSans.ttf", 18.0f, 512, 128);
@@ -635,8 +641,8 @@ public final class EditorShell {
     /**
      * One frame of the interface: input in, solve, update, draw.
      *
-     * @param width            the window's width in pixels
-     * @param height           the window's height in pixels
+     * @param width            the framebuffer's width in pixels
+     * @param height           the framebuffer's height in pixels
      * @param sceneTexture     the scene framebuffer's colour texture, for the viewport
      */
     public void frame(int width, int height, int sceneTexture) {
@@ -661,11 +667,20 @@ public final class EditorShell {
         }
         themeReloadAsked = false;
 
-        aegis.begin(width, height);
-        layout.solve(root, 0.0f, 0.0f, width, height);
+        // The interface is laid out in units, the system's scale apart from the framebuffer's
+        // pixels, so it is the size the system asks for on a screen at 150 % as at 100 %. The
+        // pointer comes in window coordinates: framebuffer pixels per coordinate, over pixels
+        // per unit, turns it into units on every platform.
+        pixelScale = window.getContentScale();
+        aegis.begin(width, height, pixelScale);
+        float unitsW = aegis.width(), unitsH = aegis.height();
+        layout.solve(root, 0.0f, 0.0f, unitsW, unitsH);
 
-        float mouseX = (float) Input.getMouseX();
-        float mouseY = (float) Input.getMouseY();
+        float toUnits = window.getPixelRatio() / aegis.scale();
+        float mouseX = (float) Input.getMouseX() * toUnits;
+        float mouseY = (float) Input.getMouseY() * toUnits;
+        pointerX = mouseX;
+        pointerY = mouseY;
         tree.update(root, mouseX, mouseY, Input.isMouseButtonPressed(0));
 
         // The right button looks around with the camera, so a right press on the viewport
@@ -780,12 +795,12 @@ public final class EditorShell {
         // solved here so nothing is drawn from the old one.
         if (restore) {
             restoreLayout();
-            layout.solve(root, 0.0f, 0.0f, width, height);
+            layout.solve(root, 0.0f, 0.0f, unitsW, unitsH);
         } else if (layoutAsked != null) {
             ShellFiles.Choice asked = layoutAsked;
             layoutAsked = null;
             chooseLayout(asked, layoutAskedBy, layoutAskedAfter);
-            layout.solve(root, 0.0f, 0.0f, width, height);
+            layout.solve(root, 0.0f, 0.0f, unitsW, unitsH);
         }
 
         // Play pressed starts the scene; pressed again, it stops it, as Unity's does. Its
@@ -899,11 +914,20 @@ public final class EditorShell {
     /** @return how far the wheel turned over the viewport this frame */
     public float viewportWheel() { return viewportWheel; }
 
-    /** @return the viewport's width in pixels, as last solved: what the scene renders at */
+    /** @return the viewport's width in interface units, as last solved; times {@link #pixelScale} for pixels */
     public float viewportWidth() { return layout.width(surfaceScene); }
 
-    /** @return the viewport's height in pixels, as last solved */
+    /** @return the viewport's height in interface units, as last solved */
     public float viewportHeight() { return layout.height(surfaceScene); }
+
+    /** @return framebuffer pixels per interface unit this frame: the system's display scale */
+    public float pixelScale() { return pixelScale; }
+
+    /** @return the pointer across the window, in interface units, as this frame read it */
+    public float pointerX() { return pointerX; }
+
+    /** @return the pointer down the window, in interface units */
+    public float pointerY() { return pointerY; }
 
     /** Writes the arrangement down as the user's arrangement of the layout in use. */
     private void saveLayout() {

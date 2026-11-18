@@ -52,22 +52,40 @@ public final class AegisRenderer {
     }
 
     /**
-     * Draws the accumulated geometry.
+     * Draws the accumulated geometry, at 100 %: a unit is a pixel.
      *
      * @param drawList       geometry for this frame
      * @param viewportWidth  target width in pixels
      * @param viewportHeight target height in pixels
      */
     public void render(AegisDrawList drawList, int viewportWidth, int viewportHeight) {
+        render(drawList, viewportWidth, viewportHeight, viewportWidth, viewportHeight, 1.0f);
+    }
+
+    /**
+     * Draws the accumulated geometry, laid out in units, into a framebuffer in pixels. The
+     * shader maps units to the whole framebuffer, so each unit covers {@code scale} pixels;
+     * the clip rectangles, which the GPU takes in pixels, are scaled here — outwards, so a
+     * clip never loses the pixel its edge falls in.
+     *
+     * @param drawList          geometry for this frame, in units
+     * @param unitsWidth        the frame's width in units
+     * @param unitsHeight       the frame's height in units
+     * @param framebufferWidth  the target's width in pixels
+     * @param framebufferHeight the target's height in pixels
+     * @param scale             pixels per unit
+     */
+    public void render(AegisDrawList drawList, float unitsWidth, float unitsHeight,
+                       int framebufferWidth, int framebufferHeight, float scale) {
         int indexCount = drawList.indexCount();
         if (indexCount == 0) return;
 
-        renderer.setRenderTargetSize(viewportWidth, viewportHeight);
+        renderer.setRenderTargetSize(framebufferWidth, framebufferHeight);
         renderer.setDepthTest(false);
         renderer.setBlend(true);
 
         shader.bind();
-        viewportSize.set(viewportWidth, viewportHeight);
+        viewportSize.set(unitsWidth, unitsHeight);
         shader.setVec2("u_ViewportSize", viewportSize);
         shader.setInt("u_Texture", 0);
 
@@ -77,11 +95,12 @@ public final class AegisRenderer {
         // data, so a frame cannot be issued as a single call once anything is clipped.
         int commands = drawList.commandCount();
         for (int i = 0; i < commands; i++) {
-            renderer.setScissor(
-                (int) drawList.commandClipX(i),
-                (int) drawList.commandClipY(i),
-                (int) drawList.commandClipW(i),
-                (int) drawList.commandClipH(i));
+            float left   = drawList.commandClipX(i) * scale;
+            float top    = drawList.commandClipY(i) * scale;
+            float right  = left + drawList.commandClipW(i) * scale;
+            float bottom = top  + drawList.commandClipH(i) * scale;
+            int x = (int) Math.floor(left), y = (int) Math.floor(top);
+            renderer.setScissor(x, y, (int) Math.ceil(right) - x, (int) Math.ceil(bottom) - y);
 
             renderer.bindTexture(0, drawList.commandTexture(i));
 

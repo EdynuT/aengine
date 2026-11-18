@@ -361,10 +361,12 @@ public class Main extends Engine {
     @Override
     protected void onDrawInterface(int sceneTexture) {
         // The interface, drawn by Aegis, with the scene in its viewport; the scene renders at
-        // the viewport's size from the next frame.
+        // the viewport's size from the next frame, in pixels: the viewport is measured in
+        // interface units, which on a screen scaled above 100 % are larger than a pixel.
         shell.showStats(FPSTracker.getCurrentFPS(), registry.getEntityCount());
         shell.frame(getWindow().getWidth(), getWindow().getHeight(), sceneTexture);
-        setSceneSize((int) shell.viewportWidth(), (int) shell.viewportHeight());
+        setSceneSize(Math.round(shell.viewportWidth()  * shell.pixelScale()),
+                     Math.round(shell.viewportHeight() * shell.pixelScale()));
 
         if (shell.saveAsked()) saveCurrentScene();
         // Esc leaves the editor while the scene has focus, as it did before; anywhere else it
@@ -374,7 +376,8 @@ public class Main extends Engine {
         // ── Entity Picking ────────────────────────────────────────────────────
         // A press on the scene → unproject to world space and hit-test every entity's AABB.
         // Only meaningful in 2D orthographic mode.
-        float mouseX = (float) Input.getMouseX(), mouseY = (float) Input.getMouseY();
+        // The pointer in interface units, as the viewport's size is measured.
+        float mouseX = shell.pointerX(), mouseY = shell.pointerY();
         if (shell.viewportPressed()) {
             handleViewportPick(shell.pressNdcX(), shell.pressNdcY());
             dragLastX = mouseX;
