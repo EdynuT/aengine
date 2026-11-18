@@ -1,0 +1,158 @@
+// ── Packaging: the editor as a native application, with a Java runtime of its own ─────────────
+//
+// ./gradlew :editor:packageApp builds build/package/AEngine/: a folder holding the launcher
+// (bin/AEngine, or AEngine.exe on Windows), a trimmed Java runtime, the engine's jars and the
+// installation's files — gui/ and lang/ from src/dist. Nothing needs Java installed to run it.
+// jpackage builds for the system it runs on only: a Windows package is built on Windows.
+
+// The JVM options the editor needs, the same `run` passes: LWJGL's native access and the
+// reflection it does into java.lang and java.nio.
+def editorJvmOptions = [
+    '--enable-native-access=ALL-UNNAMED',
+    '--add-opens=java.base/java.lang=ALL-UNNAMED',
+    '--add-opens=java.base/java.nio=ALL-UNNAMED'
+]
+
+// The Java modules the runtime keeps, from jdeps: the engine's own (base, desktop, sql,
+// unsupported) and what the scripting libraries add (GraalJS's scripting, JVMCI, JFR,
+// management). Everything else in the JDK is left out.
+def runtimeModules = 'java.base,java.desktop,java.sql,jdk.unsupported,' +
+                     'java.scripting,jdk.internal.vm.ci,jdk.jfr,jdk.management'
+
+// The JDK the build compiles with, for its jlink and jpackage.
+def jdkHome = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(25)
+}.map { it.metadata.installationPath.asFile }
+def jdkTool = { String name ->
+    def exe = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "${name}.exe" : name
+    new File(jdkHome.get(), "bin/${exe}").absolutePath
+}
+
+def packageDir = layout.buildDirectory.dir('package')
+
+// What the application carries: the jars installDist gathers, and the installation's files.
+tasks.register('packageInput', Sync) {
+    group = 'distribution'
+    description = 'Gathers the jars and the installation files the package carries.'
+    dependsOn 'installDist'
+    from(layout.buildDirectory.dir('install/editor/lib'))
+    from('src/dist')
+    into(packageDir.map { it.dir('input') })
+}
+
+// A Java runtime holding only the modules above.
+tasks.register('packageRuntime', Exec) {
+    group = 'distribution'
+    description = 'Builds a trimmed Java runtime with jlink.'
+    def out = packageDir.get().dir('runtime').asFile
+    outputs.dir(out)
+    doFirst { delete(out) }
+    commandLine jdkTool('jlink'),
+        '--add-modules', runtimeModules,
+        '--strip-debug', '--no-header-files', '--no-man-pages',
+        '--compress', 'zip-6',
+        '--output', out.absolutePath
+}
+
+// The application folder: launcher, runtime, jars and files. aengine.home is $APPDIR, the
+// folder jpackage puts the jars in, which is where gui/ and lang/ land too.
+tasks.register('packageApp', Exec) {
+    group = 'distribution'
+    description = 'Builds the editor as a native application folder with jpackage.'
+    dependsOn 'packageInput', 'packageRuntime'
+    def dest = packageDir.get().asFile
+    def mainJar = "aengine-editor-${project.version}.jar"
+    doFirst { delete(new File(dest, 'AEngine')) }
+    def javaOptions = (['-Daengine.home=$APPDIR'] + editorJvmOptions).collectMany { ['--java-options', it] }
+    commandLine([jdkTool('jpackage'),
+        '--type', 'app-image',
+        '--name', 'AEngine',
+        '--app-version', project.version.toString(),
+        '--vendor', 'AEngine',
+        '--input', new File(dest, 'input').absolutePath,
+        '--main-jar', mainJar,
+        '--main-class', 'com.aengine.Main',
+        '--runtime-image', new File(dest, 'runtime').absolutePath,
+        '--dest', dest.absolutePath] + javaOptions)
+}
+
+// ── Linux archives: the application folder as a .tar.gz, and as an AppImage ──────────────────
+//
+// ./gradlew :editor:packageTarGz → build/distributions/AEngine-<version>-linux-x86_64.tar.gz:
+// unpack anywhere and run AEngine/bin/AEngine.
+// ./gradlew :editor:packageAppImage → build/distributions/AEngine-<version>-x86_64.AppImage: one
+// file that runs on any distribution. Needs appimagetool, found on the PATH or named with
+// -PappImageTool=/path/to/appimagetool; the build says so when it is missing.
+
+def isLinux = org.gradle.internal.os.OperatingSystem.current().isLinux()
+def distDir = layout.buildDirectory.dir('distributions')
+
+tasks.register('packageTarGz', Tar) {
+    group = 'distribution'
+    description = 'Packs the application folder as a .tar.gz (Linux).'
+    dependsOn 'packageApp'
+    onlyIf('the .tar.gz is the Linux archive') { isLinux }
+    archiveFileName = "AEngine-${project.version}-linux-x86_64.tar.gz"
+    destinationDirectory = distDir
+    compression = Compression.GZIP
+    from(packageDir.map { it.dir('AEngine') }) { into 'AEngine' }
+    // The files keep the permissions they have: the launcher and the runtime's java and its
+    // libraries must stay executable, which Gradle 9's archives drop by default.
+    useFileSystemPermissions()
+}
+
+// The AppDir an AppImage is made from: the application folder, AppRun to start it, and the
+// .desktop entry and icon the system shows it by.
+tasks.register('packageAppDir', Sync) {
+    group = 'distribution'
+    description = 'Lays out the AppDir an AppImage is built from (Linux).'
+    dependsOn 'packageApp'
+    onlyIf('an AppImage is a Linux package') { isLinux }
+    into(packageDir.map { it.dir('AEngine.AppDir') })
+    from(packageDir.map { it.dir('AEngine') })
+    // jpackage's own icon until the engine has one of its own (the designer's).
+    from(packageDir.map { it.file('AEngine/lib/AEngine.png') }) { rename { 'aengine.png' } }
+    doLast {
+        def appDir = destinationDir
+        def appRun = new File(appDir, 'AppRun')
+        appRun.text = '''#!/bin/sh
+# Starts the editor from wherever the AppImage is mounted.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/bin/AEngine" "$@"
+'''
+        appRun.setExecutable(true, false)
+        new File(appDir, 'bin/AEngine').setExecutable(true, false)
+        new File(appDir, 'aengine.desktop').text = """[Desktop Entry]
+Type=Application
+Name=AEngine
+Comment=Game engine and editor
+Exec=AEngine
+Icon=aengine
+Categories=Development;Game;
+Terminal=false
+X-AppImage-Version=${project.version}
+"""
+    }
+}
+
+tasks.register('packageAppImage', Exec) {
+    group = 'distribution'
+    description = 'Builds a single-file AppImage with appimagetool (Linux).'
+    dependsOn 'packageAppDir'
+    onlyIf('an AppImage is a Linux package') { isLinux }
+    def appDir = packageDir.get().dir('AEngine.AppDir').asFile
+    def out = distDir.get().file("AEngine-${project.version}-x86_64.AppImage").asFile
+    def tool = project.findProperty('appImageTool') ?: 'appimagetool'
+    outputs.file(out)
+    doFirst {
+        def found = new File(tool.toString()).canExecute() ||
+            System.getenv('PATH').split(File.pathSeparator).any { new File(it, tool.toString()).canExecute() }
+        if (!found) {
+            throw new GradleException("appimagetool was not found. Install it (on Arch and CachyOS, the AUR package " +
+                "appimagetool-bin) or point to it with -PappImageTool=/path/to/appimagetool.")
+        }
+        out.parentFile.mkdirs()
+    }
+    environment 'ARCH', 'x86_64'
+    commandLine tool, appDir.absolutePath, out.absolutePath
+}
