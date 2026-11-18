@@ -2254,19 +2254,88 @@ one *Move entity*. Stopping the scene clears the history, since it is rebuilt fr
 snapshot and an entity may come back under another number; once entities have ids that last,
 the history can outlive a play.
 
+**4h ✅ — the theme and layout selector.** *View › Theme* and *View › Layout* list the user's
+files under *Yours*, the installation's under *Installed* — each by the name its file gives,
+read again whenever View opens — and the factory's last, the one in use ticked. A theme chosen
+is applied at once; a layout chosen rebuilds the editor screen at once; either is kept in
+`editor.json` in the user's directory (`{"theme": {"origin": "installed", "file": "dark"},
+"layout": {...}}`) for the next start, and `-PthemeFile`/`-PlayoutFile` still name a file for
+one development run. A copy of the same name no longer hides the installed file: both are
+listed. What the user resizes or closes is their **arrangement** of the layout in use, kept in
+`arrangements/<origin>/<file>.json`, one per layout, so no layout file is ever written over
+and going back to a layout finds it as it was left; *Undo my changes to this layout* (until
+4h, *Restore default layout*, a name that suggested the factory layout) forgets the
+arrangement of the layout in use. Menu items take `setLabel`, code's text a locale leaves
+alone, so the lists show the files' own names. Rebuilding a screen takes back what the old
+layout did inside the panels — widgets moved or hidden, sizes given, rows made — so a layout
+that leaves a panel alone finds it as code made it.
+
+**Valid files, unusable interfaces — tested at the end of 4h.** Theme and layout files written
+correctly but with absurd values (`editor/test-shell`, *Absurd - …*) never crashed or hung the
+editor, and values a float cannot hold (`1e39`) are refused with a clear message: per value in
+a theme, the whole screen in a layout. But a valid file can still leave the interface unusable:
+paddings of 100 000 px push everything out of the window, every panel hidden leaves no menu.
+The answer is two ways back, not ceilings on sizes, which would limit the designer:
+
+- **A confirmation after every choice** in View › Theme and View › Layout, as an operating
+  system confirms a new screen resolution: *Keep this theme and layout?* with *Revert* (first,
+  with focus, so a blind Enter goes back) and *Keep*. Revert, Esc or ten seconds without an
+  answer bring the previous ones back; `editor.json` is written only once kept, so closing the
+  editor meanwhile keeps the old choice. It works even where the dialog itself cannot be seen.
+- **The way out, Ctrl+Shift+F12** (also *View › Factory theme and layout*): the factory theme and
+  layout at once, kept, with no question. Read by the editor before any widget, so it works
+  whatever the files did. It covers what the confirmation cannot: a file that turns unusable
+  after it was kept — edited, then reloaded with Ctrl+R or by the theme watcher — or one the
+  editor starts with.
+
+Ceilings on sizes were weighed and left out for now; to revisit if designers trip on them.
+Smaller findings, fixed with it: a panel shown as a tab shows its title, so the menu, toolbar
+and status bar have titles too; a layout's `1e39` is reported as too large, not as negative.
+
 **Next**, in an order to be agreed:
+
+- **Other screen sizes — sizes tested, scaling not yet.** `-PwindowSize=1280x720` opens the
+  window at a size instead of maximized. Seen with the factory theme and layout, on a 2560×1440
+  monitor at 100 % scaling:
+
+  | Size | What was seen |
+  |---|---|
+  | 1024×600 | Everything fits, nothing overlaps; the docks keep their fixed widths (260 and 320 px), so the viewport gets under half the window |
+  | 1280×720 | Fits; the status bar's right side (theme, layout, project path) reaches the edge |
+  | 1920×1080, 2560×1080 | Room everywhere; the viewport takes the extra width, and the scene is not stretched — the camera follows the viewport's size |
+  | 3840×2160 | Larger than the monitor: the window runs off the screen, as asked; says nothing about a real 4K screen |
+  | A window dragged tiny | Panels overlap and menus open outside the window: unusable, as expected |
+
+  Still to do: **a minimum window size** (`glfwSetWindowSizeLimits`), set from what the
+  interface needs; **docks that shrink** in small windows, a choice for the factory layout; and
+  the **project path** on the status bar, the first thing to cut when it runs out of room.
+
+**HiDPI ✅ — the display's scale.** At 150 % the editor was drawn a third too small and clicks
+landed off by the scale, as reading the code had predicted: the pointer arrives in window
+coordinates (logical units on Wayland) while the interface was laid out in framebuffer pixels.
+Now, in three steps:
+
+1. **Units.** Aegis lays out and draws in *units*: `begin(framebufferWidth, framebufferHeight,
+   scale)` records a frame framebuffer/scale units wide, the renderer draws it over the whole
+   framebuffer, and clip rectangles are scaled to pixels for `glScissor`. The `Window` reports the
+   content scale and the framebuffer pixels per window coordinate; the pointer becomes units as
+   `coordinate × pixelRatio ÷ scale`, which is right on Wayland (ratio = scale) and on Windows
+   (ratio 1, coordinates already pixels). The scene renders at the viewport's size in pixels.
+2. **Sharp text.** The font and the icons are rasterised at `size × scale` pixels and give every
+   measure in units; glyphs snap to whole pixels, not units, so the atlas is sampled one to one.
+   A layout measures the same at any scale. The editor bakes them once, for the screen's scale,
+   before the first frame (`Aegis.bakeFor`).
+3. **Live changes.** The scale is read every frame: changing it in the system settings, or
+   moving the window to a screen set differently, bakes text and icons again (about 15 ms) and
+   refits every widget.
+
+Seen working on Wayland (KDE) at 100 % and 150 %, switching while open, and moving between a
+2560×1440 monitor at 150 % and a 1920×1080 TV at 100 %. Not yet seen on Windows, where the
+pointer path differs (ratio 1); the formula covers it, a run there will tell.
 
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.
-- **A theme and layout selector — soon.** Today the user's own `layouts/default.json`, which
-  the editor writes when a dock is resized, hides the installation's file of the same name, so
-  a designer editing the installed layout sees nothing change. The plan, after Unity's
-  *Window › Layouts*: the arrangement the user adjusts goes to a file of its own, recording the
-  layout it came from, and never over a layout file; *View › Layout* lists the installed and
-  the user's layouts and loads the one chosen afresh, without restarting; a theme list, the
-  choice kept in `editor.json`. Until then the status bar shows the theme and the layout in
-  use and whose each is — yours, installed or factory — and the log says where each file is.
 
 **Later, a phase of its own — plugins.** Behaviour other developers add, without the files
 becoming more than data: a jar registers actions and panels through a public engine API, and a

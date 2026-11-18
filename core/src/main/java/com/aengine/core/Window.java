@@ -25,6 +25,34 @@ public class Window {
     private int    height;
     private long   handle;
 
+    // The window's size in its own coordinates, which the pointer is given in, and the scale
+    // the system asks interfaces to be drawn at. Both differ from the framebuffer's pixels on
+    // a screen scaled above 100 %, each platform its own way: see getPixelRatio().
+    private int    windowWidth  = 1;
+    private int    windowHeight = 1;
+    private float  contentScale = 1.0f;
+
+    /**
+     * The size {@code aengine.windowSize} asks for — {@code "1280x720"}, as
+     * {@code ./gradlew :editor:run -PwindowSize=1280x720} sets it — or {@code null} when it is
+     * not set, or is not two whole numbers of 1 or more, which the log says.
+     */
+    static int[] askedSize() {
+        String asked = System.getProperty("aengine.windowSize");
+        if (asked == null) return null;
+        String[] parts = asked.trim().toLowerCase(java.util.Locale.ROOT).split("x");
+        try {
+            if (parts.length == 2) {
+                int w = Integer.parseInt(parts[0].trim()), h = Integer.parseInt(parts[1].trim());
+                if (w >= 1 && h >= 1) return new int[] { w, h };
+            }
+        } catch (NumberFormatException e) {
+            // said below
+        }
+        Logger.warn(Logger.System.WINDOW, "aengine.windowSize should be a width and a height, like 1280x720; got \"%s\". The window opens maximized.", asked);
+        return null;
+    }
+
     /**
      * Creates the window object. Nothing native is opened until {@link #init()}.
      *
@@ -97,7 +125,16 @@ public class Window {
             }
         }
 
-        glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        // A development run can ask for a size, to see the interface at other resolutions;
+        // otherwise the window opens maximized.
+        int[] asked = askedSize();
+        if (asked != null) {
+            width  = asked[0];
+            height = asked[1];
+            Logger.info(Logger.System.WINDOW, "Window opened at %dx%d, as aengine.windowSize asks (a development option).", width, height);
+        } else {
+            glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        }
 
         Logger.debug(Logger.System.WINDOW, "Instantiating native window '%s' (%dx%d)...", title, width, height);
         handle = glfwCreateWindow(width, height, title, NULL, NULL);
@@ -155,7 +192,26 @@ public class Window {
             height = fbHeight[0];
             glViewport(0, 0, width, height);
         }
-        Logger.info(Logger.System.WINDOW, "Framebuffer: %dx%d", width, height);
+        int[] winWidth = new int[1], winHeight = new int[1];
+        glfwGetWindowSize(handle, winWidth, winHeight);
+        if (winWidth[0] > 0 && winHeight[0] > 0) {
+            windowWidth  = winWidth[0];
+            windowHeight = winHeight[0];
+        }
+        float[] scaleX = new float[1], scaleY = new float[1];
+        glfwGetWindowContentScale(handle, scaleX, scaleY);
+        if (scaleX[0] > 0.0f) contentScale = scaleX[0];
+        glfwSetWindowSizeCallback(handle, (win, w, h) -> {
+            if (w > 0 && h > 0) { windowWidth = w; windowHeight = h; }
+        });
+        glfwSetWindowContentScaleCallback(handle, (win, sx, sy) -> {
+            if (sx > 0.0f) {
+                contentScale = sx;
+                Logger.info(Logger.System.WINDOW, "Display scale changed: %.0f%%.", sx * 100.0f);
+            }
+        });
+        Logger.info(Logger.System.WINDOW, "Framebuffer: %dx%d; window %dx%d; display scale %.0f%%.",
+            width, height, windowWidth, windowHeight, contentScale * 100.0f);
     }
 
     /** Shows the frame just drawn. With v-sync on, waits for the monitor's next refresh. */
@@ -222,6 +278,25 @@ public class Window {
      * @return width in framebuffer pixels, updated on every resize
      */
     public int    getWidth()  { return width; }
+
+    /**
+     * The scale the system asks interfaces to be drawn at: 1 at 100 %, 1.5 at 150 %. It changes
+     * when the user changes it or moves the window to a screen set differently.
+     *
+     * @return the horizontal content scale
+     */
+    public float  getContentScale() { return contentScale; }
+
+    /**
+     * Framebuffer pixels per window coordinate — the pointer's unit. On Wayland the window is
+     * measured in logical units and its framebuffer is larger by the scale, so this is the
+     * scale (1.5 at 150 %); on Windows and X11 both are in pixels, so it is 1.
+     *
+     * @return the framebuffer's width over the window's; 1 while either is unknown
+     */
+    public float  getPixelRatio() {
+        return windowWidth > 0 && width > 0 ? (float) width / windowWidth : 1.0f;
+    }
 
     /**
      * Returns the height of the drawable area.

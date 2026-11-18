@@ -66,6 +66,11 @@ tasks.named('run') {
     if (project.hasProperty('themeWatch')) {
         systemProperty 'aengine.themeWatch', 'true'
     }
+    // ./gradlew :editor:run -PwindowSize=1280x720 opens the window at that size instead of
+    // maximized, to see the interface at other resolutions.
+    if (project.hasProperty('windowSize')) {
+        systemProperty 'aengine.windowSize', project.property('windowSize')
+    }
     // ./gradlew :editor:run -PlayoutFile=<name> reads layouts/<name>.json instead of
     // layouts/default.json — with -PtestShell, one of the test layouts, e.g. -PlayoutFile=moved.
     // Not -Playout: every Gradle project already has a "layout" property of its own, which

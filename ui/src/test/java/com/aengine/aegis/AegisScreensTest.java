@@ -44,6 +44,39 @@ class AegisScreensTest {
     }
 
     @Test
+    void rebuildingTakesBackWhatTheOldFileDidInsideThePanels() throws Exception {
+        // A layout chosen after one that moved, hid and grouped widgets: the panels it leaves
+        // alone are as code made them, not as the old file left them.
+        screens.build("editor", file(FACTORY));
+        int nodes = layout.nodesInUse();
+        float stopWidth = layout.requestedWidth(stop);
+
+        screens.rebuild("editor", file("""
+            { "name": "Moved", "format": 1,
+              "screens": { "editor": { "root": { "type": "column", "children": [
+                { "type": "panel", "panel": "toolbar", "children": [
+                  { "type": "row", "children": [ { "type": "widget", "widget": "buttonStop", "width": 140 } ] },
+                  { "type": "widget", "widget": "buttonSave" }
+                ]},
+                { "type": "panel", "panel": "viewport", "children": [
+                  { "type": "widget", "widget": "buttonPlay", "hidden": true }
+                ]}
+              ]}}}
+            }
+            """));
+        assertEquals(toolbar, layout.parent(layout.parent(stop)), "moved into a row of the toolbar");
+
+        int root = screens.rebuild("editor", file(FACTORY));
+        assertEquals(play, layout.firstChild(viewport), "the hidden widget is back");
+        assertEquals(stop, layout.nextSibling(play), "the moved one is back in its panel, in code order");
+        assertEquals(save, layout.firstChild(toolbar));
+        assertEquals(AegisLayout.NONE, layout.nextSibling(save), "the row the old file made is gone");
+        assertEquals(stopWidth, layout.requestedWidth(stop), "the width the old file gave is taken back");
+        assertEquals(nodes, layout.nodesInUse(), "nothing the old file made is left behind");
+        assertEquals(toolbar, layout.firstChild(root));
+    }
+
+    @Test
     void aWidgetMovesToAnotherPanelAndTheUnplacedGoToTheEnd() throws Exception {
         int root = screens.build("editor", file("""
             { "name": "Moved", "format": 1,

@@ -75,6 +75,7 @@ public final class AegisIcons {
 
     private final String name;
     private final float pixelHeight;
+    private final float scale;   // pixels per unit the icons were rasterised for, as a font's
     private final int atlasSize;
     private final TextureAPI atlas;
     private final Map<String, Integer> byName = new HashMap<>();
@@ -88,10 +89,14 @@ public final class AegisIcons {
      *                    {@code "font"} is found beside it
      * @param pixelHeight the size the icons are drawn at, in pixels
      * @param upload      whether to send the atlas to the GPU; {@code false} for a headless Aegis
+     * @param scale       pixels per unit: the icons are rasterised that much larger and drawn
+     *                    at {@code pixelHeight} units, pixel for pixel
      * @throws IllegalStateException for a map or font that cannot be read — a bug in the engine
      */
-    AegisIcons(String mapResource, float pixelHeight, boolean upload) {
+    AegisIcons(String mapResource, float pixelHeight, boolean upload, float scale) {
         this.pixelHeight = pixelHeight;
+        this.scale = scale;
+        float bakeHeight = pixelHeight * scale;
         JsonObject map = readMap(mapResource);
         this.name = text(map, "name", mapResource);
         Integer format = map.has("format") ? AegisFindings.wholeNumber(map.get("format")) : null;
@@ -117,7 +122,7 @@ public final class AegisIcons {
         this.boxes = new float[names.size() * STRIDE];
 
         // Square, a power of two, with room for every icon and a pixel between them.
-        int cell = (int) Math.ceil(pixelHeight) + 2;
+        int cell = (int) Math.ceil(bakeHeight) + 2;
         int perRow = (int) Math.ceil(Math.sqrt(Math.max(1, names.size())));
         int size = 64;
         while (size < perRow * cell) size *= 2;
@@ -142,7 +147,7 @@ public final class AegisIcons {
             }
             points.flip();
             if (!names.isEmpty()) {
-                range.get(0).font_size(pixelHeight).first_unicode_codepoint_in_range(0)
+                range.get(0).font_size(bakeHeight).first_unicode_codepoint_in_range(0)
                      .array_of_unicode_codepoints(points).chardata_for_range(chars);
                 range.get(0).num_chars(names.size());
                 if (!stbtt_PackBegin(packer, bitmap, size, size, 0, 1, MemoryUtil.NULL)) {
@@ -161,8 +166,8 @@ public final class AegisIcons {
                 }
             }
             this.atlas = upload ? RenderContext.createTexture(size, size, TextureFormat.R8, bitmap) : null;
-            Logger.info(Logger.System.UI, "Icons \"%s\" baked: %d icons at %.0fpx from %s, atlas %dx%d.",
-                name, names.size(), pixelHeight, fontResource, size, size);
+            Logger.info(Logger.System.UI, "Icons \"%s\" baked: %d icons at %.0fpx (%.0f%% of %.0f) from %s, atlas %dx%d.",
+                name, names.size(), bakeHeight, scale * 100.0f, pixelHeight, fontResource, size, size);
         } finally {
             info.free();
             packer.free();
@@ -252,9 +257,10 @@ public final class AegisIcons {
     void draw(AegisDrawList list, int index, float x, float y, float[] rgba) {
         if (index < 0 || atlas == null) return;
         int m = index * STRIDE;
-        float w = boxes[m + 2] - boxes[m], h = boxes[m + 3] - boxes[m + 1];
-        float left = Math.round(x + (pixelHeight - w) * 0.5f);
-        float top  = Math.round(y + (pixelHeight - h) * 0.5f);
+        // The box in units; its corner snapped to a whole pixel, so the atlas is sampled one to one.
+        float w = (boxes[m + 2] - boxes[m]) / scale, h = (boxes[m + 3] - boxes[m + 1]) / scale;
+        float left = Math.round((x + (pixelHeight - w) * 0.5f) * scale) / scale;
+        float top  = Math.round((y + (pixelHeight - h) * 0.5f) * scale) / scale;
         list.addCoverageQuad(atlas.getID(), left, top, left + w, top + h,
             boxes[m] / atlasSize, boxes[m + 1] / atlasSize, boxes[m + 2] / atlasSize, boxes[m + 3] / atlasSize,
             rgba[0], rgba[1], rgba[2], rgba[3]);

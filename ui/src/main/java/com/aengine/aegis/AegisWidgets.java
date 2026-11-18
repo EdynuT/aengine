@@ -6,6 +6,7 @@ import com.aengine.core.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.LongSupplier;
 /**
  * The widgets — layer L4's controls, built on the layout and the tree.
@@ -672,10 +673,21 @@ public final class AegisWidgets {
                 }
             }
         }
-        for (int node = 0; node < nodes; node++) {
-            if (kind[node] != NOT_A_WIDGET) fitToContent(node);
+        // Every panel's title is a text the editor shows, in a tab, once a layout puts the panel
+        // in one — asked for now, so a locale translating a panel no tab holds yet is not told off.
+        for (Map.Entry<String, String> title : aegis.screens().panelTitles().entrySet()) {
+            locale.text(title.getKey() + "." + AegisLocale.TITLE, title.getValue());
         }
+        refitAll();
         locale.report();
+    }
+
+    /** Fits every widget to its content again: after the language or the font changed. */
+    void refitAll() {
+        int nodes = layout.nodeCount();
+        for (int node = 0; node < nodes; node++) {
+            if (kind[node] != NOT_A_WIDGET && layout.isInUse(node)) fitToContent(node);
+        }
     }
 
     /**
@@ -747,7 +759,7 @@ public final class AegisWidgets {
             case MENU_TITLE -> fit(node, (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f,
                 line + style.menuPaddingY * 2.0f);
             case MENU_ITEM -> {
-                float w = style.menuCheckWidth + (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f;
+                float w = style.menuCheckWidth + (float) Math.ceil(aegis.measure(textOf(node))) + style.menuPaddingX * 2.0f;
                 if (itemShortcut[node] != null) w += style.menuGap + (float) Math.ceil(aegis.measure(itemShortcut[node]));
                 if (itemSubMenu[node] != AegisLayout.NONE) w += style.menuGap;
                 fit(node, w, line + style.menuPaddingY * 2.0f);
@@ -786,6 +798,13 @@ public final class AegisWidgets {
         fittedHeight[node] = height;
         layout.setSize(node, keepWidth, keepHeight);
     }
+
+    /**
+     * The size a widget last fitted to its content, for the screens to give it back when the
+     * layout that sized it is replaced.
+     */
+    float fittedWidth(int node)  { return fittedWidth[node]; }
+    float fittedHeight(int node) { return fittedHeight[node]; }
 
     /**
      * The window whose system clipboard text fields copy to and paste from. Until it is set,
@@ -911,9 +930,10 @@ public final class AegisWidgets {
      * text changed. The text is copied into the label's own buffer, so a reused
      * {@code StringBuilder} can be handed in every frame: nothing is allocated, and a text that
      * did not change costs a comparison. Text set here is code's to compose, and a locale
-     * leaves it alone.
+     * leaves it alone. A menu item takes it too: a list made from files — a theme's name — is
+     * shown as the files say.
      *
-     * @param node the label
+     * @param node the label, or a menu item
      * @param text the text; copied, not kept
      */
     public void setLabel(int node, CharSequence text) {
@@ -936,7 +956,7 @@ public final class AegisWidgets {
         return true;
     }
 
-    /** What a button, toggle or label shows: the text code set, or the one it was made with. */
+    /** What a button, toggle, label or menu item shows: the text code set, or the one it was made with. */
     private CharSequence textOf(int node) {
         return liveText[node] != null ? liveText[node] : label[node];
     }
@@ -2128,12 +2148,12 @@ public final class AegisWidgets {
 
     /** The rectangle overlays are kept inside: the window, or before the first frame the root. */
     private float boundsW() {
-        int w = aegis.viewportWidth();
+        float w = aegis.viewportWidth();
         return w > 0 ? w : lastRoot != AegisLayout.NONE ? layout.x(lastRoot) + layout.width(lastRoot) : 0.0f;
     }
 
     private float boundsH() {
-        int h = aegis.viewportHeight();
+        float h = aegis.viewportHeight();
         return h > 0 ? h : lastRoot != AegisLayout.NONE ? layout.y(lastRoot) + layout.height(lastRoot) : 0.0f;
     }
 
@@ -5053,7 +5073,7 @@ public final class AegisWidgets {
             arrowText.append(AegisFont.CHECK_MARK);
             aegis.addTextTop(x + style.menuPaddingX * 0.5f, textY, arrowText, ink[0], ink[1], ink[2], ink[3]);
         }
-        aegis.addTextTop(x + style.menuPaddingX + style.menuCheckWidth, textY, label[node], ink[0], ink[1], ink[2], ink[3]);
+        aegis.addTextTop(x + style.menuPaddingX + style.menuCheckWidth, textY, textOf(node), ink[0], ink[1], ink[2], ink[3]);
         if (itemShortcut[node] != null) {
             float sw = aegis.measure(itemShortcut[node]);
             aegis.addTextTop(x + w - style.menuPaddingX - sw, textY, itemShortcut[node], dim[0], dim[1], dim[2], dim[3]);

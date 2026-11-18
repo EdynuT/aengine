@@ -58,31 +58,40 @@ Save it as `minimal.json` in a `layouts/` directory (see §3) and start the edit
 
 ## 3. Where layout files live, and how one is chosen
 
-The editor reads `layouts/<name>.json`, where the name is `default` unless
-`-PlayoutFile=<name>` says otherwise. It looks in three places, **screen by screen**:
+Layouts live in two places, and the factory layout is always there besides:
 
-| Order | Place | Who writes it |
-|---|---|---|
-| 1 | The user's directory: `~/.local/share/AEngine/gui/layouts/` on Linux, `%LOCALAPPDATA%\AEngine\gui\layouts\` on Windows | **The editor**, when the user resizes or closes a dock |
-| 2 | The installation: `<install>/gui/layouts/`. In the repository, `editor/src/dist/gui/layouts/` | The designer: the layout that ships |
-| 3 | The factory layout, compiled into the engine | Nobody. Used when no file describes the screen usably |
+| Place | Who writes it |
+|---|---|
+| The user's directory: `~/.local/share/AEngine/gui/layouts/` on Linux, `%LOCALAPPDATA%\AEngine\gui\layouts\` on Windows | The user: their own layouts |
+| The installation: `<install>/gui/layouts/`. In the repository, `editor/src/dist/gui/layouts/` | The designer: the layouts that ship |
+| The factory layout, compiled into the engine | Nobody |
 
-For each screen (today only `editor`), the first file that describes it **without errors**
-is used. A screen with an error in the user's file comes from the installation's, and so on.
+**Choosing a layout: View › Layout.** It lists the user's layouts under *Yours*, the
+installation's under *Installed*, each by its file's `"name"`, and the factory layout last;
+the one in use is ticked. Choosing one builds the editor screen from it at once, without
+restarting, and asks *Keep this theme and layout?*: **Keep** writes the choice to `editor.json`
+in the user's directory for the next start; **Revert**, Esc, or ten seconds with no answer
+bring the previous layout back.
 
-> **Watch out while designing.** Once you resize or close a dock in the running editor, the
-> editor writes your arrangement to the user's file, which then **comes first**: changes you
-> make to the installation's file seem to do nothing. Use **View › Restore default layout**,
-> which deletes the user's copy of the screen, or run with `-PtestShell`, which never writes.
+> **A layout can be valid and still unusable** — every panel hidden, or margins that push the
+> menu out of the window. Wait ten seconds for the confirmation to revert, or press
+> **Ctrl+Shift+F12** at any time: the factory theme and layout come back, whatever the files
+> did.
+The list is read again each time the View menu opens. With nothing chosen yet, the editor
+takes `layouts/default.json` — the user's, else the installation's — else the factory layout.
+
+Each screen (today only `editor`) is taken from the first of these that describes it **without
+errors**: the user's arrangement of the layout chosen (§8), the layout's file, the factory
+layout. A screen with an error in the file comes from the factory layout.
 
 | Command | Effect |
 |---|---|
-| `./gradlew :editor:run` | `layouts/default.json`, looked for as above |
-| `... -PlayoutFile=moved` | `layouts/moved.json` instead |
-| `... -PtestShell` | The user's directory becomes `editor/test-shell/` (a local folder, not in the repository), and nothing is written there |
+| `./gradlew :editor:run` | The layout chosen last in View › Layout |
+| `... -PlayoutFile=moved` | `layouts/moved.json` for this run: the user's if it exists, else the installation's |
+| `... -PtestShell` | The user's directory becomes `editor/test-shell/` (a local folder, not in the repository), and no arrangement is written there |
 
-The layout is read once, when the editor starts: restart it to see a change. **File names**
-are lower case, with hyphens between words.
+A layout file is read when it is chosen: choose it again in View › Layout to see a change
+saved to it. **File names** are lower case, with hyphens between words.
 
 ---
 
@@ -293,15 +302,20 @@ also make its own: an empty row that grows, `{ "type": "row", "grow": 1 }`.
 ## 8. What the editor writes back
 
 When the user resizes a dock or closes one, the editor writes the `editor` screen a second
-later, with the sizes the user left and the panels they closed, into the **user's**
-`layouts/<name>.json`, under `"screens"`. Only that screen: the file's other screens are
-kept, and screens it does not hold go on coming from the installation. The write goes
-through a temporary file, so a crash never leaves half a file.
+later, with the sizes the user left and the panels they closed, as the user's **arrangement**
+of the layout in use: `arrangements/<origin>/<file>.json` in the user's directory, where the
+origin is `yours`, `installed` or `factory` — `arrangements/installed/default.json` for the
+installation's `default.json`. Only that screen, under `"screens"`: the file's other screens
+are kept, and screens it does not hold come from the layout. The write goes through a
+temporary file, so a crash never leaves half a file.
 
-**View › Restore default layout** removes the screen from the user's file (deleting the
-file if nothing is left in it) and builds it again from the installation's layout.
+Each layout has its own arrangement, so going back to a layout in View › Layout finds it as
+the user left it. **View › Undo my changes to this layout** removes the screen from the arrangement
+of the layout in use (deleting the file if nothing is left in it) and builds it again from the
+layout as it is.
 
-The installation's file is **never** written by the editor.
+**No layout file is ever written by the editor**, the user's own included: a designer editing
+a layout sees their change the next time they choose it, whatever they resized meanwhile.
 
 ---
 

@@ -110,6 +110,14 @@ public final class AegisFont {
     private final int   atlasHeight;
 
     /**
+     * Pixels per interface unit the glyphs were rasterised for: 1 at 100 %, 1.5 at 150 %. The
+     * atlas holds glyphs {@code pixelHeight * scale} pixels tall, so each is drawn pixel for
+     * pixel; every measure this class gives — metrics, advances, kerning, quads — is in units,
+     * so a layout is the same at any scale.
+     */
+    private final float scale;
+
+    /**
      * Vertical metrics in pixels, read from the font and scaled to {@link #pixelHeight}.
      *
      * <p>All three are positive and measured the way the interface addresses the screen,
@@ -203,17 +211,23 @@ public final class AegisFont {
      *                               read, or its glyphs do not fit the atlas
      */
     public AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight) {
-        this(resourcePath, pixelHeight, atlasWidth, atlasHeight, true);
+        this(resourcePath, pixelHeight, atlasWidth, atlasHeight, true, 1.0f);
     }
 
     /**
      * As the public constructor, and with {@code upload} false the atlas is baked and measured
      * but never sent to the GPU — a font that measures and wraps, for {@link Aegis#headless}.
+     * The glyphs are rasterised {@code scale} times larger, in an atlas that much larger on
+     * each side, for a screen at that scale; sizes stay in units.
      */
-    AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight, boolean upload) {
+    AegisFont(String resourcePath, float pixelHeight, int atlasWidth, int atlasHeight, boolean upload, float scale) {
+        this.scale       = scale;
         this.pixelHeight = pixelHeight;
-        this.atlasWidth  = atlasWidth;
-        this.atlasHeight = atlasHeight;
+        this.atlasWidth  = (int) Math.ceil(atlasWidth  * scale);
+        this.atlasHeight = (int) Math.ceil(atlasHeight * scale);
+        float bakeHeight = pixelHeight * scale;
+        atlasWidth  = this.atlasWidth;
+        atlasHeight = this.atlasHeight;
 
         ByteBuffer ttf    = readResource(resourcePath);
         ByteBuffer bitmap = MemoryUtil.memAlloc(atlasWidth * atlasHeight);
@@ -237,14 +251,15 @@ public final class AegisFont {
 
             // The same scale the packer derives from a positive font size, so the metrics and
             // the packed glyphs describe one font at one size rather than two near-agreeing ones.
-            float scale = stbtt_ScaleForPixelHeight(info, pixelHeight);
+            // Font units to units: rasterised at bakeHeight pixels, measured in units.
+            float toUnits = stbtt_ScaleForPixelHeight(info, bakeHeight) / scale;
 
             int[] a = new int[1], d = new int[1], g = new int[1];
             stbtt_GetFontVMetrics(info, a, d, g);
 
-            this.ascent  =  a[0] * scale;
-            this.descent = -d[0] * scale;  // stb reports it negative: font units point up
-            this.lineGap =  g[0] * scale;
+            this.ascent  =  a[0] * toUnits;
+            this.descent = -d[0] * toUnits;  // stb reports it negative: font units point up
+            this.lineGap =  g[0] * toUnits;
             this.lineHeight = Math.round(this.ascent + this.descent + this.lineGap);
 
             // Two ranges in one atlas: Latin-1 as a contiguous run, then the extra punctuation
@@ -255,13 +270,13 @@ public final class AegisFont {
             extraPoints.put(EXTRA_CODEPOINTS).flip();
 
             ranges.get(0)
-                  .font_size(pixelHeight)
+                  .font_size(bakeHeight)
                   .first_unicode_codepoint_in_range(FIRST_CHAR)
                   .chardata_for_range(latinChars);
             ranges.get(0).num_chars(CHAR_COUNT);
 
             ranges.get(1)
-                  .font_size(pixelHeight)
+                  .font_size(bakeHeight)
                   .first_unicode_codepoint_in_range(0)
                   .array_of_unicode_codepoints(extraPoints)
                   .chardata_for_range(extraChars);
@@ -277,7 +292,7 @@ public final class AegisFont {
             if (!packed) {
                 throw new IllegalStateException(String.format(
                     "Glyph atlas too small: %s at %.0fpx does not fit %d glyphs in %dx%d.",
-                    resourcePath, pixelHeight, GLYPH_COUNT, atlasWidth, atlasHeight));
+                    resourcePath, bakeHeight, GLYPH_COUNT, atlasWidth, atlasHeight));
             }
 
             for (int i = 0; i < CHAR_COUNT; i++) {
@@ -296,7 +311,7 @@ public final class AegisFont {
                 for (int cur = 0; cur < CHAR_COUNT; cur++) {
                     int raw = stbtt_GetCodepointKernAdvance(info, prevCode, FIRST_CHAR + cur);
                     if (raw == 0) continue;
-                    kerning[prev * CHAR_COUNT + cur] = raw * scale;
+                    kerning[prev * CHAR_COUNT + cur] = raw * toUnits;
                     kernPairs++;
                 }
             }
@@ -306,9 +321,9 @@ public final class AegisFont {
                 : null;
 
             Logger.info(Logger.System.RENDERER,
-                "Font baked: %s at %.0fpx, %d glyphs (Latin-1 + %d punctuation), atlas %dx%d; "
+                "Font baked: %s at %.0fpx (%.0f%% of %.0f), %d glyphs (Latin-1 + %d punctuation), atlas %dx%d; "
                 + "ascent %.1f, descent %.1f, gap %.1f, line height %d; %d kerning pairs.",
-                resourcePath, pixelHeight, GLYPH_COUNT, EXTRA_CODEPOINTS.length, atlasWidth, atlasHeight,
+                resourcePath, bakeHeight, scale * 100.0f, pixelHeight, GLYPH_COUNT, EXTRA_CODEPOINTS.length, atlasWidth, atlasHeight,
                 this.ascent, this.descent, this.lineGap, this.lineHeight, kernPairs);
 
             // A font with no readable kern table is not an error — it is a font whose kerning
@@ -335,16 +350,19 @@ public final class AegisFont {
         }
     }
 
-    /** Copies one packed glyph's placement into its row of {@link #metrics}. */
+    /**
+     * Copies one packed glyph's placement into its row of {@link #metrics}: its box in the
+     * atlas in atlas pixels, its offset and advance in units.
+     */
     private void copyGlyph(STBTTPackedchar glyph, int row) {
         int m = row * STRIDE;
         metrics[m]     = glyph.x0();
         metrics[m + 1] = glyph.y0();
         metrics[m + 2] = glyph.x1();
         metrics[m + 3] = glyph.y1();
-        metrics[m + 4] = glyph.xoff();
-        metrics[m + 5] = glyph.yoff();
-        metrics[m + 6] = glyph.xadvance();
+        metrics[m + 4] = glyph.xoff() / scale;
+        metrics[m + 5] = glyph.yoff() / scale;
+        metrics[m + 6] = glyph.xadvance() / scale;
     }
 
     /**
@@ -376,13 +394,14 @@ public final class AegisFont {
         float gx0 = metrics[m],     gy0 = metrics[m + 1];
         float gx1 = metrics[m + 2], gy1 = metrics[m + 3];
 
-        float left = (float) Math.floor(penX     + metrics[m + 4] + 0.5f);
-        float top  = (float) Math.floor(baseline + metrics[m + 5] + 0.5f);
+        // Snapped to whole pixels, not units, so the atlas is sampled one to one at any scale.
+        float left = (float) Math.floor((penX     + metrics[m + 4]) * scale + 0.5f) / scale;
+        float top  = (float) Math.floor((baseline + metrics[m + 5]) * scale + 0.5f) / scale;
 
         out[0] = left;
         out[1] = top;
-        out[2] = left + (gx1 - gx0);
-        out[3] = top  + (gy1 - gy0);
+        out[2] = left + (gx1 - gx0) / scale;
+        out[3] = top  + (gy1 - gy0) / scale;
 
         out[4] = gx0 / atlasWidth;
         out[5] = gy0 / atlasHeight;

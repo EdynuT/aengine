@@ -63,9 +63,22 @@ public final class Aegis {
     /** The icons widgets draw, or null before loadIcons — step 4b. */
     private AegisIcons icons;
 
-    /** Viewport of the frame being recorded, kept so {@link #end()} can present it. */
-    private int viewportWidth;
-    private int viewportHeight;
+    /**
+     * The frame being recorded: its size in interface units, which everything is laid out
+     * and drawn in, and the framebuffer it is presented to, in pixels. A unit is
+     * {@code scale} pixels — 1 on a screen at 100 %, 1.5 at 150 %.
+     */
+    private float viewportWidth;
+    private float viewportHeight;
+    private int   framebufferWidth;
+    private int   framebufferHeight;
+    private float scale = 1.0f;
+
+    /** What the font and the icons were loaded from, to bake them again at another scale, and the scale they were baked for. */
+    private String fontPath, iconsMap;
+    private float  fontSize, iconsSize;
+    private int    fontAtlasWidth, fontAtlasHeight;
+    private float  bakedScale = 1.0f;
 
     /**
      * Creates the renderer, draw list, layout, tree and widgets. No font is loaded yet; call
@@ -114,10 +127,47 @@ public final class Aegis {
      */
     public AegisFont loadFont(String resourcePath, float pixelHeight,
                               int atlasWidth, int atlasHeight) {
-        AegisFont loaded = new AegisFont(resourcePath, pixelHeight, atlasWidth, atlasHeight, renderer != null);
+        AegisFont loaded = new AegisFont(resourcePath, pixelHeight, atlasWidth, atlasHeight, renderer != null, bakedScale);
         if (font != null) font.cleanup();
         font = loaded;
+        fontPath = resourcePath;
+        fontSize = pixelHeight;
+        fontAtlasWidth  = atlasWidth;
+        fontAtlasHeight = atlasHeight;
         return loaded;
+    }
+
+    /**
+     * The scale the font and the icons are baked for, before any frame says it: call it before
+     * {@link #loadFont} and {@link #loadIcons} with the screen's scale, so they are baked once,
+     * at the right size, rather than at 100 % and again at the first frame. Afterwards it bakes
+     * them again, as a frame at another scale would.
+     *
+     * @param scale pixels per unit; anything not positive is taken as 1
+     */
+    public void bakeFor(float scale) {
+        float s = scale > 0.0f && Float.isFinite(scale) ? scale : 1.0f;
+        if (s != bakedScale) rebake(s);
+    }
+
+    /**
+     * Bakes the font and the icons again for a new scale — the screen's scale changed, or the
+     * window moved to a screen set differently — so text stays sharp, and fits every widget to
+     * its text again: the measures in units come out a fraction different from a new bake.
+     */
+    private void rebake(float scale) {
+        bakedScale = scale;
+        if (fontPath != null) {
+            AegisFont loaded = new AegisFont(fontPath, fontSize, fontAtlasWidth, fontAtlasHeight, renderer != null, scale);
+            if (font != null) font.cleanup();
+            font = loaded;
+        }
+        if (iconsMap != null) {
+            AegisIcons loaded = new AegisIcons(iconsMap, iconsSize, renderer != null, scale);
+            if (icons != null) icons.cleanup();
+            icons = loaded;
+        }
+        widgets.refitAll();
     }
 
     /**
@@ -131,9 +181,11 @@ public final class Aegis {
      * @throws IllegalStateException for a set that cannot be read, a bug in the engine
      */
     public AegisIcons loadIcons(String mapResource, float pixelHeight) {
-        AegisIcons loaded = new AegisIcons(mapResource, pixelHeight, renderer != null);
+        AegisIcons loaded = new AegisIcons(mapResource, pixelHeight, renderer != null, bakedScale);
         if (icons != null) icons.cleanup();
         icons = loaded;
+        iconsMap  = mapResource;
+        iconsSize = pixelHeight;
         return loaded;
     }
 
@@ -161,16 +213,45 @@ public final class Aegis {
     // -----------------------------------------------------------------------------------
 
     /**
-     * Starts a frame. Everything submitted after this lands in one draw list.
+     * Starts a frame at 100 %: a unit is a pixel. See {@link #begin(int, int, float)}.
      *
      * @param width  target width in pixels
      * @param height target height in pixels
      */
     public void begin(int width, int height) {
-        viewportWidth  = width;
-        viewportHeight = height;
-        drawList.begin(width, height);
+        begin(width, height, 1.0f);
     }
+
+    /**
+     * Starts a frame. Everything submitted after this lands in one draw list, in interface
+     * units: the frame is {@code framebufferWidth / scale} units wide, and each unit is drawn
+     * as {@code scale} pixels — so at 150 % the interface is the size the system asks for,
+     * not a third smaller. Solve the layout at {@link #width()} by {@link #height()}, and give
+     * the pointer in units too.
+     *
+     * @param framebufferWidth  the framebuffer's width, in pixels
+     * @param framebufferHeight the framebuffer's height, in pixels
+     * @param scale             pixels per unit: the system's content scale; 1 or more is usual,
+     *                          anything not positive is taken as 1
+     */
+    public void begin(int framebufferWidth, int framebufferHeight, float scale) {
+        this.scale = scale > 0.0f && Float.isFinite(scale) ? scale : 1.0f;
+        if (this.scale != bakedScale) rebake(this.scale);
+        this.framebufferWidth  = framebufferWidth;
+        this.framebufferHeight = framebufferHeight;
+        viewportWidth  = framebufferWidth  / this.scale;
+        viewportHeight = framebufferHeight / this.scale;
+        drawList.begin(viewportWidth, viewportHeight);
+    }
+
+    /** @return the frame's width in units, as {@link #begin} set it */
+    public float width()  { return viewportWidth; }
+
+    /** @return the frame's height in units */
+    public float height() { return viewportHeight; }
+
+    /** @return pixels per unit for the frame being recorded */
+    public float scale()  { return scale; }
 
     /**
      * Closes the frame and draws it.
@@ -179,15 +260,15 @@ public final class Aegis {
      * order, every time. Separating them bought no freedom and only offered the chance to
      * forget the second.</p>
      */
-    /** The width of the frame being recorded, as handed to {@link #begin}; 0 before the first. */
-    int viewportWidth()  { return viewportWidth; }
+    /** The width of the frame being recorded, in units; 0 before the first. */
+    float viewportWidth()  { return viewportWidth; }
 
-    /** The height of the frame being recorded; 0 before the first. */
-    int viewportHeight() { return viewportHeight; }
+    /** The height of the frame being recorded, in units; 0 before the first. */
+    float viewportHeight() { return viewportHeight; }
 
     public void end() {
         drawList.end();
-        if (renderer != null) renderer.render(drawList, viewportWidth, viewportHeight);
+        if (renderer != null) renderer.render(drawList, viewportWidth, viewportHeight, framebufferWidth, framebufferHeight, scale);
     }
 
     // -----------------------------------------------------------------------------------

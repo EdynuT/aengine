@@ -582,8 +582,10 @@ public final class AegisTheme {
 
         Object value = type == AegisThemeCatalogue.Type.COLOUR ? parseColour(written) : parseSize(written);
         if (value == null) {
-            warn(at, at + "|" + written, at + " — expected " + (type == AegisThemeCatalogue.Type.COLOUR
-                ? "a colour like \"#5C9EF0\"" : "a number of pixels, 0 or more")
+            String expected = type == AegisThemeCatalogue.Type.COLOUR ? "a colour like \"#5C9EF0\""
+                            : tooLarge(written) ? "a number of pixels a float can hold; this one is too large"
+                            : "a number of pixels, 0 or more";
+            warn(at, at + "|" + written, at + " — expected " + expected
                 + ", got \"" + written + "\"" + reached + "; using the default");
         }
         return value;
@@ -600,6 +602,15 @@ public final class AegisTheme {
             rgba[i] = (hi * 16 + lo) / 255.0f;
         }
         return rgba;
+    }
+
+    /** Whether the text is a number too large for a float — 1e39 — which reads as infinity. */
+    private static boolean tooLarge(String text) {
+        try {
+            return Float.isInfinite(Float.parseFloat(text));
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /** A number of pixels, 0 or more, or null. */
