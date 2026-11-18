@@ -2254,19 +2254,24 @@ one *Move entity*. Stopping the scene clears the history, since it is rebuilt fr
 snapshot and an entity may come back under another number; once entities have ids that last,
 the history can outlive a play.
 
+**4h ✅ — the theme and layout selector.** *View › Theme* and *View › Layout* list the user's
+files under *Yours*, the installation's under *Installed* — each by the name its file gives,
+read again whenever View opens — and the factory's last, the one in use ticked. A theme chosen
+is applied at once; a layout chosen rebuilds the editor screen at once; either is kept in
+`editor.json` in the user's directory (`{"theme": {"origin": "installed", "file": "dark"},
+"layout": {...}}`) for the next start, and `-PthemeFile`/`-PlayoutFile` still name a file for
+one development run. A copy of the same name no longer hides the installed file: both are
+listed. What the user resizes or closes is their **arrangement** of the layout in use, kept in
+`arrangements/<origin>/<file>.json`, one per layout, so no layout file is ever written over
+and going back to a layout finds it as it was left; *Restore default layout* forgets the
+arrangement of the layout in use. Menu items take `setLabel`, code's text a locale leaves
+alone, so the lists show the files' own names.
+
 **Next**, in an order to be agreed:
 
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
   development option, *Restore default layout*.
-- **A theme and layout selector — soon.** Today the user's own `layouts/default.json`, which
-  the editor writes when a dock is resized, hides the installation's file of the same name, so
-  a designer editing the installed layout sees nothing change. The plan, after Unity's
-  *Window › Layouts*: the arrangement the user adjusts goes to a file of its own, recording the
-  layout it came from, and never over a layout file; *View › Layout* lists the installed and
-  the user's layouts and loads the one chosen afresh, without restarting; a theme list, the
-  choice kept in `editor.json`. Until then the status bar shows the theme and the layout in
-  use and whose each is — yours, installed or factory — and the log says where each file is.
 
 **Later, a phase of its own — plugins.** Behaviour other developers add, without the files
 becoming more than data: a jar registers actions and panels through a public engine API, and a

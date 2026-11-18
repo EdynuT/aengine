@@ -191,4 +191,18 @@ class AegisMenuTest {
         assertFalse(ae.isMenuOpen(menuFile));
         assertFalse(ae.isMenuOpen(recentMenu));
     }
+
+    @Test
+    void anItemShowsTextSetByCodeAndALocaleLeavesItAlone() throws Exception {
+        // The theme and layout lists: an item shows a file's own name, in no language.
+        build();
+        ae.setLabel(menuItemGrid, "Midnight blue");
+        assertEquals("Midnight blue", ae.shownText(menuItemGrid));
+        ae.applyLocale(AegisLocale.parse(new java.io.StringReader(
+            "{ \"name\": \"test\", \"format\": 1, \"texts\": { \"menuView.menuItemGrid\": \"Mostrar grade\" } }"), "test"));
+        assertEquals("Midnight blue", ae.shownText(menuItemGrid));
+        float wide = layout.requestedWidth(menuItemGrid);
+        ae.setLabel(menuItemGrid, "A much longer theme name than before");
+        assertTrue(layout.requestedWidth(menuItemGrid) > wide, "the item is sized again for its new text");
+    }
 }

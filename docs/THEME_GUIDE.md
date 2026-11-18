@@ -47,24 +47,27 @@ Everything the file leaves out keeps its default. Most widgets take their colour
 
 ## 2. Where theme files live, and how one is chosen
 
-A theme is found by its file name, without `.json`. The editor looks in two places, in this
-order, and takes the first file that exists and can be read:
+Themes live in two places, and the factory theme is always there besides:
 
 | Order | Place | Who writes it |
 |---|---|---|
 | 1 | The user's directory: `~/.local/share/AEngine/gui/themes/` on Linux, `%LOCALAPPDATA%\AEngine\gui\themes\` on Windows | The user: their own themes |
 | 2 | The installation: `<install>/gui/themes/`. In the repository, `editor/src/dist/gui/themes/` | The designer: the themes that ship |
-| 3 | The factory theme, compiled into the engine | Nobody. Used when no file is found or none can be read |
+| 3 | The factory theme, compiled into the engine | Nobody. Used when nothing else is chosen, or the file chosen is gone or cannot be read |
 
-A user's theme with the same name as a shipped one hides the shipped one.
+**Choosing a theme: View › Theme.** It lists the user's themes under *Yours*, the
+installation's under *Installed*, each by the `"name"` its file gives, and the factory theme
+last; the one in use is ticked. Choosing one applies it at once, without restarting, and keeps
+the choice in `editor.json` in the user's directory for the next start. A user's theme with the
+same file name as an installed one is listed beside it, not instead of it. The list is read
+again each time the View menu opens, so a file just saved into a `themes/` directory is there.
 
-**Choosing a theme.** Until the settings page exists, the theme is chosen when the editor is
-started:
+From the command line, for a development run:
 
 | Command | Effect |
 |---|---|
-| `./gradlew :editor:run` | The factory theme |
-| `./gradlew :editor:run -PthemeFile=dark` | `themes/dark.json`, looked for as above |
+| `./gradlew :editor:run` | The theme chosen last in View › Theme; the factory theme if none |
+| `./gradlew :editor:run -PthemeFile=dark` | `themes/dark.json` for this run: the user's if it exists, else the installation's |
 | `... -PthemeWatch` | Saving the theme file applies it to the running editor |
 | `... -PtestShell` | The user's directory becomes `editor/test-shell/`, a local folder not in the repository, so test themes never touch your real one |
 
@@ -595,6 +598,7 @@ a rule reaches nothing.
 | File menu | Save scene, Quit | `menu` | `menuFile.menuItemSaveScene`, `menuFile.menuItemQuit` | `"menuFile.menuItemQuit.text"` |
 | Edit menu | Undo, Redo | `menu` | `menuEdit.menuItemUndo`, `menuEdit.menuItemRedo` | |
 | View menu | Hierarchy … Output, Restore default layout | `menu` | `menuView.menuItemHierarchy`, `…Assets`, `…Inspector`, `…Console`, `…Output`, `menuView.menuItemRestoreLayout` | |
+| View › Theme, View › Layout | The submenus' items, and the lists in them | `menu` | `menuView.menuTheme`, `menuView.menuLayout`; inside, `menuTheme.menuItemThemesYours`, `…Installed` (the headings) and `menuTheme.menuItemTheme1`, `…2`, … in list order; the same under `menuLayout` | |
 | Dock tabs' context menu | Close | `menu` | `menuDock.menuItemClose` | |
 | Toolbar | Select, Move, Rotate, Scale | `toggle` | `toolbar.toggleSelect`, `…toggleMove`, `…toggleRotate`, `…toggleScale` | `"toolbar.toggle.radius": 2` |
 | Toolbar | Play, Pause | `toggle` | `toolbar.togglePlay`, `toolbar.togglePause` | `"toolbar.togglePlay.fill.selected": "#2E7D32"` |

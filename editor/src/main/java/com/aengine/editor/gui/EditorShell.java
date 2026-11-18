@@ -15,6 +15,7 @@ import com.aengine.editor.UndoHistory;
 import com.aengine.utils.Logger;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * The editor's interface, drawn by Aegis — Phase 4.
@@ -30,6 +31,11 @@ import java.nio.file.Path;
  * layout's: hierarchy over assets on the left, viewport over console and output in the
  * middle, inspector on the right, with the menu bar and toolbar above and the status bar
  * below.</p>
+ *
+ * <p>View &gt; Theme and View &gt; Layout list the user's and the installation's files and the
+ * factory's; the one chosen applies at once, without restarting, and is kept in
+ * {@code editor.json} for the next start. The docks the user resizes or closes are kept as
+ * their arrangement of the layout in use, never over the layout's file.</p>
  */
 public final class EditorShell {
 
@@ -50,6 +56,12 @@ public final class EditorShell {
     private final int[] menuItemDocks = new int[DOCKS.length];
     private final int menuItemRestoreLayout;
 
+    /** View &gt; Theme and View &gt; Layout: the lists shown, their items, and the View menu's state last frame. */
+    private final int menuView, menuTheme, menuLayout;
+    private List<ShellFiles.Listed> themeList = List.of(), layoutList = List.of();
+    private int[] themeItems = new int[0], layoutItems = new int[0];
+    private boolean viewWasOpen;
+
     /** Edit (4g): the scene's history, its two items, what they were last shown for, and whether the scene plays. */
     private final UndoHistory history;
     private final int menuItemUndo, menuItemRedo;
@@ -59,18 +71,22 @@ public final class EditorShell {
     /** The docks' tabs' context menu (4f), and the dock it was last opened for. */
     private final int menuDock, menuItemCloseDock;
     private String dockMenuFor;
-    private final String layoutName;
+
+    /** The layout chosen, the files the editor screen was built from for it, and a layout asked for this frame. */
+    private ShellFiles.Choice layoutChoice;
+    private AegisLayoutFile[] layoutsInLine;
+    private ShellFiles.Choice layoutAsked;
 
     /** When to write the arrangement down: a second after the user last changed it; 0 for not due. */
     private long layoutSaveDue;
     private static final long LAYOUT_SAVE_DELAY = 1_000_000_000L;
 
-    // Step 3f-5: the theme on screen, the name it was asked for by — null for the factory
-    // theme — and whether a reload has been asked for, run at the start of the next frame.
+    // Step 3f-5: the theme on screen, the one chosen, and whether a reload has been asked
+    // for, run at the start of the next frame; the watcher, while the development option is on.
     private AegisTheme theme;
-    private final String themeName;
+    private ShellFiles.Choice themeChoice;
     private boolean themeReloadAsked;
-    private final ThemeWatcher themeWatcher;
+    private ThemeWatcher themeWatcher;
 
     // Widgets the editor acts on.
     private final int menuItemSaveScene;
@@ -144,13 +160,17 @@ public final class EditorShell {
         menuItemUndo = ae.menuItem(menuEdit, "menuItemUndo", "Undo", "Ctrl+Z");
         menuItemRedo = ae.menuItem(menuEdit, "menuItemRedo", "Redo", "Ctrl+Y");
 
-        int menuView = ae.menu(menuBarMain, "menuView", "View");
+        menuView = ae.menu(menuBarMain, "menuView", "View");
         menuItemDocks[0] = ae.menuCheckItem(menuView, "menuItemHierarchy", "Hierarchy");
         menuItemDocks[1] = ae.menuCheckItem(menuView, "menuItemAssets",    "Assets");
         menuItemDocks[2] = ae.menuCheckItem(menuView, "menuItemInspector", "Inspector");
         menuItemDocks[3] = ae.menuCheckItem(menuView, "menuItemConsole",   "Console");
         menuItemDocks[4] = ae.menuCheckItem(menuView, "menuItemOutput",    "Output");
         ae.separator(menuView, "separatorView");
+        // The selector: the files are listed again each time View opens, so one just copied
+        // into a themes or layouts directory is there without restarting.
+        menuTheme  = ae.subMenu(menuView, "menuTheme", "Theme");
+        menuLayout = ae.subMenu(menuView, "menuLayout", "Layout");
         menuItemRestoreLayout = ae.menuItem(menuView, "menuItemRestoreLayout", "Restore default layout");
 
         // The docks' tabs (4f): a secondary click on one, or Shift+F10 on its bar, offers to
@@ -254,26 +274,32 @@ public final class EditorShell {
         labelProject = ae.label(status, "labelProject", "");
         showPlayState(false, false);
 
-        // ── The screen, from the first layout in line that describes it usably.
-        layoutName = System.getProperty("aengine.layout", "default");
-        AegisLayoutFile[] layouts = ShellFiles.loadLayouts(layoutName);
-        root = screens.build("editor", layouts);
-        for (AegisLayoutFile file : layouts) file.report();
+        // ── What was chosen last, from editor.json. A development run's -PlayoutFile and
+        //    -PthemeFile name a file instead, for that run.
+        ShellFiles.Choice[] chosen = ShellFiles.readChoices();
+        String layoutProperty = System.getProperty("aengine.layout");
+        layoutChoice = layoutProperty != null ? ShellFiles.defaultLayout(layoutProperty)
+                     : chosen[1] != null      ? chosen[1]
+                     : ShellFiles.defaultLayout("default");
+        String themeProperty = System.getProperty("aengine.theme");
+        themeChoice = themeProperty != null ? ShellFiles.themeNamed(themeProperty)
+                    : chosen[0] != null     ? chosen[0]
+                    : ShellFiles.Choice.FACTORY;
 
-        // ── The theme: the factory's — the catalogue's defaults, compiled in — unless
-        //    -PthemeFile=<name> asks for a file. Applied once the tree is built, since a theme
-        //    finds widgets by their paths.
-        themeName = System.getProperty("aengine.theme");
-        if (themeName != null) {
-            theme = ShellFiles.loadTheme(themeName);
-        } else {
-            theme = AegisTheme.factory();
-            Logger.info(Logger.System.UI, "Theme \"%s\": the engine's defaults.", theme.name());
-        }
+        // ── The screen, from the first layout in line that describes it usably: the user's
+        //    arrangement of the layout chosen, the layout, the factory's.
+        layoutsInLine = ShellFiles.loadLayouts(layoutChoice);
+        root = screens.build("editor", layoutsInLine);
+        for (AegisLayoutFile file : layoutsInLine) file.report();
+
+        // ── The theme, applied once the tree is built, since a theme finds widgets by their paths.
+        theme = ShellFiles.loadTheme(themeChoice);
         ae.applyTheme(theme, root);
-        // The theme author's development option: saving the file applies it. Off by default.
-        themeWatcher = themeName != null && Boolean.getBoolean("aengine.themeWatch")
-            ? ThemeWatcher.start(themeName) : null;
+        watchTheme();
+
+        // ── The lists in View > Theme and View > Layout, made before the language is applied,
+        //    so it finds their headings.
+        listChoices();
 
         // ── The language: the system's, unless -Plocale=<tag> says otherwise.
         String tag = System.getProperty("aengine.locale", java.util.Locale.getDefault().toLanguageTag());
@@ -284,6 +310,120 @@ public final class EditorShell {
         showDocksInMenu();
         giveDocksTheirMenu();
         showSources(true);
+        reportThemeFallback();   // what editor.json chose may have gone since
+        reportLayoutFallback();
+    }
+
+    /**
+     * The theme author's development option, {@code -PthemeWatch}: saving the theme chosen
+     * applies it. Off by default; started again for each theme chosen.
+     */
+    private void watchTheme() {
+        if (themeWatcher != null) { themeWatcher.close(); themeWatcher = null; }
+        if (themeChoice.file() != null && Boolean.getBoolean("aengine.themeWatch")) {
+            themeWatcher = ThemeWatcher.start(themeChoice.file());
+        }
+    }
+
+    /**
+     * Lists the themes and the layouts in View &gt; Theme and View &gt; Layout, ticking the ones in
+     * use: the user's under a heading, the installation's under another, the factory's last.
+     * Made again only when the files changed.
+     */
+    private void listChoices() {
+        List<ShellFiles.Listed> themes = ShellFiles.listThemes(), layouts = ShellFiles.listLayouts();
+        boolean changed = false;
+        if (!themes.equals(themeList)) {
+            themeList = themes;
+            themeItems = fillList(menuTheme, "Theme", themes);
+            changed = true;
+        }
+        if (!layouts.equals(layoutList)) {
+            layoutList = layouts;
+            layoutItems = fillList(menuLayout, "Layout", layouts);
+            changed = true;
+        }
+        if (changed) {   // the new items take the theme and the language the others have
+            ae.applyTheme(theme, root);
+            if (locale != null) ae.applyLocale(locale);
+        }
+        tickChoices();
+    }
+
+    /**
+     * Fills a list's submenu: a heading over the user's, one over the installation's, the
+     * factory's last, set apart by separators. The headings are always made, hidden over an
+     * empty group, so a locale always finds the texts it translates. The items are named by
+     * their place, and show the files' own names.
+     */
+    private int[] fillList(int menu, String what, List<ShellFiles.Listed> list) {
+        ae.removeChildren(menu);
+        int[] items = new int[list.size()];
+        int i = 0;
+        for (ShellFiles.Origin origin : ShellFiles.Origin.values()) {
+            int first = i;
+            while (i < list.size() && list.get(i).choice().origin() == origin) i++;
+            boolean empty = i == first;
+            if (origin != ShellFiles.Origin.FACTORY) {
+                boolean yours = origin == ShellFiles.Origin.USER;
+                int heading = ae.menuItem(menu, "menuItem" + what + "s" + (yours ? "Yours" : "Installed"),
+                                          yours ? "Yours" : "Installed");
+                ae.setEnabled(heading, false);
+                layout.setHidden(heading, empty);
+            }
+            for (int k = first; k < i; k++) {
+                items[k] = ae.menuCheckItem(menu, "menuItem" + what + (k + 1), "");
+                ae.setLabel(items[k], list.get(k).name());   // a file's own name: no language changes it
+            }
+            if (origin != ShellFiles.Origin.FACTORY) {
+                int separator = ae.separator(menu, "separator" + what + "s" + (origin == ShellFiles.Origin.USER ? "Yours" : "Installed"));
+                layout.setHidden(separator, empty);
+            }
+        }
+        return items;
+    }
+
+    /** What a list shows for a choice; its file's name when the list does not hold it. */
+    private static String listedName(List<ShellFiles.Listed> list, ShellFiles.Choice choice) {
+        for (ShellFiles.Listed listed : list) if (listed.choice().equals(choice)) return listed.name();
+        return choice.file() != null ? choice.file() : "Factory";
+    }
+
+    /** Says in the log when the theme chosen could not be used and the factory theme took its place. */
+    private void reportThemeFallback() {
+        if (themeChoice.origin() != ShellFiles.Origin.FACTORY && ShellFiles.originOf(theme.source()) == ShellFiles.Origin.FACTORY) {
+            Logger.warn(Logger.System.UI, "Theme \"%s\" (%s) could not be used, for the reason above; the factory theme is used instead.",
+                listedName(themeList, themeChoice), themeChoice.origin().word());
+        }
+    }
+
+    /** Says in the log when the layout chosen could not build the editor screen and the factory layout did. */
+    private void reportLayoutFallback() {
+        if (layoutChoice.origin() != ShellFiles.Origin.FACTORY
+                && ShellFiles.originOf(screens.builtFrom("editor").source()) == ShellFiles.Origin.FACTORY) {
+            Logger.warn(Logger.System.UI, "Layout \"%s\" (%s) could not build the editor screen, for the reason above;"
+                + " the factory layout is used instead.", listedName(layoutList, layoutChoice), layoutChoice.origin().word());
+        }
+    }
+
+    /** Ticks the theme and the layout in use, and only them. */
+    private void tickChoices() {
+        for (int i = 0; i < themeItems.length; i++)  ae.setChecked(themeItems[i],  themeList.get(i).choice().equals(themeChoice));
+        for (int i = 0; i < layoutItems.length; i++) ae.setChecked(layoutItems[i], layoutList.get(i).choice().equals(layoutChoice));
+    }
+
+    /** View &gt; Theme: the theme chosen is applied at once, and kept for the next start. */
+    private void chooseTheme(ShellFiles.Choice choice) {
+        Logger.info(Logger.System.UI, "View > Theme: \"%s\" changed to \"%s\" (%s).",
+            theme.name(), listedName(themeList, choice), choice.origin().word());
+        themeChoice = choice;
+        theme = ShellFiles.loadTheme(choice);
+        reportThemeFallback();
+        ae.applyTheme(theme, root);
+        watchTheme();
+        ShellFiles.saveChoices(themeChoice, layoutChoice);
+        tickChoices();
+        showSources(true);
     }
 
     /**
@@ -293,6 +433,8 @@ public final class EditorShell {
     private void showSources(boolean log) {
         ShellFiles.Origin themeOrigin = ShellFiles.originOf(theme.source());
         AegisLayoutFile layoutFile = screens.builtFrom("editor");
+        // The user's arrangement of a layout is shown as the layout it arranges.
+        if (ShellFiles.isArrangement(layoutFile.source()) && layoutsInLine.length > 1) layoutFile = layoutsInLine[1];
         ShellFiles.Origin layoutOrigin = ShellFiles.originOf(layoutFile.source());
         ae.setLabel(labelThemeName, theme.name());
         ae.setLabel(labelLayoutName, layoutFile.name());
@@ -337,21 +479,41 @@ public final class EditorShell {
     }
 
     /**
-     * View &gt; Restore default layout: the user's arrangement of the editor screen is
-     * forgotten — taken out of their file — and the screen is built again from the next in
-     * line, the installation's or the factory's, then dressed and translated again.
+     * View &gt; Restore default layout: the user's arrangement of the layout in use is
+     * forgotten, and the editor screen is built again from the layout as it is.
      */
     private void restoreLayout() {
         layoutSaveDue = 0;
-        ShellFiles.forgetLayout(layoutName, "editor");
-        AegisLayoutFile[] layouts = ShellFiles.loadLayouts(layoutName);
-        root = screens.rebuild("editor", layouts);
-        for (AegisLayoutFile file : layouts) file.report();
+        ShellFiles.forgetArrangement(layoutChoice, "editor");
+        rebuildScreen();
+        Logger.info(Logger.System.UI, "Layout restored.");
+    }
+
+    /**
+     * View &gt; Layout: an arrangement not yet written is written for the layout it belongs to,
+     * then the editor screen is built from the layout chosen — with the user's arrangement of
+     * it, if they made one — and the choice is kept for the next start.
+     */
+    private void chooseLayout(ShellFiles.Choice choice) {
+        if (layoutSaveDue != 0) saveLayout();
+        Logger.info(Logger.System.UI, "View > Layout: \"%s\" changed to \"%s\" (%s).",
+            listedName(layoutList, layoutChoice), listedName(layoutList, choice), choice.origin().word());
+        layoutChoice = choice;
+        rebuildScreen();
+        reportLayoutFallback();
+        ShellFiles.saveChoices(themeChoice, layoutChoice);
+        tickChoices();
+    }
+
+    /** Builds the editor screen again for the layout chosen, then dresses and translates it again. */
+    private void rebuildScreen() {
+        layoutsInLine = ShellFiles.loadLayouts(layoutChoice);
+        root = screens.rebuild("editor", layoutsInLine);
+        for (AegisLayoutFile file : layoutsInLine) file.report();
         ae.applyTheme(theme, root);
         ae.applyLocale(locale);
         showDocksInMenu();
         giveDocksTheirMenu();
-        Logger.info(Logger.System.UI, "Layout restored.");
         showSources(true);
     }
 
@@ -383,8 +545,8 @@ public final class EditorShell {
         // A theme reload asked for last frame, by Ctrl+R or by saving the file, runs first, so
         // nothing is solved or drawn half in one theme and half in the other.
         boolean themeSaved = themeWatcher != null && themeWatcher.takeChange();
-        if ((themeReloadAsked || themeSaved) && themeName != null) {
-            AegisTheme reloaded = ShellFiles.reloadTheme(themeName, theme);
+        if ((themeReloadAsked || themeSaved) && themeChoice.file() != null) {
+            AegisTheme reloaded = ShellFiles.reloadTheme(themeChoice, theme);
             if (reloaded != theme) {
                 theme = reloaded;
                 showSources(false);
@@ -451,6 +613,18 @@ public final class EditorShell {
             if (ae.wasActivated(menuItemDocks[i])) screens.setPanelOpen(DOCKS[i], ae.isChecked(menuItemDocks[i]));
         }
         boolean restore = ae.wasActivated(menuItemRestoreLayout);
+
+        // View: its lists are made again as it opens, so a file just added is there; a theme
+        // chosen applies now, a layout once this frame's input is read, as Restore does.
+        boolean viewOpen = ae.isMenuOpen(menuView);
+        if (viewOpen && !viewWasOpen) listChoices();
+        viewWasOpen = viewOpen;
+        for (int i = 0; i < themeItems.length; i++) {
+            if (ae.wasActivated(themeItems[i])) chooseTheme(themeList.get(i).choice());
+        }
+        for (int i = 0; i < layoutItems.length; i++) {
+            if (ae.wasActivated(layoutItems[i])) layoutAsked = layoutList.get(i).choice();
+        }
         if (ae.wasActivated(menuItemUndo)) history.undo();
         if (ae.wasActivated(menuItemRedo)) history.redo();
         showHistory();
@@ -475,6 +649,10 @@ public final class EditorShell {
         // solved here so nothing is drawn from the old one.
         if (restore) {
             restoreLayout();
+            layout.solve(root, 0.0f, 0.0f, width, height);
+        } else if (layoutAsked != null) {
+            chooseLayout(layoutAsked);
+            layoutAsked = null;
             layout.solve(root, 0.0f, 0.0f, width, height);
         }
 
@@ -595,10 +773,11 @@ public final class EditorShell {
     /** @return the viewport's height in pixels, as last solved */
     public float viewportHeight() { return layout.height(surfaceScene); }
 
-    /** Writes the arrangement into the user's layout file. */
+    /** Writes the arrangement down as the user's arrangement of the layout in use. */
     private void saveLayout() {
         layoutSaveDue = 0;
-        ShellFiles.saveLayout(layoutName, "editor", screens.describe("editor"));
+        AegisLayoutFile base = layoutsInLine[ShellFiles.isArrangement(layoutsInLine[0].source()) && layoutsInLine.length > 1 ? 1 : 0];
+        ShellFiles.saveArrangement(layoutChoice, base.name(), "editor", screens.describe("editor"));
     }
 
     /** Writes down an arrangement change not yet written, releases what Aegis holds, stops the theme watcher. */

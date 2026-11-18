@@ -747,7 +747,7 @@ public final class AegisWidgets {
             case MENU_TITLE -> fit(node, (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f,
                 line + style.menuPaddingY * 2.0f);
             case MENU_ITEM -> {
-                float w = style.menuCheckWidth + (float) Math.ceil(aegis.measure(label[node])) + style.menuPaddingX * 2.0f;
+                float w = style.menuCheckWidth + (float) Math.ceil(aegis.measure(textOf(node))) + style.menuPaddingX * 2.0f;
                 if (itemShortcut[node] != null) w += style.menuGap + (float) Math.ceil(aegis.measure(itemShortcut[node]));
                 if (itemSubMenu[node] != AegisLayout.NONE) w += style.menuGap;
                 fit(node, w, line + style.menuPaddingY * 2.0f);
@@ -911,9 +911,10 @@ public final class AegisWidgets {
      * text changed. The text is copied into the label's own buffer, so a reused
      * {@code StringBuilder} can be handed in every frame: nothing is allocated, and a text that
      * did not change costs a comparison. Text set here is code's to compose, and a locale
-     * leaves it alone.
+     * leaves it alone. A menu item takes it too: a list made from files — a theme's name — is
+     * shown as the files say.
      *
-     * @param node the label
+     * @param node the label, or a menu item
      * @param text the text; copied, not kept
      */
     public void setLabel(int node, CharSequence text) {
@@ -936,7 +937,7 @@ public final class AegisWidgets {
         return true;
     }
 
-    /** What a button, toggle or label shows: the text code set, or the one it was made with. */
+    /** What a button, toggle, label or menu item shows: the text code set, or the one it was made with. */
     private CharSequence textOf(int node) {
         return liveText[node] != null ? liveText[node] : label[node];
     }
@@ -5053,7 +5054,7 @@ public final class AegisWidgets {
             arrowText.append(AegisFont.CHECK_MARK);
             aegis.addTextTop(x + style.menuPaddingX * 0.5f, textY, arrowText, ink[0], ink[1], ink[2], ink[3]);
         }
-        aegis.addTextTop(x + style.menuPaddingX + style.menuCheckWidth, textY, label[node], ink[0], ink[1], ink[2], ink[3]);
+        aegis.addTextTop(x + style.menuPaddingX + style.menuCheckWidth, textY, textOf(node), ink[0], ink[1], ink[2], ink[3]);
         if (itemShortcut[node] != null) {
             float sw = aegis.measure(itemShortcut[node]);
             aegis.addTextTop(x + w - style.menuPaddingX - sw, textY, itemShortcut[node], dim[0], dim[1], dim[2], dim[3]);

@@ -16,6 +16,12 @@
   "menuView.menuItemConsole": "Console",
   "menuView.menuItemOutput": "Saída",
   "menuView.menuItemRestoreLayout": "Restaurar layout padrão",
+  "menuView.menuTheme": "Tema",
+  "menuView.menuLayout": "Layout",
+  "menuTheme.menuItemThemesYours": "Seus",
+  "menuTheme.menuItemThemesInstalled": "Instalados",
+  "menuLayout.menuItemLayoutsYours": "Seus",
+  "menuLayout.menuItemLayoutsInstalled": "Instalados",
   "menuDock.menuItemClose": "Fechar",
 
   "toolbar.toggleSelect.tooltip": "Selecionar",
