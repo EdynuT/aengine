@@ -788,6 +788,13 @@ public final class AegisWidgets {
     }
 
     /**
+     * The size a widget last fitted to its content, for the screens to give it back when the
+     * layout that sized it is replaced.
+     */
+    float fittedWidth(int node)  { return fittedWidth[node]; }
+    float fittedHeight(int node) { return fittedHeight[node]; }
+
+    /**
      * The window whose system clipboard text fields copy to and paste from. Until it is set,
      * Ctrl+C, Ctrl+X and Ctrl+V do nothing. Handed in rather than looked up, like the pointer
      * and the keys: whoever owns the window decides the interface may use its clipboard.

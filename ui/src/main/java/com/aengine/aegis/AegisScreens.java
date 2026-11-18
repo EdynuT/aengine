@@ -75,6 +75,8 @@ public final class AegisScreens {
     private final Map<String, Map<AegisLayoutFile.Node, Integer>> builtNodes = new HashMap<>();
     private final Map<String, Integer> builtRoots = new HashMap<>();
     private final Map<String, AegisLayoutFile> builtFile = new HashMap<>();
+    /** What building each screen changed inside the panels, so rebuilding it can take it back. */
+    private final Map<String, Build> builtBy = new HashMap<>();
 
     /**
      * Each panel as code made it, before any layout file set its size, spacing or alignment —
@@ -214,6 +216,7 @@ public final class AegisScreens {
             builtFile.put(screen, file);
             builtNodes.put(screen, build.handles);
             builtRoots.put(screen, built);
+            builtBy.put(screen, build);
             build.registerDocks(root, null);
             // The panels the user closed, once the whole screen stands: closing the last tab of
             // a dock hides the rows and columns left with nothing shown, which needs them all.
@@ -443,10 +446,12 @@ public final class AegisScreens {
 
     /**
      * Builds a screen again from the files in line, in place of the one built before — View
-     * &gt; Restore default layout, after the user's own file has let go of it. The panels come
-     * off the old arrangement and go into the new; the old rows, columns and tabbed panes are
-     * dropped. Apply the theme and the language again afterwards: the new tabbed panes have
-     * neither yet.
+     * &gt; Restore default layout, or another layout chosen. The panels come off the old
+     * arrangement and go into the new; the old rows, columns and tabbed panes are dropped.
+     * What the old file did inside the panels is taken back first — widgets it moved to another
+     * panel or hid, sizes it gave them, rows it grouped them in — so a file that leaves a panel
+     * as code made it finds it so. Apply the theme and the language again afterwards: the new
+     * tabbed panes have neither yet.
      *
      * @param screen a screen built before
      * @param inLine the files to take it from, as for {@link #build}
@@ -474,7 +479,10 @@ public final class AegisScreens {
             }
         }
         tabOf.clear();
+        Build last = builtBy.remove(screen);
+        if (last != null) last.takeBack();
         widgets.discard(old);
+        if (last != null) last.dropMade();
         widgets.clearDocks();
         builtFrom.remove(screen);
         builtNodes.remove(screen);
@@ -559,6 +567,59 @@ public final class AegisScreens {
         /** Widgets the file placed, so the ones it did not can go back where code made them. */
         private final Set<Integer> placed = new HashSet<>();
 
+        /**
+         * For {@link #takeBack}: each container whose children the file changed, with its
+         * children before; each widget it sized, with its size before (width, height, grow, and
+         * whether each axis was fitted to content); the rows and columns it made.
+         */
+        private final Map<Integer, List<Integer>> childrenBefore = new LinkedHashMap<>();
+        private final Map<Integer, float[]> sizeBefore = new HashMap<>();
+        private final List<Integer> made = new ArrayList<>();
+
+        /** Notes a container's children before the file first changes them. */
+        private void keep(int container) {
+            if (container == AegisLayout.NONE || childrenBefore.containsKey(container)) return;
+            List<Integer> children = new ArrayList<>();
+            for (int c = layout.firstChild(container); c != AegisLayout.NONE; c = layout.nextSibling(c)) children.add(c);
+            childrenBefore.put(container, children);
+        }
+
+        /**
+         * Takes back what the file did inside the panels: every container it changed gets its
+         * children back, in their order, and every widget it sized its size — on an axis that
+         * was fitted to content, the size it fits now, since its text may have changed.
+         */
+        void takeBack() {
+            for (Map.Entry<Integer, List<Integer>> e : childrenBefore.entrySet()) {
+                int container = e.getKey();
+                if (!layout.isInUse(container)) continue;
+                for (int c = layout.firstChild(container); c != AegisLayout.NONE; ) {
+                    int next = layout.nextSibling(c);
+                    layout.detach(c);
+                    c = next;
+                }
+            }
+            for (Map.Entry<Integer, List<Integer>> e : childrenBefore.entrySet()) {
+                if (!layout.isInUse(e.getKey())) continue;
+                for (int child : e.getValue()) if (layout.isInUse(child)) layout.attach(child, e.getKey());
+            }
+            for (Map.Entry<Integer, float[]> e : sizeBefore.entrySet()) {
+                int widget = e.getKey();
+                if (!layout.isInUse(widget)) continue;
+                float[] was = e.getValue();
+                layout.setSize(widget, was[3] != 0 ? AegisScreens.this.widgets.fittedWidth(widget)  : was[0],
+                                       was[4] != 0 ? AegisScreens.this.widgets.fittedHeight(widget) : was[1]);
+                layout.setGrow(widget, was[2]);
+            }
+        }
+
+        /** Drops the rows and columns the file made that nothing holds any more. */
+        void dropMade() {
+            for (int node : made) {
+                if (layout.isInUse(node) && layout.parent(node) == AegisLayout.NONE) AegisScreens.this.widgets.discard(node);
+            }
+        }
+
         /** Each rearranged panel's children as code made them, in code order. */
         private final Map<Integer, List<Integer>> codeOrder = new LinkedHashMap<>();
         private final Map<Integer, AegisLayoutFile.Node> panelNodes = new HashMap<>();
@@ -589,6 +650,7 @@ public final class AegisScreens {
             return switch (node.type()) {
                 case ROW, COLUMN -> {
                     int made = node.type() == AegisLayoutFile.Type.ROW ? layout.row(parent) : layout.column(parent);
+                    this.made.add(made);
                     applyProperties(node, made);
                     for (AegisLayoutFile.Node child : node.children()) place(child, made);
                     yield made;
@@ -616,6 +678,11 @@ public final class AegisScreens {
                 case WIDGET -> {
                     Integer widget = widgets.get(node.name());
                     if (widget == null) yield AegisLayout.NONE;   // warned about in check()
+                    keep(layout.parent(widget));
+                    sizeBefore.computeIfAbsent(widget, w -> new float[] {
+                        layout.requestedWidth(w), layout.requestedHeight(w), layout.grow(w),
+                        layout.requestedWidth(w)  == AegisScreens.this.widgets.fittedWidth(w)  ? 1 : 0,
+                        layout.requestedHeight(w) == AegisScreens.this.widgets.fittedHeight(w) ? 1 : 0 });
                     layout.attach(widget, parent);
                     applySizes(node, widget);
                     placed.add(widget);
@@ -635,6 +702,7 @@ public final class AegisScreens {
             if (node.type() == AegisLayoutFile.Type.WIDGET) {
                 Integer widget = widgets.get(node.name());
                 if (widget == null) return;   // warned about in check()
+                keep(layout.parent(widget));
                 layout.detach(widget);
                 placed.add(widget);
                 return;
@@ -648,6 +716,7 @@ public final class AegisScreens {
          * The ones the file did not place anywhere go back in {@link #putBackUnplaced}.
          */
         private void arrange(AegisLayoutFile.Node panelNode, int panel) {
+            keep(panel);
             List<Integer> own = new ArrayList<>();
             for (int child = layout.firstChild(panel); child != AegisLayout.NONE; child = layout.nextSibling(child)) {
                 own.add(child);
