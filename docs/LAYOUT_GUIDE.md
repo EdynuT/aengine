@@ -69,7 +69,14 @@ Layouts live in two places, and the factory layout is always there besides:
 **Choosing a layout: View › Layout.** It lists the user's layouts under *Yours*, the
 installation's under *Installed*, each by its file's `"name"`, and the factory layout last;
 the one in use is ticked. Choosing one builds the editor screen from it at once, without
-restarting, and keeps the choice in `editor.json` in the user's directory for the next start.
+restarting, and asks *Keep this theme and layout?*: **Keep** writes the choice to `editor.json`
+in the user's directory for the next start; **Revert**, Esc, or ten seconds with no answer
+bring the previous layout back.
+
+> **A layout can be valid and still unusable** — every panel hidden, or margins that push the
+> menu out of the window. Wait ten seconds for the confirmation to revert, or press
+> **Ctrl+Shift+F12** at any time: the factory theme and layout come back, whatever the files
+> did.
 The list is read again each time the View menu opens. With nothing chosen yet, the editor
 takes `layouts/default.json` — the user's, else the installation's — else the factory layout.
 
@@ -303,7 +310,7 @@ are kept, and screens it does not hold come from the layout. The write goes thro
 temporary file, so a crash never leaves half a file.
 
 Each layout has its own arrangement, so going back to a layout in View › Layout finds it as
-the user left it. **View › Restore default layout** removes the screen from the arrangement
+the user left it. **View › Undo my changes to this layout** removes the screen from the arrangement
 of the layout in use (deleting the file if nothing is left in it) and builds it again from the
 layout as it is.
 

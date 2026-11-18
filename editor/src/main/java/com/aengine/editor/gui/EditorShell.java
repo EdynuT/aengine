@@ -54,7 +54,7 @@ public final class EditorShell {
     /** The docks the View menu closes and opens, by panel name, with their menu items (4c). */
     private static final String[] DOCKS = { "hierarchy", "assets", "inspector", "console", "output" };
     private final int[] menuItemDocks = new int[DOCKS.length];
-    private final int menuItemRestoreLayout;
+    private final int menuItemRestoreLayout, menuItemFactoryLook;
 
     /** View &gt; Theme and View &gt; Layout: the lists shown, their items, and the View menu's state last frame. */
     private final int menuView, menuTheme, menuLayout;
@@ -76,6 +76,26 @@ public final class EditorShell {
     private ShellFiles.Choice layoutChoice;
     private AegisLayoutFile[] layoutsInLine;
     private ShellFiles.Choice layoutAsked;
+    private String layoutAskedBy;
+    private After layoutAskedAfter;
+
+    /** What follows a theme or layout being applied: ask whether to keep it, keep it, or nothing — a revert. */
+    private enum After { ASK, KEEP, REVERT }
+
+    /**
+     * The confirmation after a theme or layout is chosen: kept with Keep; with Revert, Esc or
+     * ten seconds of nothing the previous ones come back — so one that leaves the interface
+     * unusable undoes itself. editor.json is written only once kept.
+     */
+    private final int dialogConfirmLook, buttonKeepLook, buttonRevertLook, labelConfirmSeconds;
+    private ShellFiles.Choice confirmTheme, confirmLayout;   // what to go back to; null while not asking
+    private long confirmDeadline;
+    private int confirmShown;
+    private static final long CONFIRM_TIME = 10_000_000_000L;
+
+    /** Ctrl+Shift+F12 or View &gt; Factory theme and layout, asked for this frame: the way out of an unusable interface. */
+    private boolean factoryLookAsked;
+    private static final String FACTORY_LOOK = "Ctrl+Shift+F12";
 
     /** When to write the arrangement down: a second after the user last changed it; 0 for not due. */
     private long layoutSaveDue;
@@ -153,7 +173,7 @@ public final class EditorShell {
         menuItemQuit = ae.menuItem(menuFile, "menuItemQuit", "Quit");
 
         // View (4c): a check item per dock, ticked while it is open — Unity's Window menu —
-        // and Restore default layout, which forgets the user's arrangement.
+        // and Undo my changes to this layout, which forgets the user's arrangement.
         // Edit (4g): Undo and Redo walk the scene's history. In a text field Ctrl+Z and Ctrl+Y
         // are the field's own, for what is typed; the menu's items are the scene's always.
         int menuEdit = ae.menu(menuBarMain, "menuEdit", "Edit");
@@ -171,7 +191,11 @@ public final class EditorShell {
         // into a themes or layouts directory is there without restarting.
         menuTheme  = ae.subMenu(menuView, "menuTheme", "Theme");
         menuLayout = ae.subMenu(menuView, "menuLayout", "Layout");
-        menuItemRestoreLayout = ae.menuItem(menuView, "menuItemRestoreLayout", "Restore default layout");
+        // Forgets the user's resizing of the layout in use: the layout as its file has it.
+        menuItemRestoreLayout = ae.menuItem(menuView, "menuItemRestoreLayout", "Undo my changes to this layout");
+        // The way out of a theme or layout that leaves the interface unusable — every panel
+        // hidden, or pushed off the window — as its key, Ctrl+Shift+F12, which needs no menu.
+        menuItemFactoryLook = ae.menuItem(menuView, "menuItemFactoryLook", "Factory theme and layout", "Ctrl+Shift+F12");
 
         // The docks' tabs (4f): a secondary click on one, or Shift+F10 on its bar, offers to
         // close it, as the tabs of Unity's and Godot's docks do. Given to the bars once the
@@ -273,6 +297,26 @@ public final class EditorShell {
         ae.separator(status, "separatorLayout");
         labelProject = ae.label(status, "labelProject", "");
         showPlayState(false, false);
+
+        // Titles for the bars too, shown only when a layout puts them in tabs.
+        screens.setPanelTitle("menu", "Menu");
+        screens.setPanelTitle("toolbar", "Toolbar");
+        screens.setPanelTitle("status", "Status bar");
+
+        // The confirmation after a theme or layout is chosen. Revert comes first, so focus
+        // lands on it: Enter pressed on an interface one cannot read goes back, not forward.
+        dialogConfirmLook = ae.dialog("dialogConfirmLook", "Keep this theme and layout?");
+        int confirmLine = layout.row(dialogConfirmLook);
+        layout.setGap(confirmLine, 4.0f);
+        layout.setAlignY(confirmLine, AegisLayout.Align.CENTER);
+        ae.label(confirmLine, "labelConfirmLook", "If nothing is chosen, the previous ones come back in");
+        labelConfirmSeconds = ae.label(confirmLine, "labelConfirmSeconds", "10");
+        ae.setLabel(labelConfirmSeconds, "10");   // a number: code's text
+        ae.label(confirmLine, "labelConfirmUnit", "s");
+        int confirmButtons = layout.row(dialogConfirmLook);
+        layout.setGap(confirmButtons, 8.0f);
+        buttonRevertLook = ae.button(confirmButtons, "buttonRevertLook", "Revert");
+        buttonKeepLook   = ae.button(confirmButtons, "buttonKeepLook", "Keep");
 
         // ── What was chosen last, from editor.json. A development run's -PlayoutFile and
         //    -PthemeFile name a file instead, for that run.
@@ -412,16 +456,20 @@ public final class EditorShell {
         for (int i = 0; i < layoutItems.length; i++) ae.setChecked(layoutItems[i], layoutList.get(i).choice().equals(layoutChoice));
     }
 
-    /** View &gt; Theme: the theme chosen is applied at once, and kept for the next start. */
-    private void chooseTheme(ShellFiles.Choice choice) {
-        Logger.info(Logger.System.UI, "View > Theme: \"%s\" changed to \"%s\" (%s).",
-            theme.name(), listedName(themeList, choice), choice.origin().word());
+    /**
+     * Applies a theme at once: View &gt; Theme asks whether to keep it, the way out keeps it, a
+     * revert just puts it back.
+     */
+    private void chooseTheme(ShellFiles.Choice choice, String by, After after) {
+        Logger.info(Logger.System.UI, "%s: theme \"%s\" changed to \"%s\" (%s).",
+            by, theme.name(), listedName(themeList, choice), choice.origin().word());
+        ShellFiles.Choice before = themeChoice;
         themeChoice = choice;
         theme = ShellFiles.loadTheme(choice);
         reportThemeFallback();
         ae.applyTheme(theme, root);
         watchTheme();
-        ShellFiles.saveChoices(themeChoice, layoutChoice);
+        settle(after, before, layoutChoice, choice.equals(before));
         tickChoices();
         showSources(true);
     }
@@ -479,7 +527,7 @@ public final class EditorShell {
     }
 
     /**
-     * View &gt; Restore default layout: the user's arrangement of the layout in use is
+     * View &gt; Undo my changes to this layout: the user's arrangement of the layout in use is
      * forgotten, and the editor screen is built again from the layout as it is.
      */
     private void restoreLayout() {
@@ -490,19 +538,77 @@ public final class EditorShell {
     }
 
     /**
-     * View &gt; Layout: an arrangement not yet written is written for the layout it belongs to,
-     * then the editor screen is built from the layout chosen — with the user's arrangement of
-     * it, if they made one — and the choice is kept for the next start.
+     * Builds the editor screen from a layout at once: an arrangement not yet written is written
+     * for the layout it belongs to first, and the layout chosen comes with the user's
+     * arrangement of it, if they made one. View &gt; Layout asks whether to keep it, the way out
+     * keeps it, a revert just puts it back.
      */
-    private void chooseLayout(ShellFiles.Choice choice) {
+    private void chooseLayout(ShellFiles.Choice choice, String by, After after) {
         if (layoutSaveDue != 0) saveLayout();
-        Logger.info(Logger.System.UI, "View > Layout: \"%s\" changed to \"%s\" (%s).",
-            listedName(layoutList, layoutChoice), listedName(layoutList, choice), choice.origin().word());
+        Logger.info(Logger.System.UI, "%s: layout \"%s\" changed to \"%s\" (%s).",
+            by, listedName(layoutList, layoutChoice), listedName(layoutList, choice), choice.origin().word());
+        ShellFiles.Choice before = layoutChoice;
         layoutChoice = choice;
         rebuildScreen();
         reportLayoutFallback();
-        ShellFiles.saveChoices(themeChoice, layoutChoice);
+        settle(after, themeChoice, before, choice.equals(before));
         tickChoices();
+    }
+
+    /**
+     * What follows a change: asked about — unless nothing changed — with the theme and layout
+     * to go back to; kept, written to editor.json; or, for a revert, nothing.
+     */
+    private void settle(After after, ShellFiles.Choice backTheme, ShellFiles.Choice backLayout, boolean same) {
+        if (after == After.KEEP || (after == After.ASK && same)) {
+            ShellFiles.saveChoices(themeChoice, layoutChoice);
+        } else if (after == After.ASK) {
+            confirmTheme  = backTheme;
+            confirmLayout = backLayout;
+            confirmDeadline = System.nanoTime() + CONFIRM_TIME;
+            confirmShown = -1;
+            ae.openDialog(dialogConfirmLook);
+        }
+    }
+
+    /**
+     * The confirmation, each frame while it is open: Keep writes the choice down; Revert, Esc
+     * or the time running out bring the previous theme and layout back, the layout once this
+     * frame's input is read. Otherwise the seconds left are shown.
+     */
+    private void runConfirmation() {
+        if (confirmTheme == null) return;
+        long left = confirmDeadline - System.nanoTime();
+        if (ae.wasActivated(buttonKeepLook)) {
+            Logger.info(Logger.System.UI, "Theme \"%s\" and layout \"%s\" kept.",
+                listedName(themeList, themeChoice), listedName(layoutList, layoutChoice));
+            ae.closeDialog(dialogConfirmLook);
+            confirmTheme = confirmLayout = null;
+            ShellFiles.saveChoices(themeChoice, layoutChoice);
+            return;
+        }
+        boolean asked = ae.wasActivated(buttonRevertLook) || ae.wasCancelled(dialogConfirmLook);
+        if (asked || left <= 0) {
+            Logger.info(Logger.System.UI, asked ? "Reverting, as asked." : "Reverting: nothing was chosen in %d seconds.",
+                CONFIRM_TIME / 1_000_000_000L);
+            ae.closeDialog(dialogConfirmLook);
+            ShellFiles.Choice backTheme = confirmTheme, backLayout = confirmLayout;
+            confirmTheme = confirmLayout = null;
+            if (!backTheme.equals(themeChoice)) chooseTheme(backTheme, "Revert", After.REVERT);
+            if (!backLayout.equals(layoutChoice)) {
+                layoutAsked = backLayout;
+                layoutAskedBy = "Revert";
+                layoutAskedAfter = After.REVERT;
+            }
+            return;
+        }
+        int seconds = (int) ((left + 999_999_999L) / 1_000_000_000L);
+        if (seconds != confirmShown) {
+            confirmShown = seconds;
+            statusText.setLength(0);
+            statusText.append(seconds);
+            ae.setLabel(labelConfirmSeconds, statusText);
+        }
     }
 
     /** Builds the editor screen again for the layout chosen, then dresses and translates it again. */
@@ -585,6 +691,9 @@ public final class EditorShell {
                     boolean ctrl = Keys.isCtrlShortcut(mods);   // AltGr+R types ®, and must not reload the theme
                     // Editor keys, not handed to the widgets. Ctrl+R reads the theme again:
                     // a development key, until the settings page exists.
+                    // The way out, read here before any widget, so it works whatever the theme
+                    // and the layout have done to the interface.
+                    if (ctrl && (mods & Keys.MOD_SHIFT) != 0 && key == Keys.F12) { factoryLookAsked = true; continue; }
                     if (ctrl && key == Keys.R) { themeReloadAsked = true; continue; }
                     if (ctrl && key == Keys.S) { saveAsked = true; continue; }
                     // Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z, undo and redo in the scene — unless
@@ -620,10 +729,32 @@ public final class EditorShell {
         if (viewOpen && !viewWasOpen) listChoices();
         viewWasOpen = viewOpen;
         for (int i = 0; i < themeItems.length; i++) {
-            if (ae.wasActivated(themeItems[i])) chooseTheme(themeList.get(i).choice());
+            if (ae.wasActivated(themeItems[i])) chooseTheme(themeList.get(i).choice(), "View > Theme", After.ASK);
         }
         for (int i = 0; i < layoutItems.length; i++) {
-            if (ae.wasActivated(layoutItems[i])) layoutAsked = layoutList.get(i).choice();
+            if (ae.wasActivated(layoutItems[i])) {
+                layoutAsked = layoutList.get(i).choice();
+                layoutAskedBy = "View > Layout";
+                layoutAskedAfter = After.ASK;
+            }
+        }
+        runConfirmation();
+        // The way out: the factory theme and layout, kept at once, with no question — the
+        // interface it rescues may be one where no question can be read.
+        if (ae.wasActivated(menuItemFactoryLook)) factoryLookAsked = true;
+        if (factoryLookAsked) {
+            factoryLookAsked = false;
+            Logger.info(Logger.System.UI, "Back to the factory theme and layout, as asked.");
+            if (confirmTheme != null) {
+                ae.closeDialog(dialogConfirmLook);
+                confirmTheme = confirmLayout = null;
+            }
+            // The theme only if it is not the factory's already; the layout always, which also
+            // writes both down, once.
+            if (!themeChoice.equals(ShellFiles.Choice.FACTORY)) chooseTheme(ShellFiles.Choice.FACTORY, FACTORY_LOOK, After.REVERT);
+            layoutAsked = ShellFiles.Choice.FACTORY;
+            layoutAskedBy = FACTORY_LOOK;
+            layoutAskedAfter = After.KEEP;
         }
         if (ae.wasActivated(menuItemUndo)) history.undo();
         if (ae.wasActivated(menuItemRedo)) history.redo();
@@ -651,8 +782,9 @@ public final class EditorShell {
             restoreLayout();
             layout.solve(root, 0.0f, 0.0f, width, height);
         } else if (layoutAsked != null) {
-            chooseLayout(layoutAsked);
+            ShellFiles.Choice asked = layoutAsked;
             layoutAsked = null;
+            chooseLayout(asked, layoutAskedBy, layoutAskedAfter);
             layout.solve(root, 0.0f, 0.0f, width, height);
         }
 

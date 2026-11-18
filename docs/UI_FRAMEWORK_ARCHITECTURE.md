@@ -2263,11 +2263,44 @@ is applied at once; a layout chosen rebuilds the editor screen at once; either i
 one development run. A copy of the same name no longer hides the installed file: both are
 listed. What the user resizes or closes is their **arrangement** of the layout in use, kept in
 `arrangements/<origin>/<file>.json`, one per layout, so no layout file is ever written over
-and going back to a layout finds it as it was left; *Restore default layout* forgets the
+and going back to a layout finds it as it was left; *Undo my changes to this layout* (until
+4h, *Restore default layout*, a name that suggested the factory layout) forgets the
 arrangement of the layout in use. Menu items take `setLabel`, code's text a locale leaves
-alone, so the lists show the files' own names.
+alone, so the lists show the files' own names. Rebuilding a screen takes back what the old
+layout did inside the panels — widgets moved or hidden, sizes given, rows made — so a layout
+that leaves a panel alone finds it as code made it.
+
+**Valid files, unusable interfaces — tested at the end of 4h.** Theme and layout files written
+correctly but with absurd values (`editor/test-shell`, *Absurd - …*) never crashed or hung the
+editor, and values a float cannot hold (`1e39`) are refused with a clear message: per value in
+a theme, the whole screen in a layout. But a valid file can still leave the interface unusable:
+paddings of 100 000 px push everything out of the window, every panel hidden leaves no menu.
+The answer is two ways back, not ceilings on sizes, which would limit the designer:
+
+- **A confirmation after every choice** in View › Theme and View › Layout, as an operating
+  system confirms a new screen resolution: *Keep this theme and layout?* with *Revert* (first,
+  with focus, so a blind Enter goes back) and *Keep*. Revert, Esc or ten seconds without an
+  answer bring the previous ones back; `editor.json` is written only once kept, so closing the
+  editor meanwhile keeps the old choice. It works even where the dialog itself cannot be seen.
+- **The way out, Ctrl+Shift+F12** (also *View › Factory theme and layout*): the factory theme and
+  layout at once, kept, with no question. Read by the editor before any widget, so it works
+  whatever the files did. It covers what the confirmation cannot: a file that turns unusable
+  after it was kept — edited, then reloaded with Ctrl+R or by the theme watcher — or one the
+  editor starts with.
+
+Ceilings on sizes were weighed and left out for now; to revisit if designers trip on them.
+Smaller findings, fixed with it: a panel shown as a tab shows its title, so the menu, toolbar
+and status bar have titles too; a layout's `1e39` is reported as too large, not as negative.
 
 **Next**, in an order to be agreed:
+
+- **Other screen sizes — to test, not yet done.** Everything so far was seen at 2560×1440 only.
+  To check: small windows (1280×720, 1366×768, a window dragged narrow), large and wide screens
+  (3840×2160, 21:9), and the system's scaling above 100 % (HiDPI, where window and framebuffer
+  sizes differ). What to look for: docks squeezed to nothing, text cut off, menus and dialogs
+  opening outside the window, the viewport's aspect. The window opens maximized at the
+  monitor's resolution today, so a development option to open it at a given size
+  (`-PwindowSize=1280x720`, say) comes first.
 
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the

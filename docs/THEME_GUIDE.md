@@ -57,8 +57,15 @@ Themes live in two places, and the factory theme is always there besides:
 
 **Choosing a theme: View › Theme.** It lists the user's themes under *Yours*, the
 installation's under *Installed*, each by the `"name"` its file gives, and the factory theme
-last; the one in use is ticked. Choosing one applies it at once, without restarting, and keeps
-the choice in `editor.json` in the user's directory for the next start. A user's theme with the
+last; the one in use is ticked. Choosing one applies it at once, without restarting, and asks
+*Keep this theme and layout?*: **Keep** writes the choice to `editor.json` in the user's
+directory for the next start; **Revert**, Esc, or ten seconds with no answer bring the previous
+theme back.
+
+> **A theme can be valid and still unusable.** Sizes have no upper limit, so a padding of
+> 100 000 px is accepted and pushes the whole interface out of the window. If that happens,
+> wait ten seconds — the confirmation reverts on its own — or press **Ctrl+Shift+F12** at any
+> time: the factory theme and layout come back, whatever the files did. A user's theme with the
 same file name as an installed one is listed beside it, not instead of it. The list is read
 again each time the View menu opens, so a file just saved into a `themes/` directory is there.
 
@@ -597,7 +604,7 @@ a rule reaches nothing.
 | Menu bar title | File, Edit, View | `menu` | `menu.menuBarMain.menuFile` | `"menu.menuBarMain.menuFile.text"` |
 | File menu | Save scene, Quit | `menu` | `menuFile.menuItemSaveScene`, `menuFile.menuItemQuit` | `"menuFile.menuItemQuit.text"` |
 | Edit menu | Undo, Redo | `menu` | `menuEdit.menuItemUndo`, `menuEdit.menuItemRedo` | |
-| View menu | Hierarchy … Output, Restore default layout | `menu` | `menuView.menuItemHierarchy`, `…Assets`, `…Inspector`, `…Console`, `…Output`, `menuView.menuItemRestoreLayout` | |
+| View menu | Hierarchy … Output, Undo my changes to this layout, Factory theme and layout | `menu` | `menuView.menuItemHierarchy`, `…Assets`, `…Inspector`, `…Console`, `…Output`, `menuView.menuItemRestoreLayout`, `menuView.menuItemFactoryLook` | |
 | View › Theme, View › Layout | The submenus' items, and the lists in them | `menu` | `menuView.menuTheme`, `menuView.menuLayout`; inside, `menuTheme.menuItemThemesYours`, `…Installed` (the headings) and `menuTheme.menuItemTheme1`, `…2`, … in list order; the same under `menuLayout` | |
 | Dock tabs' context menu | Close | `menu` | `menuDock.menuItemClose` | |
 | Toolbar | Select, Move, Rotate, Scale | `toggle` | `toolbar.toggleSelect`, `…toggleMove`, `…toggleRotate`, `…toggleScale` | `"toolbar.toggle.radius": 2` |

@@ -389,7 +389,7 @@ public final class ShellFiles {
             top.addProperty("name", name);
             top.addProperty("description", "Written by the editor when you resize or close panels: your arrangement"
                 + " of this layout. Only the screens you changed are here; the others come from the layout itself."
-                + " View > Restore default layout, or deleting this file, goes back to the layout as it is.");
+                + " View > Undo my changes to this layout, or deleting this file, goes back to the layout as it is.");
             top.addProperty("format", AegisLayoutFile.FORMAT);
             top.add("screens", new JsonObject());
         }
@@ -399,7 +399,7 @@ public final class ShellFiles {
 
     /**
      * Takes a screen out of the user's arrangement of a layout, so it comes from the layout
-     * again — View &gt; Restore default layout. With no screen left, the file is deleted.
+     * again — View &gt; Undo my changes to this layout. With no screen left, the file is deleted.
      *
      * @param choice the layout arranged
      * @param screen the screen's name

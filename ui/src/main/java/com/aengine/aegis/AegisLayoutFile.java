@@ -587,6 +587,10 @@ public final class AegisLayoutFile {
             return;
         }
         float number = p.getAsFloat();
+        if (Float.isInfinite(number) && number > 0.0f) {
+            error(at, node.label() + ": " + key + " is too large for a float to hold; got " + value);
+            return;
+        }
         if (!(number >= 0.0f) || !Float.isFinite(number)) {
             error(at, node.label() + ": " + key + " must be 0 or more; got " + value);
             return;

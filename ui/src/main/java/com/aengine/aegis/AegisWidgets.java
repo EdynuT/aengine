@@ -6,6 +6,7 @@ import com.aengine.core.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.LongSupplier;
 /**
  * The widgets — layer L4's controls, built on the layout and the tree.
@@ -671,6 +672,11 @@ public final class AegisWidgets {
                     comboItems[node][i] = locale.text(address + "." + comboItemNames[node][i], comboItemEnglish[node][i]);
                 }
             }
+        }
+        // Every panel's title is a text the editor shows, in a tab, once a layout puts the panel
+        // in one — asked for now, so a locale translating a panel no tab holds yet is not told off.
+        for (Map.Entry<String, String> title : aegis.screens().panelTitles().entrySet()) {
+            locale.text(title.getKey() + "." + AegisLocale.TITLE, title.getValue());
         }
         for (int node = 0; node < nodes; node++) {
             if (kind[node] != NOT_A_WIDGET) fitToContent(node);

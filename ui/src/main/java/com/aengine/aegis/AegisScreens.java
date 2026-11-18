@@ -65,6 +65,9 @@ public final class AegisScreens {
     /** What each panel's tab says, when a layout puts it in tabs; its name, until code gives it one. */
     private final Map<String, String> titles = new HashMap<>();
 
+    /** Every panel's title, by panel name, so a locale is asked for each whether or not it is in a tab now. */
+    Map<String, String> panelTitles() { return titles; }
+
     /** Panels a layout put in tabs. The ones not shown hang nowhere, yet are on a screen all the same. */
     private final Set<Integer> inTabs = new HashSet<>();
 
@@ -446,7 +449,7 @@ public final class AegisScreens {
 
     /**
      * Builds a screen again from the files in line, in place of the one built before — View
-     * &gt; Restore default layout, or another layout chosen. The panels come off the old
+     * &gt; Undo my changes to this layout, or another layout chosen. The panels come off the old
      * arrangement and go into the new; the old rows, columns and tabbed panes are dropped.
      * What the old file did inside the panels is taken back first — widgets it moved to another
      * panel or hid, sizes it gave them, rows it grouped them in — so a file that leaves a panel
