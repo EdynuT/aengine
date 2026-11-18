@@ -26,6 +26,27 @@ public class Window {
     private long   handle;
 
     /**
+     * The size {@code aengine.windowSize} asks for — {@code "1280x720"}, as
+     * {@code ./gradlew :editor:run -PwindowSize=1280x720} sets it — or {@code null} when it is
+     * not set, or is not two whole numbers of 1 or more, which the log says.
+     */
+    static int[] askedSize() {
+        String asked = System.getProperty("aengine.windowSize");
+        if (asked == null) return null;
+        String[] parts = asked.trim().toLowerCase(java.util.Locale.ROOT).split("x");
+        try {
+            if (parts.length == 2) {
+                int w = Integer.parseInt(parts[0].trim()), h = Integer.parseInt(parts[1].trim());
+                if (w >= 1 && h >= 1) return new int[] { w, h };
+            }
+        } catch (NumberFormatException e) {
+            // said below
+        }
+        Logger.warn(Logger.System.WINDOW, "aengine.windowSize should be a width and a height, like 1280x720; got \"%s\". The window opens maximized.", asked);
+        return null;
+    }
+
+    /**
      * Creates the window object. Nothing native is opened until {@link #init()}.
      *
      * @param title text for the window's title bar
@@ -97,7 +118,16 @@ public class Window {
             }
         }
 
-        glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        // A development run can ask for a size, to see the interface at other resolutions;
+        // otherwise the window opens maximized.
+        int[] asked = askedSize();
+        if (asked != null) {
+            width  = asked[0];
+            height = asked[1];
+            Logger.info(Logger.System.WINDOW, "Window opened at %dx%d, as aengine.windowSize asks (a development option).", width, height);
+        } else {
+            glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        }
 
         Logger.debug(Logger.System.WINDOW, "Instantiating native window '%s' (%dx%d)...", title, width, height);
         handle = glfwCreateWindow(width, height, title, NULL, NULL);

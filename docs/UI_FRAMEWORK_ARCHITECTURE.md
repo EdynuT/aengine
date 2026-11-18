@@ -2294,13 +2294,26 @@ and status bar have titles too; a layout's `1e39` is reported as too large, not 
 
 **Next**, in an order to be agreed:
 
-- **Other screen sizes — to test, not yet done.** Everything so far was seen at 2560×1440 only.
-  To check: small windows (1280×720, 1366×768, a window dragged narrow), large and wide screens
-  (3840×2160, 21:9), and the system's scaling above 100 % (HiDPI, where window and framebuffer
-  sizes differ). What to look for: docks squeezed to nothing, text cut off, menus and dialogs
-  opening outside the window, the viewport's aspect. The window opens maximized at the
-  monitor's resolution today, so a development option to open it at a given size
-  (`-PwindowSize=1280x720`, say) comes first.
+- **Other screen sizes — sizes tested, scaling not yet.** `-PwindowSize=1280x720` opens the
+  window at a size instead of maximized. Seen with the factory theme and layout, on a 2560×1440
+  monitor at 100 % scaling:
+
+  | Size | What was seen |
+  |---|---|
+  | 1024×600 | Everything fits, nothing overlaps; the docks keep their fixed widths (260 and 320 px), so the viewport gets under half the window |
+  | 1280×720 | Fits; the status bar's right side (theme, layout, project path) reaches the edge |
+  | 1920×1080, 2560×1080 | Room everywhere; the viewport takes the extra width, and the scene is not stretched — the camera follows the viewport's size |
+  | 3840×2160 | Larger than the monitor: the window runs off the screen, as asked; says nothing about a real 4K screen |
+  | A window dragged tiny | Panels overlap and menus open outside the window: unusable, as expected |
+
+  Still to do: **a minimum window size** (`glfwSetWindowSizeLimits`), set from what the
+  interface needs; **docks that shrink** in small windows, a choice for the factory layout; the
+  **project path** on the status bar, the first thing to cut when it runs out of room; and
+  **scaling above 100 %** (HiDPI), the real test for 4K screens. From reading the code, that
+  last one should break: the pointer arrives in window coordinates while the interface is laid
+  out in framebuffer pixels, which differ by the scale, so clicks would land off by that
+  factor; and nothing reads the content scale, so text stays at 18 px on a 4K screen. To be
+  confirmed by running the editor with the system's scaling at 150 % or 200 %.
 
 - **The panels themselves**, as they are decided, with what each asks of the framework.
 - **Settings**: `editor.json` in the user's directory, the language, the theme list with the
