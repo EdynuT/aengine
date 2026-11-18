@@ -148,8 +148,8 @@ tasks.register('packageAppImage', Exec) {
         def found = new File(tool.toString()).canExecute() ||
             System.getenv('PATH').split(File.pathSeparator).any { new File(it, tool.toString()).canExecute() }
         if (!found) {
-            throw new GradleException("appimagetool was not found. Install it (on Arch and CachyOS, the AUR's " +
-                "appimagetool package) or point to it with -PappImageTool=/path/to/appimagetool.")
+            throw new GradleException("appimagetool was not found. Install it (on Arch and CachyOS, the AUR package " +
+                "appimagetool-bin) or point to it with -PappImageTool=/path/to/appimagetool.")
         }
         out.parentFile.mkdirs()
     }

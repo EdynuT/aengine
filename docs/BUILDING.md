@@ -82,7 +82,7 @@ built on Windows and a Linux one on Linux.
 - **Running the folder:** `editor/build/package/AEngine/bin/AEngine` (on Windows,
   `AEngine.exe`).
 - **The `.tar.gz`:** unpack it anywhere and run `AEngine/bin/AEngine`.
-- **The AppImage** needs `appimagetool`: install it (on Arch and CachyOS, from the AUR), or
+- **The AppImage** needs `appimagetool`: install it (on Arch based distros, from the AUR), or
   point to it with `-PappImageTool=/path/to/appimagetool`. Without it, the build stops and says
   so. Make the AppImage executable (`chmod +x`) and run it.
 
